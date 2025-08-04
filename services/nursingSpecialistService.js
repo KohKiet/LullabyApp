@@ -98,13 +98,10 @@ class NursingSpecialistService {
         try {
           const errorData = await response.json();
           errorMessage =
-            errorData.message ||
-            errorData.error ||
-            `HTTP ${response.status}`;
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          // Ignore parse error, use default message
         }
-
         return { success: false, error: errorMessage };
       }
     } catch (error) {
@@ -115,7 +112,7 @@ class NursingSpecialistService {
   // Lấy tất cả zones
   async getAllZones() {
     try {
-      const response = await fetch(ZONE_ENDPOINTS.GET_ALL, {
+      const response = await fetch(ZONE_ENDPOINTS.GET_ALL_ZONES, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -136,7 +133,7 @@ class NursingSpecialistService {
   // Lấy zone theo ID
   async getZoneById(id) {
     try {
-      const response = await fetch(ZONE_ENDPOINTS.GET_BY_ID(id), {
+      const response = await fetch(ZONE_ENDPOINTS.GET_ZONE_BY_ID(id), {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -154,86 +151,109 @@ class NursingSpecialistService {
     }
   }
 
-  // Enrich NursingSpecialist data với zone information
-  async enrichNursingSpecialistData(nursingSpecialist) {
+  // Lấy NursingSpecialist theo major (specialist hoặc nurse)
+  async getNursingSpecialistsByMajor(major) {
     try {
-      if (nursingSpecialist.zoneID) {
-        const zoneResult = await this.getZoneById(
-          nursingSpecialist.zoneID
+      const allResult = await this.getAllNursingSpecialists();
+      if (allResult.success) {
+        const filteredSpecialists = allResult.data.filter(
+          specialist => specialist.major === major
         );
-        if (zoneResult.success) {
-          return {
-            ...nursingSpecialist,
-            zoneName: zoneResult.data.zoneName,
-            city: zoneResult.data.city,
-          };
-        }
+        return { success: true, data: filteredSpecialists };
+      } else {
+        return { success: false, error: allResult.error };
       }
-      return nursingSpecialist;
     } catch (error) {
-      return nursingSpecialist;
+      return { success: false, error: error.message };
     }
   }
 
-  // Format date cho display
-  formatDate(dateString) {
-    if (!dateString) return "N/A";
+  // Lấy tất cả specialists (major = "specialist")
+  async getAllSpecialists() {
+    return this.getNursingSpecialistsByMajor("specialist");
+  }
+
+  // Lấy tất cả nurses (major = "nurse")
+  async getAllNurses() {
+    return this.getNursingSpecialistsByMajor("nurse");
+  }
+
+  // Lấy thông tin chi tiết của NursingSpecialist với account data
+  async getDetailedNursingSpecialist(nursingID) {
     try {
-      return new Date(dateString).toLocaleDateString("vi-VN");
-    } catch (error) {
-      return dateString;
-    }
-  }
-
-  // Format zone display
-  formatZoneDisplay(zoneName, city) {
-    if (!zoneName && !city) return "N/A";
-    if (zoneName && city) return `${zoneName} - ${city}`;
-    return zoneName || city || "N/A";
-  }
-
-  // Get display values for profile fields
-  getDisplayValues(userData) {
-    if (!userData) return {};
-
-    return {
-      fullName: userData.fullName || userData.full_name || "N/A",
-      gender:
-        userData.gender === "Nam"
-          ? "Nam"
-          : userData.gender === "Nữ"
-          ? "Nữ"
-          : "N/A",
-      dateOfBirth: this.formatDate(userData.dateOfBirth),
-      address: userData.address || "N/A",
-      zone: this.formatZoneDisplay(userData.zoneName, userData.city),
-      major: userData.major || "N/A",
-      experience: userData.experience || "N/A",
-      slogan: userData.slogan || "N/A",
-      status:
-        userData.status === "active"
-          ? "Hoạt động"
-          : userData.status === "unactive"
-          ? "Không hoạt động"
-          : "N/A",
-    };
-  }
-
-  // Enrich user data for NursingSpecialist
-  async enrichUserData(user) {
-    try {
-      console.log("🔍 Enriching user data for NursingSpecialist...");
-      console.log("🔍 Original user data:", user);
-
-      // Lấy thông tin account từ API accounts
-      let accountData = null;
-      if (user.accountID || user.id) {
-        const accountID = user.accountID || user.id;
-        console.log("🔍 Fetching account data for ID:", accountID);
-
+      const nursingResult = await this.getNursingSpecialistById(nursingID);
+      if (!nursingResult.success) {
+        return nursingResult;
+      }
+      
+      const nursingData = nursingResult.data;
+      
+      if (nursingData.accountID) {
         try {
-          const response = await fetch(
-            `http://localhost:5294/api/accounts/get/${accountID}`,
+          const accountResponse = await fetch(
+            `http://localhost:5294/api/accounts/get/${nursingData.accountID}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          
+          if (accountResponse.ok) {
+            const accountData = await accountResponse.json();
+            
+            const detailedData = {
+              ...nursingData,
+              fullName: accountData.fullName || nursingData.fullName,
+              email: accountData.email,
+              phoneNumber: accountData.phoneNumber,
+              accountID: accountData.accountID,
+              roleID: accountData.roleID,
+              status: accountData.status,
+              createAt: accountData.createAt,
+              nursingID: nursingData.nursingID,
+              zoneID: nursingData.zoneID,
+              gender: nursingData.gender,
+              dateOfBirth: nursingData.dateOfBirth,
+              address: nursingData.address,
+              experience: nursingData.experience,
+              slogan: nursingData.slogan,
+              major: nursingData.major,
+            };
+            
+            return { success: true, data: detailedData };
+          } else {
+            return { success: true, data: nursingData };
+          }
+        } catch (accountError) {
+          return { success: true, data: nursingData };
+        }
+      } else {
+        return { success: true, data: nursingData };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Lấy danh sách chi tiết tất cả nursing specialists với account data
+  async getAllDetailedNursingSpecialists() {
+    try {
+      const allResult = await this.getAllNursingSpecialists();
+      if (!allResult.success) {
+        return allResult;
+      }
+      
+      const accountIds = allResult.data
+        .map(specialist => specialist.accountID)
+        .filter(id => id != null);
+      
+      const accountDataMap = new Map();
+      for (const accountId of accountIds) {
+        try {
+          const accountResponse = await fetch(
+            `http://localhost:5294/api/accounts/get/${accountId}`,
             {
               method: "GET",
               headers: {
@@ -242,96 +262,83 @@ class NursingSpecialistService {
             }
           );
 
-          if (response.ok) {
-            accountData = await response.json();
-            console.log("🔍 Account data fetched:", accountData);
-          } else {
-            console.log(
-              "🔍 Failed to fetch account data:",
-              response.status
-            );
+          if (accountResponse.ok) {
+            const accountData = await accountResponse.json();
+            accountDataMap.set(accountId, accountData);
           }
         } catch (error) {
-          console.log("🔍 Error fetching account data:", error);
+          // Ignore individual account fetch errors
         }
       }
-
-      // Lấy thông tin nursing specialist từ API nursing specialists
-      let nursingData = null;
-      if (user.nursingID) {
-        const result = await this.getNursingSpecialistById(
-          user.nursingID
-        );
-        if (result.success) {
-          nursingData = result.data;
-          console.log(
-            "🔍 Nursing data fetched by nursingID:",
-            nursingData
-          );
+      
+      const detailedSpecialists = allResult.data.map(specialist => {
+        const accountData = accountDataMap.get(specialist.accountID);
+        
+        if (accountData) {
+          const detailedData = {
+            ...specialist,
+            fullName: accountData.fullName || specialist.fullName,
+            email: accountData.email,
+            phoneNumber: accountData.phoneNumber,
+            accountID: accountData.accountID,
+            roleID: accountData.roleID,
+            status: accountData.status,
+            createAt: accountData.createAt,
+            nursingID: specialist.nursingID,
+            zoneID: specialist.zoneID,
+            gender: specialist.gender,
+            dateOfBirth: specialist.dateOfBirth,
+            address: specialist.address,
+            experience: specialist.experience,
+            slogan: specialist.slogan,
+            major: specialist.major,
+          };
+          
+          return detailedData;
+        } else {
+          return specialist;
         }
-      } else if (user.accountID || user.id) {
-        const result = await this.getNursingSpecialistByAccountId(
-          user.accountID || user.id
-        );
-        if (result.success) {
-          nursingData = result.data;
-          console.log(
-            "🔍 Nursing data fetched by accountID:",
-            nursingData
-          );
-        }
-      }
-
-      // Combine data từ cả hai API
-      const enrichedData = {
-        ...user,
-        // Account data (ưu tiên từ API)
-        fullName:
-          accountData?.fullName || user.fullName || user.full_name,
-        full_name:
-          accountData?.fullName || user.fullName || user.full_name,
-        email: accountData?.email || user.email,
-        phoneNumber:
-          accountData?.phoneNumber ||
-          user.phoneNumber ||
-          user.phone_number,
-        phone_number:
-          accountData?.phoneNumber ||
-          user.phoneNumber ||
-          user.phone_number,
-        accountID:
-          accountData?.accountID || user.accountID || user.id,
-        roleID: accountData?.roleID || user.roleID || user.role_id,
-        role_id: accountData?.roleID || user.roleID || user.role_id,
-        status: accountData?.status || user.status,
-
-        // Nursing specialist data (ưu tiên từ API)
-        nursingID: nursingData?.nursingID || user.nursingID,
-        zoneID: nursingData?.zoneID || user.zoneID,
-        gender: nursingData?.gender || user.gender,
-        dateOfBirth: nursingData?.dateOfBirth || user.dateOfBirth,
-        address: nursingData?.address || user.address,
-        experience: nursingData?.experience || user.experience,
-        slogan: nursingData?.slogan || user.slogan,
-        major: nursingData?.major || user.major,
-      };
-
-      // Enrich với zone information nếu có
-      if (enrichedData.zoneID) {
-        const enrichedWithZone =
-          await this.enrichNursingSpecialistData(enrichedData);
-        console.log(
-          "🔍 Final enriched data with zone:",
-          enrichedWithZone
-        );
-        return enrichedWithZone;
-      }
-
-      console.log("🔍 Final enriched data:", enrichedData);
-      return enrichedData;
+      });
+      
+      return { success: true, data: detailedSpecialists };
     } catch (error) {
-      console.error("🔍 Error enriching user data:", error);
-      return user;
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Lấy danh sách chi tiết specialists với account data
+  async getAllDetailedSpecialists() {
+    try {
+      const allDetailedResult = await this.getAllDetailedNursingSpecialists();
+      if (!allDetailedResult.success) {
+        return allDetailedResult;
+      }
+      
+      const specialistsData = allDetailedResult.data.filter(
+        specialist => specialist.major === "specialist"
+      );
+      
+      return { success: true, data: specialistsData };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Lấy danh sách chi tiết nurses với account data
+  async getAllDetailedNurses() {
+    try {
+      const allDetailedResult = await this.getAllDetailedNursingSpecialists();
+      if (!allDetailedResult.success) {
+        return allDetailedResult;
+      }
+      
+      const nursesData = allDetailedResult.data.filter(
+        nurse => nurse.major === "nurse"
+      );
+      
+      return { success: true, data: nursesData };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 }

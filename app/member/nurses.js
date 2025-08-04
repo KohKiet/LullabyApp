@@ -3,6 +3,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,11 +12,14 @@ import {
   View,
 } from "react-native";
 import Avatar from "../../components/Avatar";
+import NursingSpecialistService from "../../services/nursingSpecialistService";
 
 export default function NursesScreen() {
   const router = useRouter();
   const [nurses, setNurses] = useState([]);
-  const [zones, setZones] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedNurse, setSelectedNurse] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -22,63 +27,188 @@ export default function NursesScreen() {
 
   const loadData = async () => {
     try {
-      // Mock data - trong thực tế sẽ gọi API
-      const mockZones = [
-        { zoneId: 1, zoneName: "Quận 1", city: "TP.HCM" },
-        { zoneId: 2, zoneName: "Quận 2", city: "TP.HCM" },
-        { zoneId: 3, zoneName: "Quận 3", city: "TP.HCM" },
-        { zoneId: 4, zoneName: "Quận 7", city: "TP.HCM" },
-      ];
-
-      // Lấy dữ liệu từ AsyncStorage - trong thực tế sẽ gọi API
-      const mockNurses = [
-        {
-          nursingId: 3,
-          accountId: 4,
-          zoneId: 3,
-          gender: "Female",
-          dateOfBirth: "1992-07-10",
-          fullName: "Phạm Thị D",
-          address: "789 Trần Hưng Đạo, Quận 3, TP.HCM",
-          experience: "6 năm kinh nghiệm điều dưỡng",
-          slogan: "Điều dưỡng chuyên nghiệp, tận tâm",
-          status: "active",
-          major: "Điều dưỡng viên",
-          avatarUrl:
-            "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=150&h=150&fit=crop&crop=face",
-        },
-        {
-          nursingId: 4,
-          accountId: 5,
-          zoneId: 4,
-          gender: "Male",
-          dateOfBirth: "1985-12-25",
-          fullName: "Hoàng Văn E",
-          address: "321 Phạm Văn Đồng, Quận 7, TP.HCM",
-          experience: "10 năm kinh nghiệm chăm sóc sức khỏe",
-          slogan: "Chăm sóc sức khỏe toàn diện",
-          status: "active",
-          major: "Điều dưỡng viên",
-          avatarUrl:
-            "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-        },
-      ];
-
-      setZones(mockZones);
-      setNurses(mockNurses);
+      setIsLoading(true);
+      
+      const result = await NursingSpecialistService.getAllDetailedNurses();
+      
+      if (result.success) {
+        setNurses(result.data);
+      } else {
+        Alert.alert("Lỗi", "Không thể tải danh sách điều dưỡng viên");
+      }
+      
     } catch (error) {
-      console.error("Error loading nurses:", error);
+      Alert.alert("Lỗi", "Không thể kết nối đến server");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getZoneName = (zoneId) => {
-    const zone = zones.find((z) => z.zoneId === zoneId);
-    return zone ? zone.zoneName : "Không xác định";
+  const getGenderText = (gender) => {
+    if (gender === "nam") return "Nam";
+    if (gender === "nữ") return "Nữ";
+    return gender || "N/A";
   };
 
-  const getGenderText = (gender) => {
-    return gender === "Female" ? "Nữ" : "Nam";
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("vi-VN");
+    } catch (error) {
+      return "N/A";
+    }
   };
+
+  const handleNursePress = (nurse) => {
+    setSelectedNurse(nurse);
+    setShowDetailModal(true);
+  };
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedNurse(null);
+  };
+
+  const renderDetailModal = () => {
+    if (!selectedNurse) return null;
+
+    return (
+      <Modal
+        visible={showDetailModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closeDetailModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thông tin chi tiết</Text>
+              <TouchableOpacity onPress={closeDetailModal}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.modalAvatarContainer}>
+                <Avatar
+                  source={{ uri: selectedNurse.avatarUrl }}
+                  size={80}
+                  name={selectedNurse.fullName}
+                  fallbackType="initials"
+                />
+                <Text style={styles.modalName}>{selectedNurse.fullName}</Text>
+                <View style={styles.modalGenderBadge}>
+                  <Text style={styles.modalGenderText}>
+                    {getGenderText(selectedNurse.gender)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.modalInfoSection}>
+                <Text style={styles.modalSectionTitle}>Thông tin liên hệ</Text>
+                
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="mail-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Email:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedNurse.email || "Chưa cập nhật"}
+                  </Text>
+                </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="call-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Số điện thoại:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedNurse.phoneNumber || "Chưa cập nhật"}
+                  </Text>
+                </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="home-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Địa chỉ:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedNurse.address || "Chưa cập nhật"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.modalInfoSection}>
+                <Text style={styles.modalSectionTitle}>Thông tin chuyên môn</Text>
+                
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="person-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Chuyên môn:</Text>
+                  <Text style={styles.modalInfoValue}>Điều dưỡng viên</Text>
+                </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="briefcase-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Kinh nghiệm:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedNurse.experience || "Chưa cập nhật"}
+                  </Text>
+                </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="calendar-outline" size={20} color="#FF8AB3" />
+                  <Text style={styles.modalInfoLabel}>Ngày sinh:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {formatDate(selectedNurse.dateOfBirth)}
+                  </Text>
+                </View>
+
+                {selectedNurse.createAt && (
+                  <View style={styles.modalInfoRow}>
+                    <Ionicons name="time-outline" size={20} color="#FF8AB3" />
+                    <Text style={styles.modalInfoLabel}>Tham gia:</Text>
+                    <Text style={styles.modalInfoValue}>
+                      {formatDate(selectedNurse.createAt)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {selectedNurse.slogan && (
+                <View style={styles.modalInfoSection}>
+                  <Text style={styles.modalSectionTitle}>Slogan</Text>
+                  <View style={styles.modalSloganContainer}>
+                    <Ionicons name="chatbubble-outline" size={20} color="#FF8AB3" />
+                    <Text style={styles.modalSloganText}>{selectedNurse.slogan}</Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.modalInfoSection}>
+                <Text style={styles.modalSectionTitle}>Trạng thái</Text>
+                <View style={[
+                  styles.modalStatusBadge,
+                  { backgroundColor: selectedNurse.status === "active" ? "#4CAF50" : "#FF6B6B" }
+                ]}>
+                  <Text style={styles.modalStatusText}>
+                    {selectedNurse.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={["#C2F5E9", "#B3E5FC", "#FFD9E6"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradientBg}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Đang tải danh sách điều dưỡng viên...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -90,7 +220,7 @@ export default function NursesScreen() {
         <TouchableOpacity
           style={styles.backBtnOuter}
           onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color="#4FC3F7" />
+          <Ionicons name="arrow-back" size={28} color="#FF8AB3" />
         </TouchableOpacity>
         <LinearGradient
           colors={["#F8F9FA", "#FFFFFF"]}
@@ -109,69 +239,146 @@ export default function NursesScreen() {
           Danh sách điều dưỡng viên ({nurses.length})
         </Text>
 
-        {nurses.map((nurse) => (
-          <View key={nurse.nursingId} style={styles.nurseCard}>
-            <View style={styles.avatarContainer}>
-              <Avatar
-                source={{ uri: nurse.avatarUrl }}
-                size={60}
-                name={nurse.fullName}
-                fallbackType="initials"
-              />
-            </View>
+        {nurses.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="medical-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>Chưa có điều dưỡng viên nào</Text>
+            <Text style={styles.emptySubtext}>
+              Vui lòng thử lại sau hoặc liên hệ admin
+            </Text>
+          </View>
+        ) : (
+          nurses.map((nurse) => (
+            <TouchableOpacity
+              key={nurse.nursingID}
+              style={styles.nurseCard}
+              onPress={() => handleNursePress(nurse)}>
+              <View style={styles.avatarContainer}>
+                <Avatar
+                  source={{ uri: nurse.avatarUrl }}
+                  size={60}
+                  name={nurse.fullName}
+                  fallbackType="initials"
+                />
+              </View>
 
-            <View style={styles.infoContainer}>
-              <View style={styles.nameRow}>
-                <Text style={styles.fullName}>{nurse.fullName}</Text>
-                <View style={styles.genderBadge}>
-                  <Text style={styles.genderText}>
-                    {getGenderText(nurse.gender)}
+              <View style={styles.infoContainer}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.fullName}>{nurse.fullName}</Text>
+                  <View style={styles.genderBadge}>
+                    <Text style={styles.genderText}>
+                      {getGenderText(nurse.gender)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={16}
+                    color="#666"
+                  />
+                  <Text style={styles.detailText}>
+                    {nurse.email || "Chưa cập nhật"}
                   </Text>
                 </View>
-              </View>
 
-              <View style={styles.detailRow}>
-                <Ionicons
-                  name="briefcase-outline"
-                  size={16}
-                  color="#666"
-                />
-                <Text style={styles.detailText}>
-                  {nurse.experience}
-                </Text>
-              </View>
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="call-outline"
+                    size={16}
+                    color="#666"
+                  />
+                  <Text style={styles.detailText}>
+                    {nurse.phoneNumber || "Chưa cập nhật"}
+                  </Text>
+                </View>
 
-              <View style={styles.detailRow}>
-                <Ionicons
-                  name="location-outline"
-                  size={16}
-                  color="#666"
-                />
-                <Text style={styles.detailText}>
-                  {getZoneName(nurse.zoneId)}
-                </Text>
-              </View>
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="person-outline"
+                    size={16}
+                    color="#666"
+                  />
+                  <Text style={styles.detailText}>Điều dưỡng viên</Text>
+                </View>
 
-              <View style={styles.detailRow}>
-                <Ionicons
-                  name="person-outline"
-                  size={16}
-                  color="#666"
-                />
-                <Text style={styles.detailText}>{nurse.major}</Text>
-              </View>
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color="#666"
+                  />
+                  <Text style={styles.detailText}>
+                    {formatDate(nurse.dateOfBirth)}
+                  </Text>
+                </View>
 
-              <View style={styles.sloganContainer}>
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={16}
-                  color="#FF8AB3"
-                />
-                <Text style={styles.sloganText}>{nurse.slogan}</Text>
+                {nurse.address && (
+                  <View style={styles.detailRow}>
+                    <Ionicons
+                      name="home-outline"
+                      size={16}
+                      color="#666"
+                    />
+                    <Text style={styles.detailText}>
+                      {nurse.address}
+                    </Text>
+                  </View>
+                )}
+
+                {nurse.experience && (
+                  <View style={styles.detailRow}>
+                    <Ionicons
+                      name="briefcase-outline"
+                      size={16}
+                      color="#666"
+                    />
+                    <Text style={styles.detailText}>
+                      {nurse.experience}
+                    </Text>
+                  </View>
+                )}
+
+                {nurse.slogan && (
+                  <View style={styles.sloganContainer}>
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={16}
+                      color="#FF8AB3"
+                    />
+                    <Text style={styles.sloganText}>{nurse.slogan}</Text>
+                  </View>
+                )}
+
+                <View style={styles.statusContainer}>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: nurse.status === "active" ? "#4CAF50" : "#FF6B6B" }
+                  ]}>
+                    <Text style={styles.statusText}>
+                      {nurse.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                    </Text>
+                  </View>
+                </View>
+
+                {nurse.createAt && (
+                  <View style={styles.detailRow}>
+                    <Ionicons
+                      name="time-outline"
+                      size={16}
+                      color="#666"
+                    />
+                    <Text style={styles.detailText}>
+                      Tham gia: {formatDate(nurse.createAt)}
+                    </Text>
+                  </View>
+                )}
               </View>
-            </View>
-          </View>
-        ))}
+            </TouchableOpacity>
+          ))
+        )}
+        {renderDetailModal()}
       </ScrollView>
     </LinearGradient>
   );
@@ -180,6 +387,35 @@ export default function NursesScreen() {
 const styles = StyleSheet.create({
   gradientBg: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 18,
+    color: "#333",
+    textAlign: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#666",
+    marginTop: 20,
+    textAlign: "center",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 10,
+    textAlign: "center",
   },
   headerWrapper: {
     flexDirection: "row",
@@ -231,7 +467,7 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 15,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -240,12 +476,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginRight: 15,
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#f0f0f0",
   },
   infoContainer: {
     flex: 1,
@@ -281,10 +511,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginLeft: 8,
+    flex: 1,
   },
   sloganContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginTop: 8,
   },
   sloganText: {
@@ -294,16 +525,121 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  bookButton: {
-    backgroundColor: "#FF8AB3",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 10,
+  statusContainer: {
+    marginTop: 8,
   },
-  bookButtonText: {
+  statusBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    width: "90%",
+    maxHeight: "80%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalAvatarContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginTop: 10,
+  },
+  modalGenderBadge: {
+    backgroundColor: "#FF8AB3",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 5,
+  },
+  modalGenderText: {
     color: "white",
     fontSize: 12,
+    fontWeight: "500",
+  },
+  modalInfoSection: {
+    marginBottom: 20,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
     fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  modalInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  modalInfoLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#666",
+    marginLeft: 10,
+    width: 100,
+  },
+  modalInfoValue: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
+  },
+  modalSloganContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  modalSloganText: {
+    fontSize: 14,
+    color: "#FF8AB3",
+    fontStyle: "italic",
+    marginLeft: 10,
+    flex: 1,
+  },
+  modalStatusBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  modalStatusText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

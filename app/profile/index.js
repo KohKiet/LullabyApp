@@ -1455,16 +1455,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "Nam" &&
+                    relativeForm.gender === "male" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "Nam")
+                    handleRelativeFormChange("gender", "male")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "Nam" &&
+                      relativeForm.gender === "male" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nam
@@ -1473,16 +1473,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "Nữ" &&
+                    relativeForm.gender === "female" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "Nữ")
+                    handleRelativeFormChange("gender", "female")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "Nữ" &&
+                      relativeForm.gender === "female" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nữ
@@ -1576,16 +1576,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "Nam" &&
+                    relativeForm.gender === "male" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "Nam")
+                    handleRelativeFormChange("gender", "male")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "Nam" &&
+                      relativeForm.gender === "male" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nam
@@ -1594,16 +1594,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "Nữ" &&
+                    relativeForm.gender === "female" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "Nữ")
+                    handleRelativeFormChange("gender", "female")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "Nữ" &&
+                      relativeForm.gender === "female" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nữ

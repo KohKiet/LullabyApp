@@ -1,83 +1,84 @@
 import { RELATIVE_ENDPOINTS } from "./apiConfig";
 
-// Helper function for API calls with timeout
-const fetchWithTimeout = async (
-  url,
-  options = {},
-  timeout = 10000
-) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-};
+// Network timeout (10 seconds)
+const NETWORK_TIMEOUT = 10000;
 
 class RelativeService {
-  // Get all relatives
-  static async getAllRelatives() {
+  // Helper function to create fetch with timeout
+  async fetchWithTimeout(url, options, timeout = NETWORK_TIMEOUT) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     try {
-      const url = RELATIVE_ENDPOINTS.GET_ALL_RELATIVES;
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
 
-      const response = await fetchWithTimeout(url, {}, 30000); // 30 seconds timeout
+  // Lấy tất cả relatives
+  async getAllRelatives() {
+    try {
+      const response = await this.fetchWithTimeout(
+        RELATIVE_ENDPOINTS.GET_ALL_RELATIVES,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data };
+      } else {
+        return { success: false, error: `HTTP ${response.status}` };
       }
-
-      const data = await response.json();
-      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // Get relative by ID
-  static async getRelativeById(relativeID) {
+  // Lấy relative theo ID
+  async getRelativeById(relativeID) {
     try {
-      const url = RELATIVE_ENDPOINTS.GET_RELATIVE_BY_ID(relativeID);
+      const response = await this.fetchWithTimeout(
+        RELATIVE_ENDPOINTS.GET_RELATIVE_BY_ID(relativeID),
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const response = await fetchWithTimeout(url, {}, 30000); // 30 seconds timeout
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data };
+      } else {
+        return { success: false, error: `HTTP ${response.status}` };
       }
-
-      const data = await response.json();
-      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // Get relatives by care profile ID
-  static async getRelativesByCareProfileId(careProfileID) {
+  // Lấy relatives theo care profile ID
+  async getRelativesByCareProfileId(careProfileID) {
     try {
-      // Try to get all relatives first, then filter
-      const url = RELATIVE_ENDPOINTS.GET_ALL_RELATIVES;
-
-      const response = await fetchWithTimeout(url, {}, 30000); // 30 seconds timeout
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      const allResult = await this.getAllRelatives();
+      if (!allResult.success) {
+        return allResult;
       }
 
-      const allRelatives = await response.json();
-
-      // Filter relatives by careProfileID
-      const filteredRelatives = allRelatives.filter(
+      const filteredRelatives = allResult.data.filter(
         (relative) => relative.careProfileID === careProfileID
       );
 
@@ -87,10 +88,10 @@ class RelativeService {
     }
   }
 
-  // Create new relative
-  static async createRelative(relativeData) {
+  // Tạo relative mới
+  async createRelative(relativeData) {
     try {
-      const response = await fetchWithTimeout(
+      const response = await this.fetchWithTimeout(
         RELATIVE_ENDPOINTS.CREATE_RELATIVE,
         {
           method: "POST",
@@ -101,83 +102,110 @@ class RelativeService {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data };
+      } else {
+        let errorMessage = "Create failed";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Ignore parse error, use default message
+        }
+        return { success: false, error: errorMessage };
       }
-
-      const data = await response.json();
-      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // Update relative
-  static async updateRelative(relativeID, updateData) {
+  // Cập nhật relative
+  async updateRelative(relativeID, updateData) {
     try {
-      const response = await fetchWithTimeout(
+      const response = await this.fetchWithTimeout(
         RELATIVE_ENDPOINTS.UPDATE_RELATIVE(relativeID),
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json-patch+json",
           },
           body: JSON.stringify(updateData),
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data };
+      } else {
+        let errorMessage = "Update failed";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Ignore parse error, use default message
+        }
+        return { success: false, error: errorMessage };
       }
-
-      const data = await response.json();
-      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // Delete relative
-  static async deleteRelative(relativeID) {
+  // Xóa relative
+  async deleteRelative(relativeID) {
     try {
-      const response = await fetchWithTimeout(
+      const response = await this.fetchWithTimeout(
         RELATIVE_ENDPOINTS.DELETE_RELATIVE(relativeID),
         {
           method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.ok) {
+        return { success: true };
+      } else {
+        let errorMessage = "Delete failed";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Ignore parse error, use default message
+        }
+        return { success: false, error: errorMessage };
       }
-
-      const data = await response.json();
-      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 
-  // Format date for display
-  static formatDate(dateString) {
+  // Format date cho display
+  formatDate(dateString) {
     if (!dateString) return "N/A";
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("vi-VN");
+      return new Date(dateString).toLocaleDateString("vi-VN");
     } catch (error) {
       return dateString;
     }
   }
 
-  // Format gender for display
-  static formatGenderDisplay(gender) {
-    return gender === "Nam" ? "Nam" : gender === "Nữ" ? "Nữ" : "N/A";
+  // Format gender display
+  formatGenderDisplay(gender) {
+    if (gender === "nam") return "Nam";
+    if (gender === "nữ") return "Nữ";
+    return gender || "N/A";
   }
 
-  // Format status for display
-  static formatStatusDisplay(status) {
-    return status === "Active" ? "Hoạt động" : "Không hoạt động";
+  // Format status display
+  formatStatusDisplay(status) {
+    if (status === "active") return "Hoạt động";
+    if (status === "inactive") return "Không hoạt động";
+    return status || "N/A";
   }
 }
 
-export default RelativeService;
+// Export singleton instance
+export default new RelativeService();

@@ -25,7 +25,6 @@ class CareProfileService {
   // Lấy tất cả Care Profiles
   async getAllCareProfiles() {
     try {
-      console.log("🔍 Getting all care profiles...");
       const response = await this.fetchWithTimeout(
         CARE_PROFILE_ENDPOINTS.GET_ALL_CARE_PROFILES,
         {
@@ -38,17 +37,11 @@ class CareProfileService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("🔍 All care profiles:", data);
         return { success: true, data: data };
       } else {
-        console.log(
-          "🔍 Failed to get care profiles:",
-          response.status
-        );
         return { success: false, error: `HTTP ${response.status}` };
       }
     } catch (error) {
-      console.error("🔍 Error getting care profiles:", error);
       return { success: false, error: error.message };
     }
   }
@@ -56,7 +49,6 @@ class CareProfileService {
   // Lấy Care Profile theo ID
   async getCareProfileById(careProfileID) {
     try {
-      console.log("🔍 Getting care profile by ID:", careProfileID);
       const response = await this.fetchWithTimeout(
         CARE_PROFILE_ENDPOINTS.GET_CARE_PROFILE_BY_ID(careProfileID),
         {
@@ -69,17 +61,11 @@ class CareProfileService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("🔍 Care profile data:", data);
         return { success: true, data: data };
       } else {
-        console.log(
-          "🔍 Failed to get care profile:",
-          response.status
-        );
         return { success: false, error: `HTTP ${response.status}` };
       }
     } catch (error) {
-      console.error("🔍 Error getting care profile:", error);
       return { success: false, error: error.message };
     }
   }
@@ -87,12 +73,6 @@ class CareProfileService {
   // Lấy Care Profiles theo accountID
   async getCareProfilesByAccountId(accountID) {
     try {
-      console.log(
-        "🔍 Getting care profiles by accountID:",
-        accountID
-      );
-
-      // Lấy tất cả care profiles và filter theo accountID
       const allResult = await this.getAllCareProfiles();
       if (!allResult.success) {
         return allResult;
@@ -101,14 +81,8 @@ class CareProfileService {
       const careProfiles = allResult.data.filter(
         (profile) => profile.accountID === accountID
       );
-
-      console.log("🔍 Care profiles for accountID:", careProfiles);
       return { success: true, data: careProfiles };
     } catch (error) {
-      console.error(
-        "🔍 Error getting care profiles by accountID:",
-        error
-      );
       return { success: false, error: error.message };
     }
   }
@@ -116,9 +90,6 @@ class CareProfileService {
   // Tạo Care Profile mới
   async createCareProfile(careProfileData) {
     try {
-      console.log("🔍 Creating care profile...");
-      console.log("🔍 Care profile data:", careProfileData);
-
       const response = await this.fetchWithTimeout(
         CARE_PROFILE_ENDPOINTS.CREATE_CARE_PROFILE,
         {
@@ -132,24 +103,18 @@ class CareProfileService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("🔍 Care profile created successfully:", data);
         return { success: true, data: data };
       } else {
-        let errorMessage = "Failed to create care profile";
+        let errorMessage = "Create failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message ||
-            errorData.error ||
-            `HTTP ${response.status}`;
+          errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          // Ignore parse error, use default message
         }
-        console.log("🔍 Create failed:", errorMessage);
         return { success: false, error: errorMessage };
       }
     } catch (error) {
-      console.error("🔍 Error creating care profile:", error);
       return { success: false, error: error.message };
     }
   }
@@ -157,15 +122,12 @@ class CareProfileService {
   // Cập nhật Care Profile
   async updateCareProfile(careProfileID, updateData) {
     try {
-      console.log("🔍 Updating care profile with ID:", careProfileID);
-      console.log("🔍 Update data:", updateData);
-
       const response = await this.fetchWithTimeout(
         CARE_PROFILE_ENDPOINTS.UPDATE_CARE_PROFILE(careProfileID),
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json-patch+json",
           },
           body: JSON.stringify(updateData),
         }
@@ -173,24 +135,18 @@ class CareProfileService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("🔍 Care profile updated successfully:", data);
         return { success: true, data: data };
       } else {
-        let errorMessage = "Failed to update care profile";
+        let errorMessage = "Update failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message ||
-            errorData.error ||
-            `HTTP ${response.status}`;
+          errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          // Ignore parse error, use default message
         }
-        console.log("🔍 Update failed:", errorMessage);
         return { success: false, error: errorMessage };
       }
     } catch (error) {
-      console.error("🔍 Error updating care profile:", error);
       return { success: false, error: error.message };
     }
   }
@@ -198,8 +154,6 @@ class CareProfileService {
   // Xóa Care Profile
   async deleteCareProfile(careProfileID) {
     try {
-      console.log("🔍 Deleting care profile with ID:", careProfileID);
-
       const response = await this.fetchWithTimeout(
         CARE_PROFILE_ENDPOINTS.DELETE_CARE_PROFILE(careProfileID),
         {
@@ -211,24 +165,18 @@ class CareProfileService {
       );
 
       if (response.ok) {
-        console.log("🔍 Care profile deleted successfully");
         return { success: true };
       } else {
-        let errorMessage = "Failed to delete care profile";
+        let errorMessage = "Delete failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message ||
-            errorData.error ||
-            `HTTP ${response.status}`;
+          errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          // Ignore parse error, use default message
         }
-        console.log("🔍 Delete failed:", errorMessage);
         return { success: false, error: errorMessage };
       }
     } catch (error) {
-      console.error("🔍 Error deleting care profile:", error);
       return { success: false, error: error.message };
     }
   }
@@ -239,14 +187,14 @@ class CareProfileService {
     try {
       return new Date(dateString).toLocaleDateString("vi-VN");
     } catch (error) {
-      return "N/A";
+      return dateString;
     }
   }
 
-  // Format status cho display
+  // Format status display
   formatStatusDisplay(status) {
-    if (status === "Active") return "Hoạt động";
-    if (status === "Inactive") return "Không hoạt động";
+    if (status === "active") return "Hoạt động";
+    if (status === "inactive") return "Không hoạt động";
     return status || "N/A";
   }
 }

@@ -12,7 +12,6 @@ class RoleService {
   // Lấy tất cả roles từ API
   async getAllRoles() {
     try {
-      console.log("Fetching roles from API...");
       const response = await fetch(ROLE_ENDPOINTS.GET_ALL_ROLES, {
         method: "GET",
         headers: {
@@ -22,14 +21,11 @@ class RoleService {
 
       if (response.ok) {
         const roles = await response.json();
-        console.log("Roles fetched successfully:", roles);
         return { success: true, roles: roles };
       } else {
-        console.log("Failed to fetch roles:", response.status);
         return { success: false, error: `HTTP ${response.status}` };
       }
     } catch (error) {
-      console.log("Error fetching roles:", error.message);
       return { success: false, error: error.message };
     }
   }
