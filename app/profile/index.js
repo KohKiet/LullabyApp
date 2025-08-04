@@ -78,8 +78,10 @@ export default function ProfileScreen() {
         );
 
         if (isNursingSpecialist) {
+          console.log("Loading nursing specialist data from API...");
           const enrichedUser =
             await NursingSpecialistService.enrichUserData(user);
+          console.log("Enriched user data:", enrichedUser);
           setUserData(enrichedUser);
         } else {
           setUserData(user);
@@ -738,53 +740,25 @@ export default function ProfileScreen() {
     const displayValues =
       NursingSpecialistService.getDisplayValues(userData);
 
-    // Base fields for all users
-    const baseFields = [
-      {
-        label: "Họ và tên",
-        value: displayValues.fullName,
-        key: "fullName",
-        editable: isEditing,
-      },
-      {
-        label: "Email",
-        value: userData.email || "",
-        key: "email",
-        editable: false, // Email không được edit
-      },
-      {
-        label: "Số điện thoại",
-        value: userData.phoneNumber || userData.phone_number || "",
-        key: "phoneNumber",
-        editable: false, // Phone không được edit
-      },
-      {
-        label: "Vai trò",
-        value: RoleService.getDisplayName(
-          userData.roleName ||
-            RoleService.getRoleName(
-              userData.role_id || userData.roleID
-            )
-        ),
-        key: "role_id",
-        editable: false,
-      },
-    ];
+    // Check if user is NursingSpecialist
+    const isNursingSpecialist = RoleService.isNursingSpecialist(
+      userData.role_id || userData.roleID
+    );
 
-    // Add NursingSpecialist specific fields
-    if (
-      RoleService.isNursingSpecialist(
-        userData.role_id || userData.roleID
-      )
-    ) {
-      baseFields.splice(
-        1,
-        0, // Insert after full name
+    if (isNursingSpecialist) {
+      // Fields for NursingSpecialist
+      const nursingFields = [
+        {
+          label: "Họ và tên",
+          value: displayValues.fullName,
+          key: "fullName",
+          editable: isEditing,
+        },
         {
           label: "Giới tính",
           value: displayValues.gender,
           key: "gender",
-          editable: false,
+          editable: isEditing,
         },
         {
           label: "Ngày sinh",
@@ -800,33 +774,97 @@ export default function ProfileScreen() {
           editable: isEditing,
         },
         {
-          label: "Khu vực",
-          value: displayValues.zone,
-          key: "zone",
-          editable: false,
-        },
-        {
           label: "Chuyên môn",
           value: displayValues.major,
           key: "major",
           editable: isEditing,
-        }
-      );
-    }
+        },
+        {
+          label: "Email",
+          value: userData.email || "",
+          key: "email",
+          editable: false, // Email không được edit
+        },
+        {
+          label: "Số điện thoại",
+          value: userData.phoneNumber || userData.phone_number || "",
+          key: "phoneNumber",
+          editable: false, // Phone không được edit
+        },
+        {
+          label: "Trạng thái",
+          value: displayValues.status,
+          key: "status",
+          editable: false,
+        },
+      ];
 
-    // Add status at the end
-    baseFields.push({
-      label: "Trạng thái",
-      value: displayValues.status,
-      key: "status",
-      editable: false,
-    });
+      return nursingFields.map((field, index) => (
+        <View key={index} style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>{field.label}</Text>
+          {field.editable ? (
+            field.type === "date" ? (
+              <TextInput
+                style={styles.fieldInput}
+                value={field.value}
+                onChangeText={(text) =>
+                  handleFieldChange(field.key, text)
+                }
+                placeholder={`Nhập ${field.label.toLowerCase()}`}
+              />
+            ) : (
+              <TextInput
+                style={styles.fieldInput}
+                value={field.value}
+                onChangeText={(text) =>
+                  handleFieldChange(field.key, text)
+                }
+                placeholder={`Nhập ${field.label.toLowerCase()}`}
+              />
+            )
+          ) : (
+            <Text style={styles.fieldValue}>{field.value}</Text>
+          )}
+        </View>
+      ));
+    } else {
+      // Fields for Customer (basic fields only)
+      const customerFields = [
+        {
+          label: "Họ và tên",
+          value: displayValues.fullName,
+          key: "fullName",
+          editable: isEditing,
+        },
+        {
+          label: "Email",
+          value: userData.email || "",
+          key: "email",
+          editable: false, // Email không được edit
+        },
+        {
+          label: "Số điện thoại",
+          value: userData.phoneNumber || userData.phone_number || "",
+          key: "phoneNumber",
+          editable: false, // Phone không được edit
+        },
+        {
+          label: "Vai trò",
+          value: RoleService.getDisplayName(
+            userData.roleName ||
+              RoleService.getRoleName(
+                userData.role_id || userData.roleID
+              )
+          ),
+          key: "role_id",
+          editable: false,
+        },
+      ];
 
-    return baseFields.map((field, index) => (
-      <View key={index} style={styles.fieldContainer}>
-        <Text style={styles.fieldLabel}>{field.label}</Text>
-        {field.editable ? (
-          field.type === "date" ? (
+      return customerFields.map((field, index) => (
+        <View key={index} style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>{field.label}</Text>
+          {field.editable ? (
             <TextInput
               style={styles.fieldInput}
               value={field.value}
@@ -836,20 +874,11 @@ export default function ProfileScreen() {
               placeholder={`Nhập ${field.label.toLowerCase()}`}
             />
           ) : (
-            <TextInput
-              style={styles.fieldInput}
-              value={field.value}
-              onChangeText={(text) =>
-                handleFieldChange(field.key, text)
-              }
-              placeholder={`Nhập ${field.label.toLowerCase()}`}
-            />
-          )
-        ) : (
-          <Text style={styles.fieldValue}>{field.value}</Text>
-        )}
-      </View>
-    ));
+            <Text style={styles.fieldValue}>{field.value}</Text>
+          )}
+        </View>
+      ));
+    }
   };
 
   const renderMajorSelection = () => {
@@ -887,12 +916,6 @@ export default function ProfileScreen() {
         multiline: true,
         placeholder: "Ví dụ: Chăm sóc sức khỏe với tình yêu thương",
       },
-      {
-        label: "Trạng thái",
-        value: displayValues.status,
-        key: "status",
-        editable: false,
-      },
     ];
 
     return (
@@ -916,17 +939,7 @@ export default function ProfileScreen() {
                 numberOfLines={field.multiline ? 3 : 1}
               />
             ) : (
-              <Text
-                style={[
-                  styles.fieldValue,
-                  field.key === "status" && {
-                    color:
-                      displayValues.status === "Hoạt động"
-                        ? "#4CAF50"
-                        : "#FF6B6B",
-                    fontWeight: "bold",
-                  },
-                ]}>
+              <Text style={styles.fieldValue}>
                 {field.value || "Chưa cập nhật"}
               </Text>
             )}
@@ -1725,17 +1738,27 @@ export default function ProfileScreen() {
             <Text style={styles.logoutButtonText}>Đăng xuất</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.addCareProfileButton}
-            onPress={openCareProfileForm}>
-            <Text style={styles.addCareProfileButtonText}>
-              Thêm hồ sơ chăm sóc
-            </Text>
-          </TouchableOpacity>
+          {/* Chỉ hiển thị "Thêm hồ sơ chăm sóc" cho Customer */}
+          {!RoleService.isNursingSpecialist(
+            userData.role_id || userData.roleID
+          ) && (
+            <TouchableOpacity
+              style={styles.addCareProfileButton}
+              onPress={openCareProfileForm}>
+              <Text style={styles.addCareProfileButtonText}>
+                Thêm hồ sơ chăm sóc
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {renderNursingSpecialistFields()}
-        {renderCareProfiles()}
+
+        {/* Chỉ hiển thị "Hồ sơ chăm sóc" cho Customer */}
+        {!RoleService.isNursingSpecialist(
+          userData.role_id || userData.roleID
+        ) && renderCareProfiles()}
+
         {renderCareProfileForm()}
         {renderEditCareProfileForm()}
         {renderRelativeForm()}

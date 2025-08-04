@@ -83,7 +83,7 @@ export default function LoginScreen() {
       let welcomeMessage = "Đăng nhập thành công!";
 
       if (userData.role_id === 2 || userData.roleID === 2) {
-        targetRoute = "/nursing";
+        targetRoute = "/";
         welcomeMessage = "Chào mừng Điều dưỡng viên!";
       } else if (userData.role_id === 1 || userData.roleID === 1) {
         targetRoute = "/admin";
@@ -144,8 +144,8 @@ export default function LoginScreen() {
         let welcomeMessage = "Đăng nhập thành công!";
 
         if (user.role_id === 2 || user.roleID === 2) {
-          // NursingSpecialist - chuyển đến trang nursing
-          targetRoute = "/nursing";
+          // NursingSpecialist - chuyển đến trang chủ
+          targetRoute = "/";
           welcomeMessage = "Chào mừng Điều dưỡng viên!";
         } else if (user.role_id === 1 || user.roleID === 1) {
           // Admin - chuyển đến trang admin

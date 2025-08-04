@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import BottomTab from "../components/BottomTab";
+import RoleService from "../services/roleService";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -259,7 +260,10 @@ export default function HomeScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}>
         {/* Hiển thị nội dung theo role */}
-        {userData?.role_id === 2
+        {userData &&
+        RoleService.isNursingSpecialist(
+          userData.role_id || userData.roleID
+        )
           ? renderNurseSpecialistContent()
           : renderMemberContent()}
       </ScrollView>

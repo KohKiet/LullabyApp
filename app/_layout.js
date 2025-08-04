@@ -16,7 +16,6 @@ export default function RootLayout() {
         options={{ headerShown: false }}
       />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
-      <Stack.Screen name="nursing" options={{ headerShown: false }} />
       <Stack.Screen name="member" options={{ headerShown: false }} />
       <Stack.Screen
         name="nurse_specialist"

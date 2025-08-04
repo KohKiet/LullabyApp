@@ -138,49 +138,47 @@ class AuthService {
       console.log("🔍 GETTING USER DATA FROM ASYNCSTORAGE");
       const userData = await AsyncStorage.getItem(USER_STORAGE_KEY);
       console.log("🔍 Raw user data from AsyncStorage:", userData);
-      console.log("🔍 Raw data type:", typeof userData);
-      console.log(
-        "🔍 Raw data length:",
-        userData ? userData.length : 0
-      );
 
       if (userData) {
         try {
           const user = JSON.parse(userData);
           console.log("🔍 Parsed user data:", user);
-          console.log("🔍 Parsed user keys:", Object.keys(user));
-          console.log("🔍 Parsed user type:", typeof user);
-          console.log(
-            "🔍 Parsed role info - role_id:",
-            user.role_id,
-            "roleID:",
-            user.roleID,
-            "roleName:",
-            user.roleName
-          );
-          console.log(
-            "🔍 Parsed ID info - id:",
-            user.id,
-            "accountID:",
-            user.accountID
-          );
-          console.log(
-            "🔍 Parsed name info - fullName:",
-            user.fullName,
-            "full_name:",
-            user.full_name
-          );
-          console.log(
-            "🔍 User data retrieved:",
-            user.id || user.accountID
-          );
+          console.log("🔍 User ID:", user.id || user.accountID);
+
+          // Nếu có user ID, thử fetch thông tin mới từ API
+          if (user.id || user.accountID) {
+            const userId = user.id || user.accountID;
+            console.log(
+              "🔍 Fetching fresh user data from API for ID:",
+              userId
+            );
+
+            try {
+              const profileResult = await this.fetchUserProfile(
+                userId
+              );
+              if (profileResult.success) {
+                console.log(
+                  "🔍 Fresh user data fetched from API:",
+                  profileResult.user
+                );
+                return profileResult.user;
+              } else {
+                console.log("🔍 API fetch failed, using cached data");
+                return user;
+              }
+            } catch (apiError) {
+              console.log(
+                "🔍 API error, using cached data:",
+                apiError
+              );
+              return user;
+            }
+          }
+
           return user;
         } catch (parseError) {
           console.error("🔍 Error parsing user data:", parseError);
-          console.error(
-            "🔍 Raw data that failed to parse:",
-            userData
-          );
           return null;
         }
       }
@@ -799,7 +797,7 @@ class AuthService {
         // Fallback: sử dụng getall để tìm nursingID
         const token = await this.getToken();
         const response = await this.fetchWithTimeout(
-          AUTH_ENDPOINTS.GET_ALL_NURSING_SPECIALISTS,
+          "http://localhost:5294/api/nursingspecialists/getall",
           {
             method: "GET",
             headers: {
@@ -835,75 +833,56 @@ class AuthService {
             );
             return {
               success: false,
-              error: "NursingSpecialist not found",
+              error: "Nursing specialist not found",
             };
           }
         } else {
-          let errorMessage =
-            "Failed to fetch NursingSpecialist details";
-          try {
-            const errorData = await response.json();
-            errorMessage =
-              errorData.message ||
-              errorData.error ||
-              `HTTP ${response.status}`;
-          } catch (parseError) {
-            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          console.log(
+            "🔍 NursingSpecialist getall failed:",
+            response.status
+          );
+          return {
+            success: false,
+            error: "Failed to fetch nursing specialists",
+          };
+        }
+      } else {
+        // Có nursingID, lấy thông tin chi tiết
+        const token = await this.getToken();
+        const response = await this.fetchWithTimeout(
+          `http://localhost:5294/api/nursingspecialists/get/${nursingID}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("🔍 NursingSpecialist details:", data);
+          return { success: true, data: data };
+        } else {
           console.log(
             "🔍 NursingSpecialist details fetch failed:",
-            errorMessage
+            response.status
           );
-          return { success: false, error: errorMessage };
+          return {
+            success: false,
+            error: "Failed to fetch nursing specialist details",
+          };
         }
-      }
-
-      // Sử dụng nursingID để gọi endpoint get/{id}
-      console.log("🔍 Using nursingID:", nursingID);
-      const token = await this.getToken();
-      const response = await this.fetchWithTimeout(
-        NURSING_SPECIALIST_ENDPOINTS.GET_NURSING_SPECIALIST_BY_ID(nursingID),
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      console.log(
-        "🔍 NursingSpecialist get/{id} response status:",
-        response.status
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("🔍 NursingSpecialist details:", data);
-        return { success: true, data: data };
-      } else {
-        let errorMessage =
-          "Failed to fetch NursingSpecialist details";
-        try {
-          const errorData = await response.json();
-          errorMessage =
-            errorData.message ||
-            errorData.error ||
-            `HTTP ${response.status}`;
-        } catch (parseError) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        }
-        console.log(
-          "🔍 NursingSpecialist details fetch failed:",
-          errorMessage
-        );
-        return { success: false, error: errorMessage };
       }
     } catch (error) {
       console.error(
         "🔍 Error fetching NursingSpecialist details:",
         error
       );
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   }
 
