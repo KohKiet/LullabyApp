@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaskedView from "@react-native-masked-view/masked-view";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -11,9 +13,203 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import BottomTab from "../components/BottomTab";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // Reload user data khi screen được focus (khi quay lại từ logout)
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUserData();
+    }, [])
+  );
+
+  const loadUserData = async () => {
+    try {
+      const userDataString = await AsyncStorage.getItem("user");
+      if (userDataString) {
+        const user = JSON.parse(userDataString);
+        setUserData(user);
+      } else {
+        // Nếu không có user data (đã logout), set về null
+        setUserData(null);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      setUserData(null);
+    }
+  };
+
+  // Render content cho Member
+  const renderMemberContent = () => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Đội Ngũ</Text>
+        <View style={styles.separator} />
+        <View style={styles.cardRow}>
+          <LinearGradient
+            colors={["#B3E5FC", "#81D4FA", "#4FC3F7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() => router.push("/member/specialists")}>
+              <Ionicons
+                name="person-circle"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Tư vấn viên
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+          <LinearGradient
+            colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() => router.push("/member/nurses")}>
+              <Ionicons
+                name="person-circle"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Điều dưỡng viên
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Gói dịch vụ</Text>
+        <View style={styles.separator} />
+        <View style={styles.cardRow}>
+          <LinearGradient
+            colors={["#C2F5E9", "#A8E6CF", "#8ED9C3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}>
+            <TouchableOpacity style={styles.cardContent}>
+              <Ionicons
+                name="cube-outline"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Gói dịch vụ chăm sóc
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+          <LinearGradient
+            colors={["#B3E5FC", "#81D4FA", "#4FC3F7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}>
+            <TouchableOpacity style={styles.cardContent}>
+              <Ionicons
+                name="document-text"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Dịch vụ cơ bản
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Lịch</Text>
+        <View style={styles.separator} />
+        <View style={styles.cardRow}>
+          <LinearGradient
+            colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.card, styles.singleCard]}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() => router.push("/appointment")}>
+              <Ionicons
+                name="calendar-outline"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Lịch Hẹn
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </View>
+    </>
+  );
+
+  // Render content cho Nurse/Specialist
+  const renderNurseSpecialistContent = () => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Lịch hẹn</Text>
+        <View style={styles.separator} />
+        <View style={styles.cardRow}>
+          <LinearGradient
+            colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.card, styles.singleCard]}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() =>
+                router.push("/nurse_specialist/workschedule")
+              }>
+              <Ionicons name="calendar" size={40} color="#FFFFFF" />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Lịch làm việc
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Lịch sử</Text>
+        <View style={styles.separator} />
+        <View style={styles.cardRow}>
+          <LinearGradient
+            colors={["#B3E5FC", "#81D4FA", "#4FC3F7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.card, styles.singleCard]}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() =>
+                router.push("/nurse_specialist/booking_history")
+              }>
+              <Ionicons
+                name="time-outline"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Lịch sử đặt lịch
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#C2F5E9" />
@@ -62,125 +258,13 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}>
-        {/* Notification and Application Status Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Đội Ngũ</Text>
-          <View style={styles.separator} />
-          <View style={styles.cardRow}>
-            <LinearGradient
-              colors={["#B3E5FC", "#81D4FA", "#4FC3F7"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}>
-              <TouchableOpacity style={styles.cardContent}>
-                <Ionicons
-                  name="person-circle"
-                  size={40}
-                  color="#FFFFFF"
-                />
-                <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                  Tư vấn viên
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-            <LinearGradient
-              colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}>
-              <TouchableOpacity style={styles.cardContent}>
-                <Ionicons
-                  name="person-circle"
-                  size={40}
-                  color="#FFFFFF"
-                />
-                <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                  Điều dưỡng viên
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Gói dịch vụ</Text>
-          <View style={styles.separator} />
-          <View style={styles.cardRow}>
-            <LinearGradient
-              colors={["#C2F5E9", "#A8E6CF", "#8ED9C3"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}>
-              <TouchableOpacity style={styles.cardContent}>
-                <Ionicons
-                  name="cube-outline"
-                  size={40}
-                  color="#FFFFFF"
-                />
-                <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                  Gói dịch vụ chăm sóc
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-            <LinearGradient
-              colors={["#B3E5FC", "#81D4FA", "#4FC3F7"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}>
-              <TouchableOpacity style={styles.cardContent}>
-                <Ionicons
-                  name="document-text"
-                  size={40}
-                  color="#FFFFFF"
-                />
-                <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                  Dịch vụ cơ bản
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Lịch</Text>
-          <View style={styles.separator} />
-          <View style={styles.cardRow}>
-            <LinearGradient
-              colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[styles.card, styles.singleCard]}>
-              <TouchableOpacity
-                style={styles.cardContent}
-                onPress={() => router.push("/appointment")}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={40}
-                  color="#FFFFFF"
-                />
-                <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                  Lịch Hẹn
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </View>
+        {/* Hiển thị nội dung theo role */}
+        {userData?.role_id === 2
+          ? renderNurseSpecialistContent()
+          : renderMemberContent()}
       </ScrollView>
       {/* Bottom Navigation */}
-      <LinearGradient
-        colors={["#C2F5E9", "#B3E5FC", "#FFD9E6"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={24} color="#FFFFFF" />
-          <View style={styles.activeIndicator} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="chatbubble" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </LinearGradient>
+      <BottomTab />
     </View>
   );
 }

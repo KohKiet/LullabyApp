@@ -1,0 +1,247 @@
+{
+  "accounts": [
+    {
+      "id": 1,
+      "role_id": 1,
+      "full_name": "Nguyễn Văn A",
+      "phone_number": "0123456789",
+      "email": "nguyenvana@email.com",
+      "password": "password123",
+      "avatar_url": "https://example.com/avatar1.jpg",
+      "create_at": "2024-01-01T00:00:00Z",
+      "deleted_at": null,
+      "status": "active"
+    },
+    {
+      "id": 2,
+      "role_id": 2,
+      "full_name": "Trần Thị B",
+      "phone_number": "0987654321",
+      "email": "tranthib@email.com",
+      "password": "password123",
+      "avatar_url": "https://example.com/avatar2.jpg",
+      "create_at": "2024-01-01T00:00:00Z",
+      "deleted_at": null,
+      "status": "active"
+    },
+    {
+      "id": 3,
+      "role_id": 2,
+      "full_name": "Lê Văn C",
+      "phone_number": "0123456788",
+      "email": "levanc@email.com",
+      "password": "password123",
+      "avatar_url": "https://example.com/avatar3.jpg",
+      "create_at": "2024-01-01T00:00:00Z",
+      "deleted_at": null,
+      "status": "active"
+    },
+    {
+      "id": 4,
+      "role_id": 2,
+      "full_name": "Phạm Thị D",
+      "phone_number": "0123456787",
+      "email": "phamthid@email.com",
+      "password": "password123",
+      "avatar_url": "https://example.com/avatar4.jpg",
+      "create_at": "2024-01-01T00:00:00Z",
+      "deleted_at": null,
+      "status": "active"
+    },
+    {
+      "id": 5,
+      "role_id": 2,
+      "full_name": "Hoàng Văn E",
+      "phone_number": "0123456786",
+      "email": "hoangvane@email.com",
+      "password": "password123",
+      "avatar_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbvL5npKudVGZj8oLnBYT-wBgNKhgqORwmFg&s",
+      "create_at": "2024-01-01T00:00:00Z",
+      "deleted_at": null,
+      "status": "active"
+    }
+  ],
+  "zones": [
+    {
+      "zoneId": 1,
+      "accountId": 1,
+      "zoneName": "Quận 1",
+      "city": "TP.HCM"
+    },
+    {
+      "zoneId": 2,
+      "accountId": 1,
+      "zoneName": "Quận 2",
+      "city": "TP.HCM"
+    },
+    {
+      "zoneId": 3,
+      "accountId": 1,
+      "zoneName": "Quận 3",
+      "city": "TP.HCM"
+    },
+    {
+      "zoneId": 4,
+      "accountId": 1,
+      "zoneName": "Quận 7",
+      "city": "TP.HCM"
+    }
+  ],
+  "nursingSpecialists": [
+    {
+      "nursingId": 1,
+      "accountId": 2,
+      "zoneId": 1,
+      "gender": "Female",
+      "dateOfBirth": "1990-05-15",
+      "fullName": "Trần Thị B",
+      "address": "123 Nguyễn Huệ, Quận 1, TP.HCM",
+      "experience": "5 năm kinh nghiệm",
+      "slogan": "Chăm sóc sức khỏe với tình yêu thương",
+      "status": "active",
+      "major": "Tư vấn viên"
+    },
+    {
+      "nursingId": 2,
+      "accountId": 3,
+      "zoneId": 2,
+      "gender": "Male",
+      "dateOfBirth": "1988-03-20",
+      "fullName": "Lê Văn C",
+      "address": "456 Lê Lợi, Quận 2, TP.HCM",
+      "experience": "8 năm kinh nghiệm",
+      "slogan": "Tư vấn dinh dưỡng chuyên nghiệp",
+      "status": "active",
+      "major": "Tư vấn viên"
+    },
+    {
+      "nursingId": 3,
+      "accountId": 4,
+      "zoneId": 3,
+      "gender": "Female",
+      "dateOfBirth": "1992-07-10",
+      "fullName": "Phạm Thị D",
+      "address": "789 Trần Hưng Đạo, Quận 3, TP.HCM",
+      "experience": "6 năm kinh nghiệm",
+      "slogan": "Điều dưỡng chuyên nghiệp, tận tâm",
+      "status": "active",
+      "major": "Điều dưỡng viên"
+    },
+    {
+      "nursingId": 4,
+      "accountId": 5,
+      "zoneId": 4,
+      "gender": "Male",
+      "dateOfBirth": "1985-12-25",
+      "fullName": "Hoàng Văn E",
+      "address": "321 Phạm Văn Đồng, Quận 7, TP.HCM",
+      "experience": "10 năm kinh nghiệm",
+      "slogan": "Chăm sóc sức khỏe toàn diện",
+      "status": "active",
+      "major": "Điều dưỡng viên"
+    }
+  ],
+  "bookings": [
+    {
+      "bookingId": 1,
+      "careProfileId": 1,
+      "nursingId": 1,
+      "workDate": "2025-07-17",
+      "startTime": "08:00",
+      "endTime": "10:00",
+      "status": "Pending",
+      "amount": 500000,
+      "service": "Chăm sóc sức khỏe tại nhà",
+      "address": "123 Nguyễn Văn A, Quận 1"
+    },
+    {
+      "bookingId": 2,
+      "careProfileId": 1,
+      "nursingId": 2,
+      "workDate": "2025-07-17",
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "status": "Accepted",
+      "amount": 300000,
+      "service": "Tư vấn dinh dưỡng",
+      "address": "456 Lê Văn B, Quận 2"
+    },
+    {
+      "bookingId": 3,
+      "careProfileId": 1,
+      "nursingId": 3,
+      "workDate": "2025-07-18",
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "status": "Completed",
+      "amount": 400000,
+      "service": "Kiểm tra sức khỏe định kỳ",
+      "address": "789 Trần Văn C, Quận 3"
+    }
+  ],
+  "notifications": [
+    {
+      "notificationId": 1,
+      "accountId": 1,
+      "message": "Bạn có lịch hẹn mới vào ngày mai",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "isRead": false
+    },
+    {
+      "notificationId": 2,
+      "accountId": 1,
+      "message": "Lịch hẹn của bạn đã được xác nhận",
+      "createdAt": "2024-01-02T10:30:00Z",
+      "isRead": false
+    },
+    {
+      "notificationId": 3,
+      "accountId": 2,
+      "message": "Bạn có lịch làm việc mới được giao",
+      "createdAt": "2024-01-03T08:15:00Z",
+      "isRead": true
+    },
+    {
+      "notificationId": 4,
+      "accountId": 3,
+      "message": "Cập nhật thông tin profile của bạn",
+      "createdAt": "2024-01-04T14:20:00Z",
+      "isRead": false
+    },
+    {
+      "notificationId": 5,
+      "accountId": 4,
+      "message": "Lịch hẹn với khách hàng đã hoàn thành",
+      "createdAt": "2024-01-05T16:45:00Z",
+      "isRead": true
+    }
+  ],
+  "roles": [
+    {
+      "id": 1,
+      "name": "member",
+      "description": "Thành viên"
+    },
+    {
+      "id": 2,
+      "name": "nurse_specialist",
+      "description": "Điều dưỡng viên/Tư vấn viên"
+    }
+  ],
+  "services": [
+    {
+      "id": 1,
+      "name": "Chăm sóc sức khỏe tại nhà",
+      "description": "Dịch vụ chăm sóc sức khỏe tại nhà",
+      "price": 500000,
+      "duration": 120
+    },
+    {
+      "id": 2,
+      "name": "Tư vấn dinh dưỡng",
+      "description": "Tư vấn dinh dưỡng chuyên nghiệp",
+      "price": 300000,
+      "duration": 120
+    }
+  ]
+}
