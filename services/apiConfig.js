@@ -88,3 +88,60 @@ export const ROLE_ENDPOINTS = {
   UPDATE_ROLE: (id) => `${BASE_URL}/api/roles/update/${id}`,
   DELETE_ROLE: (id) => `${BASE_URL}/api/roles/delete/${id}`,
 };
+
+// Zone Detail Endpoints
+export const ZONE_DETAIL_ENDPOINTS = {
+  GET_ALL_ZONE_DETAILS: `${BASE_URL}/api/zonedetails/getall`,
+  GET_ZONE_DETAIL_BY_ID: (id) =>
+    `${BASE_URL}/api/zonedetails/get/${id}`,
+  CREATE_ZONE_DETAIL: `${BASE_URL}/api/zonedetails/create`,
+  UPDATE_ZONE_DETAIL: (id) =>
+    `${BASE_URL}/api/zonedetails/update/${id}`,
+  DELETE_ZONE_DETAIL: (id) =>
+    `${BASE_URL}/api/zonedetails/delete/${id}`,
+};
+
+// Service Type Endpoints
+export const SERVICE_TYPE_ENDPOINTS = {
+  GET_ALL_SERVICE_TYPES: `${BASE_URL}/api/servicetypes/getall`,
+  GET_SERVICE_TYPE_BY_ID: (id) =>
+    `${BASE_URL}/api/servicetypes/get/${id}`,
+  CREATE_SERVICE_TYPE: `${BASE_URL}/api/servicetypes/create`,
+  UPDATE_SERVICE_TYPE: (id) =>
+    `${BASE_URL}/api/servicetypes/update/${id}`,
+  DELETE_SERVICE_TYPE: (id) =>
+    `${BASE_URL}/api/servicetypes/delete/${id}`,
+};
+
+// Template Endpoints
+export const TEMPLATE_ENDPOINTS = {
+  BOOKINGS: `${BASE_URL}/api/bookings`,
+  BLOGS: `${BASE_URL}/api/blogs`,
+  BLOG_CATEGORIES: `${BASE_URL}/api/blogcategories`,
+  FEEDBACKS: `${BASE_URL}/api/feedbacks`,
+  HOLIDAYS: `${BASE_URL}/api/holidays`,
+  INVOICES: `${BASE_URL}/api/invoices`,
+  MEDICAL_NOTES: `${BASE_URL}/api/medicalnotes`,
+  NOTIFICATIONS: `${BASE_URL}/api/notifications`,
+  SERVICE_TASKS: `${BASE_URL}/api/servicetasks`,
+  TRANSACTION_HISTORIES: `${BASE_URL}/api/transactionhistories`,
+  WALLETS: `${BASE_URL}/api/wallets`,
+  WORK_SCHEDULES: `${BASE_URL}/api/workschedules`,
+  CUSTOMIZE_PACKAGES: `${BASE_URL}/api/customizepackages`,
+  CUSTOMIZE_TASKS: `${BASE_URL}/api/customizetasks`,
+  NURSING_SPECIALIST_SERVICE_TYPES: `${BASE_URL}/api/nursingspecialist_servicetypes`,
+};
+
+// API Configuration Object
+export const API_CONFIG = {
+  BASE_URL,
+  AUTH_ENDPOINTS,
+  ZONE_ENDPOINTS,
+  ZONE_DETAIL_ENDPOINTS,
+  CARE_PROFILE_ENDPOINTS,
+  SERVICE_TYPE_ENDPOINTS,
+  NURSING_SPECIALIST_ENDPOINTS,
+  RELATIVE_ENDPOINTS,
+  ROLE_ENDPOINTS,
+  TEMPLATE_ENDPOINTS,
+};
