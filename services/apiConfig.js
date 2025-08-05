@@ -27,6 +27,13 @@ if (isDevelopment) {
   BASE_URL = "https://your-production-api.com";
 }
 
+console.log("API Config: Platform:", Platform.OS);
+console.log("API Config: BASE_URL:", BASE_URL);
+console.log(
+  "API Config: Service Types URL:",
+  `${BASE_URL}/api/servicetypes/getall`
+);
+
 // Authentication & Account Management Endpoints
 export const AUTH_ENDPOINTS = {
   LOGIN: `${BASE_URL}/api/accounts/login`,

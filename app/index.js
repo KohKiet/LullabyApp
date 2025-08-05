@@ -14,12 +14,21 @@ import {
   View,
 } from "react-native";
 import BottomTab from "../components/BottomTab";
+import PackageListModal from "../components/PackageListModal";
+import ServiceListModal from "../components/ServiceListModal";
 import WalletCard from "../components/WalletCard";
 import RoleService from "../services/roleService";
+import ServiceTypeService from "../services/serviceTypeService";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [userData, setUserData] = useState(null);
+  const [services, setServices] = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [showServicesModal, setShowServicesModal] = useState(false);
+  const [showPackagesModal, setShowPackagesModal] = useState(false);
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -46,6 +55,66 @@ export default function HomeScreen() {
       console.error("Error loading user data:", error);
       setUserData(null);
     }
+  };
+
+  const loadServices = async () => {
+    try {
+      console.log("HomeScreen: Loading services...");
+      setIsLoadingServices(true);
+      const result = await ServiceTypeService.getServices();
+      console.log("HomeScreen: Services result:", result);
+      if (result.success) {
+        setServices(result.data);
+        console.log(
+          "HomeScreen: Services loaded:",
+          result.data.length,
+          "items"
+        );
+      } else {
+        console.error("Error loading services:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading services:", error);
+    } finally {
+      setIsLoadingServices(false);
+    }
+  };
+
+  const loadPackages = async () => {
+    try {
+      console.log("HomeScreen: Loading packages...");
+      setIsLoadingPackages(true);
+      const result = await ServiceTypeService.getPackages();
+      console.log("HomeScreen: Packages result:", result);
+      if (result.success) {
+        setPackages(result.data);
+        console.log(
+          "HomeScreen: Packages loaded:",
+          result.data.length,
+          "items"
+        );
+      } else {
+        console.error("Error loading packages:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading packages:", error);
+    } finally {
+      setIsLoadingPackages(false);
+    }
+  };
+
+  const handleShowServices = () => {
+    if (services.length === 0) {
+      loadServices();
+    }
+    setShowServicesModal(true);
+  };
+
+  const handleShowPackages = () => {
+    if (packages.length === 0) {
+      loadPackages();
+    }
+    setShowPackagesModal(true);
   };
 
   // Render content cho Member
@@ -102,7 +171,9 @@ export default function HomeScreen() {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.card}>
-            <TouchableOpacity style={styles.cardContent}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={handleShowPackages}>
               <Ionicons
                 name="cube-outline"
                 size={40}
@@ -118,7 +189,9 @@ export default function HomeScreen() {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.card}>
-            <TouchableOpacity style={styles.cardContent}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={handleShowServices}>
               <Ionicons
                 name="document-text"
                 size={40}
@@ -274,6 +347,24 @@ export default function HomeScreen() {
           ? renderNurseSpecialistContent()
           : renderMemberContent()}
       </ScrollView>
+
+      {/* Service List Modals */}
+      <ServiceListModal
+        visible={showServicesModal}
+        onClose={() => setShowServicesModal(false)}
+        services={services}
+        title="Dịch vụ chăm sóc"
+        isLoading={isLoadingServices}
+      />
+
+      <PackageListModal
+        visible={showPackagesModal}
+        onClose={() => setShowPackagesModal(false)}
+        packages={packages}
+        title="Gói dịch vụ chăm sóc"
+        isLoading={isLoadingPackages}
+      />
+
       {/* Bottom Navigation */}
       <BottomTab />
     </View>
