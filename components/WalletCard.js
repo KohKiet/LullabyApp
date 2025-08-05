@@ -66,7 +66,7 @@ export default function WalletCard({ userData }) {
     }
   };
 
-  const handleTopUp = () => {
+  const handleTopUp = async () => {
     if (!topUpAmount.trim()) {
       Alert.alert("Lỗi", "Vui lòng nhập số tiền");
       return;
@@ -78,19 +78,31 @@ export default function WalletCard({ userData }) {
       return;
     }
 
-    // Update wallet amount
-    const newAmount = (walletData?.amount || 0) + amount;
-    setWalletData((prev) => ({
-      ...prev,
-      amount: newAmount,
-    }));
+    try {
+      const result = await WalletService.topUpWallet(
+        userData.accountID || userData.id,
+        amount
+      );
 
-    setShowTopUpModal(false);
-    setTopUpAmount("");
-    Alert.alert(
-      "Thành công",
-      `Đã nạp ${WalletService.formatAmount(amount)}`
-    );
+      if (result.success) {
+        // Cập nhật số dư hiện tại
+        setWalletData((prevData) => ({
+          ...prevData,
+          amount: result.data.amount,
+        }));
+
+        // Reset input
+        setTopUpAmount("");
+        setShowTopUpModal(false);
+
+        // Không hiển thị thông báo thành công
+      } else {
+        Alert.alert("Lỗi", `Không thể nạp tiền: ${result.error}`);
+      }
+    } catch (error) {
+      console.log("Error topping up wallet:", error);
+      Alert.alert("Lỗi", "Đã xảy ra lỗi khi nạp tiền.");
+    }
   };
 
   // Format amount input as user types

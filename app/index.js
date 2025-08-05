@@ -6,6 +6,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
+  FlatList,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,6 +20,8 @@ import BottomTab from "../components/BottomTab";
 import PackageListModal from "../components/PackageListModal";
 import ServiceListModal from "../components/ServiceListModal";
 import WalletCard from "../components/WalletCard";
+import BookingService from "../services/bookingService";
+import CareProfileService from "../services/careProfileService";
 import RoleService from "../services/roleService";
 import ServiceTypeService from "../services/serviceTypeService";
 
@@ -29,6 +34,16 @@ export default function HomeScreen() {
   const [showPackagesModal, setShowPackagesModal] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+
+  // Thêm state cho care profiles
+  const [careProfiles, setCareProfiles] = useState([]);
+  const [isLoadingCareProfiles, setIsLoadingCareProfiles] =
+    useState(false);
+  const [showCareProfileModal, setShowCareProfileModal] =
+    useState(false);
+  const [selectedCareProfile, setSelectedCareProfile] =
+    useState(null);
+  const [pendingBookingType, setPendingBookingType] = useState(null); // 'service' hoặc 'package'
 
   useEffect(() => {
     loadUserData();
@@ -47,6 +62,8 @@ export default function HomeScreen() {
       if (userDataString) {
         const user = JSON.parse(userDataString);
         setUserData(user);
+        // Load care profiles sau khi có user data
+        await loadCareProfiles(user);
       } else {
         // Nếu không có user data (đã logout), set về null
         setUserData(null);
@@ -54,6 +71,42 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error loading user data:", error);
       setUserData(null);
+    }
+  };
+
+  const loadCareProfiles = async (user) => {
+    if (!user) return;
+
+    try {
+      setIsLoadingCareProfiles(true);
+      console.log(
+        "HomeScreen: Loading care profiles for user:",
+        user.accountID || user.id
+      );
+
+      const result =
+        await CareProfileService.getCareProfilesByAccountId(
+          user.accountID || user.id
+        );
+
+      console.log("HomeScreen: Care profiles result:", result);
+
+      if (result.success) {
+        setCareProfiles(result.data);
+        console.log(
+          "HomeScreen: Care profiles loaded:",
+          result.data.length,
+          "items"
+        );
+      } else {
+        setCareProfiles([]);
+        console.log("HomeScreen: No care profiles found");
+      }
+    } catch (error) {
+      console.error("Error loading care profiles:", error);
+      setCareProfiles([]);
+    } finally {
+      setIsLoadingCareProfiles(false);
     }
   };
 
@@ -104,17 +157,178 @@ export default function HomeScreen() {
   };
 
   const handleShowServices = () => {
-    if (services.length === 0) {
-      loadServices();
+    if (careProfiles.length === 0) {
+      Alert.alert(
+        "Thông báo",
+        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch. Vui lòng tạo hồ sơ chăm sóc trước.",
+        [
+          { text: "Đóng", style: "cancel" },
+          {
+            text: "Tạo hồ sơ",
+            onPress: () => router.push("/profile"),
+          },
+        ]
+      );
+      return;
     }
-    setShowServicesModal(true);
+
+    setPendingBookingType("service");
+    setShowCareProfileModal(true);
   };
 
   const handleShowPackages = () => {
-    if (packages.length === 0) {
-      loadPackages();
+    if (careProfiles.length === 0) {
+      Alert.alert(
+        "Thông báo",
+        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch. Vui lòng tạo hồ sơ chăm sóc trước.",
+        [
+          { text: "Đóng", style: "cancel" },
+          {
+            text: "Tạo hồ sơ",
+            onPress: () => router.push("/profile"),
+          },
+        ]
+      );
+      return;
     }
-    setShowPackagesModal(true);
+
+    setPendingBookingType("package");
+    setShowCareProfileModal(true);
+  };
+
+  const handleCareProfileSelect = (careProfile) => {
+    setSelectedCareProfile(careProfile);
+    setShowCareProfileModal(false);
+
+    // Mở modal booking tương ứng
+    if (pendingBookingType === "service") {
+      if (services.length === 0) {
+        loadServices();
+      }
+      setShowServicesModal(true);
+    } else if (pendingBookingType === "package") {
+      if (packages.length === 0) {
+        loadPackages();
+      }
+      setShowPackagesModal(true);
+    }
+
+    setPendingBookingType(null);
+  };
+
+  const handleServiceBooking = async (bookingData) => {
+    try {
+      console.log("HomeScreen: Service booking data:", bookingData);
+
+      // Sử dụng careProfileID đã chọn
+      const careProfileID = selectedCareProfile?.careProfileID || 1;
+
+      const bookingPayload = {
+        careProfileID: careProfileID,
+        amount: bookingData.totalAmount,
+        workdate: bookingData.workdate,
+        customizePackageCreateDtos: bookingData.services,
+      };
+
+      console.log(
+        "HomeScreen: Service booking payload:",
+        bookingPayload
+      );
+
+      const result = await BookingService.createServiceBooking(
+        bookingPayload
+      );
+
+      if (result.success) {
+        // Lưu thông tin service vào AsyncStorage để sử dụng ở trang payment
+        const serviceInfo = {
+          type: "service",
+          services: bookingData.services.map((service) => ({
+            serviceID: service.serviceID,
+            quantity: service.quantity,
+            serviceName:
+              services.find((s) => s.serviceID === service.serviceID)
+                ?.serviceName || "Unknown Service",
+            price:
+              services.find((s) => s.serviceID === service.serviceID)
+                ?.price || 0,
+          })),
+        };
+        await AsyncStorage.setItem(
+          `booking_${result.data.bookingID}`,
+          JSON.stringify(serviceInfo)
+        );
+
+        // Chuyển thẳng sang trang thanh toán
+        setShowServicesModal(false);
+        setSelectedCareProfile(null);
+        router.push(`/payment?bookingId=${result.data.bookingID}`);
+
+        return result;
+      } else {
+        Alert.alert("Lỗi", `Không thể đặt lịch: ${result.error}`);
+        return result;
+      }
+    } catch (error) {
+      console.error("Error creating service booking:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi đặt lịch");
+      return { success: false, error: error.message };
+    }
+  };
+
+  const handlePackageBooking = async (bookingData) => {
+    try {
+      console.log("HomeScreen: Package booking data:", bookingData);
+
+      // Sử dụng careProfileID đã chọn
+      const careProfileID = selectedCareProfile?.careProfileID || 1;
+
+      const bookingPayload = {
+        careProfileID: careProfileID,
+        amount: bookingData.totalAmount,
+        workdate: bookingData.workdate,
+        customizePackageCreateDto: {
+          serviceID: bookingData.packageId,
+          quantity: 1,
+        },
+      };
+
+      console.log(
+        "HomeScreen: Package booking payload:",
+        bookingPayload
+      );
+
+      const result = await BookingService.createPackageBooking(
+        bookingPayload
+      );
+
+      if (result.success) {
+        // Lưu thông tin package vào AsyncStorage để sử dụng ở trang payment
+        const packageInfo = {
+          type: "package",
+          packageId: bookingData.packageId,
+          packageData: bookingData.packageData,
+        };
+        await AsyncStorage.setItem(
+          `booking_${result.data.bookingID}`,
+          JSON.stringify(packageInfo)
+        );
+
+        // Chuyển thẳng sang trang thanh toán
+        setShowPackagesModal(false);
+        setSelectedCareProfile(null);
+        router.push(`/payment?bookingId=${result.data.bookingID}`);
+
+        return result;
+      } else {
+        Alert.alert("Lỗi", `Không thể đặt lịch: ${result.error}`);
+        return result;
+      }
+    } catch (error) {
+      console.error("Error creating package booking:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi đặt lịch");
+      return { success: false, error: error.message };
+    }
   };
 
   // Render content cho Member
@@ -285,6 +499,73 @@ export default function HomeScreen() {
     </>
   );
 
+  // Render modal chọn care profile
+  const renderCareProfileModal = () => (
+    <Modal
+      visible={showCareProfileModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCareProfileModal(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Chọn hồ sơ chăm sóc</Text>
+            <TouchableOpacity
+              onPress={() => setShowCareProfileModal(false)}
+              style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          {isLoadingCareProfiles ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>
+                Đang tải hồ sơ chăm sóc...
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={careProfiles}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.careProfileItem}
+                  onPress={() => handleCareProfileSelect(item)}>
+                  <View style={styles.careProfileInfo}>
+                    <Text style={styles.careProfileName}>
+                      {item.profileName}
+                    </Text>
+                    <Text style={styles.careProfileDetails}>
+                      Ngày sinh:{" "}
+                      {CareProfileService.formatDate(
+                        item.dateOfBirth
+                      )}
+                    </Text>
+                    <Text style={styles.careProfileDetails}>
+                      SĐT: {item.phoneNumber}
+                    </Text>
+                    {item.address && (
+                      <Text style={styles.careProfileDetails}>
+                        Địa chỉ: {item.address}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.careProfileID.toString()}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#C2F5E9" />
@@ -355,6 +636,7 @@ export default function HomeScreen() {
         services={services}
         title="Dịch vụ chăm sóc"
         isLoading={isLoadingServices}
+        onBooking={handleServiceBooking}
       />
 
       <PackageListModal
@@ -363,7 +645,11 @@ export default function HomeScreen() {
         packages={packages}
         title="Gói dịch vụ chăm sóc"
         isLoading={isLoadingPackages}
+        onBooking={handlePackageBooking}
       />
+
+      {/* Modal chọn care profile */}
+      {renderCareProfileModal()}
 
       {/* Bottom Navigation */}
       <BottomTab />
@@ -486,5 +772,71 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 2,
     marginTop: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    width: "90%",
+    maxHeight: "70%",
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  closeButton: {
+    padding: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  listContainer: {
+    paddingBottom: 20,
+  },
+  careProfileItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  careProfileInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  careProfileName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  careProfileDetails: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
   },
 });

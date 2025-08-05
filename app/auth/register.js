@@ -79,9 +79,8 @@ export default function RegisterScreen() {
       await AuthService.saveUser(userData);
       await AuthService.saveToken(accessToken);
 
-      Alert.alert("Thành công", "Đăng ký thành công!", [
-        { text: "OK", onPress: () => router.replace("/") },
-      ]);
+      // Chuyển thẳng đến trang chủ, không hiển thị alert
+      router.replace("/");
     } catch (e) {
       Alert.alert(
         "Lỗi",
@@ -140,14 +139,10 @@ export default function RegisterScreen() {
       const result = await AuthService.register(userData);
 
       if (result.success) {
-        Alert.alert("Thành công", "Đăng ký thành công!", [
-          { text: "OK", onPress: () => router.replace("/") },
-        ]);
+        // Chuyển thẳng đến trang đăng nhập, không hiển thị alert
+        router.replace("/auth/login");
       } else {
-        Alert.alert(
-          "Lỗi",
-          result.error || "Có lỗi xảy ra khi đăng ký!"
-        );
+        Alert.alert("Lỗi", result.error || "Không thể đăng ký!");
       }
     } catch (error) {
       Alert.alert("Lỗi", "Có lỗi xảy ra khi đăng ký!");

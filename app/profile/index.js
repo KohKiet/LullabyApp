@@ -230,7 +230,7 @@ export default function ProfileScreen() {
 
           setUserData(updatedUser);
           setIsEditing(false);
-          Alert.alert("Thành công", "Đã cập nhật thông tin profile!");
+          // Không hiển thị thông báo thành công
         } else {
           Alert.alert(
             "Lỗi",
@@ -247,7 +247,7 @@ export default function ProfileScreen() {
         if (result.success) {
           setUserData(result.user);
           setIsEditing(false);
-          Alert.alert("Thành công", "Đã cập nhật thông tin profile!");
+          // Không hiển thị thông báo thành công
         } else {
           Alert.alert(
             "Lỗi",
@@ -289,10 +289,7 @@ export default function ProfileScreen() {
       );
 
       if (result.success) {
-        Alert.alert(
-          "Thành công",
-          `Đã tạo hồ sơ chăm sóc: ${result.data.careProfile.profileName}`
-        );
+        // Không hiển thị thông báo thành công
         // Reload care profiles sau khi tạo thành công
         await loadCareProfiles();
       } else {

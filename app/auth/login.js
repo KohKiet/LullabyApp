@@ -98,9 +98,8 @@ export default function LoginScreen() {
 
       console.log(`Google login - Redirecting to: ${targetRoute}`);
 
-      Alert.alert("Thành công", welcomeMessage, [
-        { text: "OK", onPress: () => router.replace(targetRoute) },
-      ]);
+      // Chuyển thẳng đến trang đích, không hiển thị alert
+      router.replace(targetRoute);
     } catch (e) {
       Alert.alert(
         "Lỗi",
@@ -141,31 +140,25 @@ export default function LoginScreen() {
 
         // Chuyển hướng dựa trên role
         let targetRoute = "/";
-        let welcomeMessage = "Đăng nhập thành công!";
 
         if (user.role_id === 2 || user.roleID === 2) {
           // NursingSpecialist - chuyển đến trang chủ
           targetRoute = "/";
-          welcomeMessage = "Chào mừng Điều dưỡng viên!";
         } else if (user.role_id === 1 || user.roleID === 1) {
           // Admin - chuyển đến trang admin
           targetRoute = "/admin";
-          welcomeMessage = "Chào mừng Quản trị viên!";
         } else if (user.role_id === 3 || user.roleID === 3) {
           // Manager - chuyển đến trang manager
           targetRoute = "/manager";
-          welcomeMessage = "Chào mừng Quản lý!";
         } else {
           // Customer - chuyển đến trang chủ
           targetRoute = "/";
-          welcomeMessage = "Đăng nhập thành công!";
         }
 
         console.log(`Redirecting to: ${targetRoute}`);
 
-        Alert.alert("Thành công", welcomeMessage, [
-          { text: "OK", onPress: () => router.replace(targetRoute) },
-        ]);
+        // Chuyển thẳng đến trang đích, không hiển thị alert
+        router.replace(targetRoute);
       } else {
         Alert.alert(
           "Lỗi",

@@ -122,7 +122,7 @@ export const SERVICE_TYPE_ENDPOINTS = {
 
 // Template Endpoints
 export const TEMPLATE_ENDPOINTS = {
-  BOOKINGS: `${BASE_URL}/api/bookings`,
+  BOOKINGS: `${BASE_URL}/api/Booking`,
   BLOGS: `${BASE_URL}/api/blogs`,
   BLOG_CATEGORIES: `${BASE_URL}/api/blogcategories`,
   FEEDBACKS: `${BASE_URL}/api/feedbacks`,
