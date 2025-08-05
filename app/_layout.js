@@ -27,6 +27,10 @@ export default function RootLayout() {
         name="wallet/history"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="booking/history"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

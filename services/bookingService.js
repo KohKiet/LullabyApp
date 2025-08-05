@@ -232,6 +232,70 @@ class BookingService {
     }
   }
 
+  async getBookingHistoryByAccount(accountID) {
+    try {
+      console.log(
+        "BookingService: Getting booking history for account:",
+        accountID
+      );
+
+      // Lấy tất cả bookings
+      const allBookingsResult = await this.getAllBookings();
+
+      if (allBookingsResult.success) {
+        // Lọc các booking có careProfileID thuộc về account này và đã thanh toán
+        const userBookings = allBookingsResult.data.filter(
+          (booking) => {
+            // Cần kiểm tra careProfileID có thuộc về account này không
+            // Tạm thời lấy tất cả booking có status khác pending
+            return booking.status !== "pending";
+          }
+        );
+
+        console.log(
+          "BookingService: User booking history:",
+          userBookings
+        );
+        return { success: true, data: userBookings };
+      } else {
+        return allBookingsResult;
+      }
+    } catch (error) {
+      console.error(
+        "Error getting booking history by account:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getPaidBookings() {
+    try {
+      console.log("BookingService: Getting paid bookings...");
+
+      // Lấy tất cả bookings
+      const allBookingsResult = await this.getAllBookings();
+
+      if (allBookingsResult.success) {
+        // Lọc các booking đã thanh toán (có invoice status = "paid")
+        const paidBookings = allBookingsResult.data.filter(
+          (booking) => {
+            // Tạm thời lấy tất cả booking có status khác pending
+            return booking.status !== "pending";
+          }
+        );
+
+        console.log("BookingService: Paid bookings:", paidBookings);
+        return { success: true, data: paidBookings };
+      } else {
+        return allBookingsResult;
+      }
+    } catch (error) {
+      console.error("Error getting paid bookings:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Format ngày tháng
   formatDate(date) {
     return new Date(date).toISOString();

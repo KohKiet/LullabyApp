@@ -419,14 +419,14 @@ export default function HomeScreen() {
         </View>
       </View>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Lịch</Text>
+        <Text style={styles.sectionTitle}>Lịch hẹn và lịch sử</Text>
         <View style={styles.separator} />
         <View style={styles.cardRow}>
           <LinearGradient
             colors={["#FFD9E6", "#FFB3D1", "#FF8AB3"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.card, styles.singleCard]}>
+            style={styles.card}>
             <TouchableOpacity
               style={styles.cardContent}
               onPress={() => router.push("/appointment")}>
@@ -437,6 +437,30 @@ export default function HomeScreen() {
               />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
                 Lịch Hẹn
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+          <LinearGradient
+            colors={["#C2F5E9", "#A8E6CF", "#8ED9C3"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardContent}
+              onPress={() => {
+                if (userData?.accountID) {
+                  router.push(
+                    `/booking/history?accountID=${userData.accountID}`
+                  );
+                }
+              }}>
+              <Ionicons
+                name="time-outline"
+                size={40}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
+                Lịch sử lịch hẹn
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -614,7 +638,7 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}>
-        {/* Wallet Card - chỉ hiển thị cho Member (roleID=4) */}
+        {/* Wallet Card - chỉ hiển thị cho Member */}
         {userData &&
           (userData.roleID === 4 || userData.role_id === 4) && (
             <WalletCard userData={userData} />
