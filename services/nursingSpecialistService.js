@@ -348,6 +348,72 @@ class NursingSpecialistService {
       return { success: false, error: error.message };
     }
   }
+
+  // Enrich user data với nursing specialist information
+  async enrichUserData(user) {
+    try {
+      console.log(
+        "🔍 Enriching user data for accountID:",
+        user.accountID
+      );
+
+      const result = await this.getNursingSpecialistByAccountId(
+        user.accountID
+      );
+
+      if (result.success) {
+        const nursingData = result.data;
+        console.log("🔍 Found nursing specialist data:", nursingData);
+
+        // Merge user data với nursing specialist data
+        const enrichedUser = {
+          ...user,
+          nursingID: nursingData.nursingID,
+          zoneID: nursingData.zoneID,
+          gender: nursingData.gender,
+          dateOfBirth: nursingData.dateOfBirth,
+          address: nursingData.address,
+          experience: nursingData.experience,
+          slogan: nursingData.slogan,
+          major: nursingData.major,
+          status: nursingData.status,
+        };
+
+        console.log("🔍 Enriched user data:", enrichedUser);
+        return enrichedUser;
+      } else {
+        console.log(
+          "🔍 No nursing specialist data found, returning original user data"
+        );
+        return user;
+      }
+    } catch (error) {
+      console.log("🔍 Error enriching user data:", error.message);
+      return user;
+    }
+  }
+
+  // Get display values for profile fields
+  getDisplayValues(userData) {
+    return {
+      fullName: userData.fullName || userData.full_name || "",
+      gender: userData.gender || "",
+      dateOfBirth: userData.dateOfBirth
+        ? new Date(userData.dateOfBirth).toLocaleDateString("vi-VN")
+        : "",
+      address: userData.address || "",
+      zone: userData.zoneID ? `Khu vực ${userData.zoneID}` : "",
+      major: userData.major || "",
+      experience: userData.experience || "",
+      slogan: userData.slogan || "",
+      status:
+        userData.status === "active"
+          ? "Hoạt động"
+          : userData.status === "unactive"
+          ? "Không hoạt động"
+          : userData.status || "",
+    };
+  }
 }
 
 // Export singleton instance

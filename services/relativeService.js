@@ -109,7 +109,8 @@ class RelativeService {
         let errorMessage = "Create failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }
@@ -141,7 +142,8 @@ class RelativeService {
         let errorMessage = "Update failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }
@@ -171,7 +173,8 @@ class RelativeService {
         let errorMessage = "Delete failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }
@@ -194,8 +197,8 @@ class RelativeService {
 
   // Format gender display
   formatGenderDisplay(gender) {
-    if (gender === "nam") return "Nam";
-    if (gender === "nữ") return "Nữ";
+    if (gender === "nam" || gender === "male") return "Nam";
+    if (gender === "nữ" || gender === "female") return "Nữ";
     return gender || "N/A";
   }
 

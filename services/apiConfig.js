@@ -132,6 +132,15 @@ export const TEMPLATE_ENDPOINTS = {
   NURSING_SPECIALIST_SERVICE_TYPES: `${BASE_URL}/api/nursingspecialist_servicetypes`,
 };
 
+// Wallet Endpoints
+export const WALLET_ENDPOINTS = {
+  GET_ALL_WALLETS: `${BASE_URL}/api/Wallet/GetAll`,
+  GET_WALLET_BY_ID: (id) => `${BASE_URL}/api/Wallet/${id}`,
+  CREATE_WALLET: `${BASE_URL}/api/Wallet/create`,
+  UPDATE_WALLET: (id) => `${BASE_URL}/api/Wallet/update/${id}`,
+  DELETE_WALLET: (id) => `${BASE_URL}/api/Wallet/delete/${id}`,
+};
+
 // API Configuration Object
 export const API_CONFIG = {
   BASE_URL,
@@ -144,4 +153,5 @@ export const API_CONFIG = {
   RELATIVE_ENDPOINTS,
   ROLE_ENDPOINTS,
   TEMPLATE_ENDPOINTS,
+  WALLET_ENDPOINTS,
 };

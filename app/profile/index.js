@@ -46,7 +46,7 @@ export default function ProfileScreen() {
   const [relativeForm, setRelativeForm] = useState({
     relativeName: "",
     dateOfBirth: "",
-    gender: "Nam",
+    gender: "nam",
     note: "",
   });
   const [selectedCareProfileId, setSelectedCareProfileId] =
@@ -69,12 +69,12 @@ export default function ProfileScreen() {
     try {
       setIsLoading(true);
 
-      const user = await AuthService.getUser();
+      const user = await AuthService.getUserData();
 
       if (user) {
         // Kiểm tra xem có phải NursingSpecialist không và cần enrich data
         const isNursingSpecialist = RoleService.isNursingSpecialist(
-          user.role_id || user.roleID
+          user.roleID
         );
 
         if (isNursingSpecialist) {
@@ -166,22 +166,29 @@ export default function ProfileScreen() {
     try {
       // Kiểm tra xem có phải NursingSpecialist không
       const isNursingSpecialist = RoleService.isNursingSpecialist(
-        userData.role_id || userData.roleID
+        userData.roleID
       );
 
       if (isNursingSpecialist) {
-        // Chuẩn bị data cho NursingSpecialist update
-        const nursingUpdateData = {
-          zoneID: userData.zoneID || 1,
-          gender: userData.gender || "Nữ",
-          dateOfBirth:
-            userData.dateOfBirth || new Date().toISOString(),
-          fullName: userData.fullName || userData.full_name || "",
-          address: userData.address || "",
-          experience: userData.experience || "",
-          slogan: userData.slogan || "",
-          major: userData.major || "",
-        };
+        // Chuẩn bị data cho NursingSpecialist update - chỉ gửi fields có giá trị
+        const nursingUpdateData = {};
+
+        if (userData.zoneID)
+          nursingUpdateData.zoneID = userData.zoneID;
+        if (userData.gender)
+          nursingUpdateData.gender = userData.gender;
+        if (userData.dateOfBirth)
+          nursingUpdateData.dateOfBirth = userData.dateOfBirth;
+        if (userData.fullName || userData.full_name)
+          nursingUpdateData.fullName =
+            userData.fullName || userData.full_name;
+        if (userData.address)
+          nursingUpdateData.address = userData.address;
+        if (userData.experience)
+          nursingUpdateData.experience = userData.experience;
+        if (userData.slogan)
+          nursingUpdateData.slogan = userData.slogan;
+        if (userData.major) nursingUpdateData.major = userData.major;
 
         // Sử dụng NursingSpecialistService để update
         const result =
@@ -191,23 +198,34 @@ export default function ProfileScreen() {
           );
 
         if (result.success) {
-          // Cập nhật user data với response mới
+          // Cập nhật user data với response mới, nhưng preserve data hiện tại
           const updatedUser = {
-            ...userData,
-            ...result.data,
-            // Map lại các field để phù hợp với app
-            fullName: result.data.fullName || userData.fullName,
-            full_name: result.data.fullName || userData.fullName,
-            nursingID: result.data.nursingID,
-            accountID: result.data.accountID,
-            zoneID: result.data.zoneID,
-            gender: result.data.gender,
-            dateOfBirth: result.data.dateOfBirth,
-            address: result.data.address,
-            experience: result.data.experience,
-            slogan: result.data.slogan,
-            major: result.data.major,
-            status: result.data.status,
+            ...userData, // Giữ lại tất cả data hiện tại
+            // Chỉ update các field được trả về từ API
+            ...(result.data.fullName && {
+              fullName: result.data.fullName,
+              full_name: result.data.fullName,
+            }),
+            ...(result.data.nursingID && {
+              nursingID: result.data.nursingID,
+            }),
+            ...(result.data.accountID && {
+              accountID: result.data.accountID,
+            }),
+            ...(result.data.zoneID && { zoneID: result.data.zoneID }),
+            ...(result.data.gender && { gender: result.data.gender }),
+            ...(result.data.dateOfBirth && {
+              dateOfBirth: result.data.dateOfBirth,
+            }),
+            ...(result.data.address && {
+              address: result.data.address,
+            }),
+            ...(result.data.experience && {
+              experience: result.data.experience,
+            }),
+            ...(result.data.slogan && { slogan: result.data.slogan }),
+            ...(result.data.major && { major: result.data.major }),
+            ...(result.data.status && { status: result.data.status }),
           };
 
           setUserData(updatedUser);
@@ -494,7 +512,7 @@ export default function ProfileScreen() {
     setRelativeForm({
       relativeName: "",
       dateOfBirth: "",
-      gender: "Nam",
+      gender: "nam",
       note: "",
     });
     setSelectedDate(new Date());
@@ -507,7 +525,7 @@ export default function ProfileScreen() {
     setRelativeForm({
       relativeName: "",
       dateOfBirth: "",
-      gender: "Nam",
+      gender: "nam",
       note: "",
     });
   };
@@ -574,7 +592,7 @@ export default function ProfileScreen() {
       dateOfBirth: relative.dateOfBirth
         ? new Date(relative.dateOfBirth).toISOString().split("T")[0]
         : "",
-      gender: relative.gender || "Nam",
+      gender: relative.gender || "nam",
       note: relative.note || "",
     });
     setShowEditRelativeForm(true);
@@ -586,7 +604,7 @@ export default function ProfileScreen() {
     setRelativeForm({
       relativeName: "",
       dateOfBirth: "",
-      gender: "Nam",
+      gender: "nam",
       note: "",
     });
   };
@@ -742,7 +760,7 @@ export default function ProfileScreen() {
 
     // Check if user is NursingSpecialist
     const isNursingSpecialist = RoleService.isNursingSpecialist(
-      userData.role_id || userData.roleID
+      userData.roleID
     );
 
     if (isNursingSpecialist) {
@@ -823,7 +841,9 @@ export default function ProfileScreen() {
               />
             )
           ) : (
-            <Text style={styles.fieldValue}>{field.value}</Text>
+            <Text style={styles.fieldValue}>
+              {field.value || "Chưa cập nhật"}
+            </Text>
           )}
         </View>
       ));
@@ -874,7 +894,9 @@ export default function ProfileScreen() {
               placeholder={`Nhập ${field.label.toLowerCase()}`}
             />
           ) : (
-            <Text style={styles.fieldValue}>{field.value}</Text>
+            <Text style={styles.fieldValue}>
+              {field.value || "Chưa cập nhật"}
+            </Text>
           )}
         </View>
       ));
@@ -1455,16 +1477,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "male" &&
+                    relativeForm.gender === "nam" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "male")
+                    handleRelativeFormChange("gender", "nam")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "male" &&
+                      relativeForm.gender === "nam" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nam
@@ -1473,16 +1495,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "female" &&
+                    relativeForm.gender === "nữ" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "female")
+                    handleRelativeFormChange("gender", "nữ")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "female" &&
+                      relativeForm.gender === "nữ" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nữ
@@ -1576,16 +1598,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "male" &&
+                    relativeForm.gender === "nam" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "male")
+                    handleRelativeFormChange("gender", "nam")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "male" &&
+                      relativeForm.gender === "nam" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nam
@@ -1594,16 +1616,16 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[
                     styles.genderOption,
-                    relativeForm.gender === "female" &&
+                    relativeForm.gender === "nữ" &&
                       styles.selectedGenderOption,
                   ]}
                   onPress={() =>
-                    handleRelativeFormChange("gender", "female")
+                    handleRelativeFormChange("gender", "nữ")
                   }>
                   <Text
                     style={[
                       styles.genderOptionText,
-                      relativeForm.gender === "female" &&
+                      relativeForm.gender === "nữ" &&
                         styles.selectedGenderOptionText,
                     ]}>
                     Nữ

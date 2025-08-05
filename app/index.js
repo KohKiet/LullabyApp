@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import BottomTab from "../components/BottomTab";
+import WalletCard from "../components/WalletCard";
 import RoleService from "../services/roleService";
 
 export default function HomeScreen() {
@@ -124,7 +125,7 @@ export default function HomeScreen() {
                 color="#FFFFFF"
               />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                Dịch vụ cơ bản
+                Dịch vụ chăm sóc
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -237,7 +238,7 @@ export default function HomeScreen() {
                     styles.mainText,
                     { backgroundColor: "transparent" },
                   ]}>
-                  Lullaby
+                  𝓛𝓾𝓵𝓵𝓪𝓫𝔂
                 </Text>
               }>
               <LinearGradient
@@ -251,7 +252,7 @@ export default function HomeScreen() {
             </MaskedView>
           </LinearGradient>
           <Text style={styles.subText}>
-            Evokes the image of a lullaby
+            𝓔𝓿𝓸𝓴𝓮𝓼 𝓽𝓱𝓮 𝓲𝓶𝓪𝓰𝓮 𝓸𝓯 𝓪 𝓵𝓾𝓵𝓵𝓪𝓫𝔂
           </Text>
         </View>
       </LinearGradient>
@@ -259,6 +260,12 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}>
+        {/* Wallet Card - chỉ hiển thị cho Member (roleID=4) */}
+        {userData &&
+          (userData.roleID === 4 || userData.role_id === 4) && (
+            <WalletCard userData={userData} />
+          )}
+
         {/* Hiển thị nội dung theo role */}
         {userData &&
         RoleService.isNursingSpecialist(
@@ -309,14 +316,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   mainText: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     color: "#333333",
   },
   subText: {
-    fontSize: 14,
-    color: "#666666",
-    marginTop: -5,
+    fontSize: 20,
+    color: "#66BB6A",
+    marginTop: 3,
   },
   content: {
     flex: 1,
