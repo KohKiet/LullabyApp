@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -17,6 +18,8 @@ export default function WalletCard({ userData }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
+  const [showBalance, setShowBalance] = useState(true);
+  const router = useRouter();
 
   // Check if user is a Member (roleID=4)
   const isMember =
@@ -78,6 +81,15 @@ export default function WalletCard({ userData }) {
       return;
     }
 
+    // Kiểm tra số tiền phải chia hết cho 1000 (3 số cuối là 0)
+    if (amount % 1000 !== 0) {
+      Alert.alert(
+        "Lỗi",
+        "Số tiền phải có 3 số cuối là 0 (ví dụ: 1,000, 2,000, 24,000)"
+      );
+      return;
+    }
+
     try {
       const result = await WalletService.topUpWallet(
         userData.accountID || userData.id,
@@ -123,6 +135,12 @@ export default function WalletCard({ userData }) {
     }
   };
 
+  // Validate amount format
+  const validateAmountFormat = (amount) => {
+    const cleanAmount = WalletService.parseAmount(amount);
+    return cleanAmount % 1000 === 0;
+  };
+
   const formatAmount = (amount) => {
     return WalletService.formatAmount(amount);
   };
@@ -155,16 +173,34 @@ export default function WalletCard({ userData }) {
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.walletTitle}>Lullaby Wallet</Text>
-              <TouchableOpacity
-                style={styles.topUpButton}
-                onPress={() => setShowTopUpModal(true)}>
-                <Ionicons
-                  name="add-circle"
-                  size={16}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.topUpButtonText}>Nạp tiền</Text>
-              </TouchableOpacity>
+              <View style={styles.headerButtons}>
+                <TouchableOpacity
+                  style={styles.topUpButton}
+                  onPress={() => setShowTopUpModal(true)}>
+                  <Ionicons
+                    name="add-circle"
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.topUpButtonText}>Nạp tiền</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.historyButton}
+                  onPress={() => {
+                    // Navigate to transaction history screen
+                    if (userData?.accountID) {
+                      router.push(
+                        `/wallet/history?accountID=${userData.accountID}`
+                      );
+                    }
+                  }}>
+                  <Ionicons name="time" size={16} color="#FFFFFF" />
+                  <Text style={styles.historyButtonText}>
+                    Lịch sử
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* User Info */}
@@ -187,9 +223,22 @@ export default function WalletCard({ userData }) {
 
             {/* Balance */}
             <View style={styles.balanceContainer}>
-              <Text style={styles.balanceLabel}>Số dư</Text>
+              <View style={styles.balanceHeader}>
+                <Text style={styles.balanceLabel}>Số dư</Text>
+                <TouchableOpacity
+                  onPress={() => setShowBalance(!showBalance)}
+                  style={styles.eyeButton}>
+                  <Ionicons
+                    name={showBalance ? "eye-off" : "eye"}
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
+              </View>
               <Text style={styles.balanceAmount}>
-                {formatAmount(walletData?.amount || 0)}
+                {showBalance
+                  ? formatAmount(walletData?.amount || 0)
+                  : "••••••••••••"}
               </Text>
             </View>
           </LinearGradient>
@@ -213,16 +262,26 @@ export default function WalletCard({ userData }) {
 
             <View style={styles.modalBody}>
               <Text style={styles.modalLabel}>
-                Nhập số tiền (VNĐ)
+                Nhập số tiền (VNĐ) - Phải có 3 số cuối là 0
               </Text>
               <TextInput
-                style={styles.amountInput}
+                style={[
+                  styles.amountInput,
+                  topUpAmount &&
+                    !validateAmountFormat(topUpAmount) &&
+                    styles.invalidInput,
+                ]}
                 value={topUpAmount}
                 onChangeText={handleAmountInputChange}
-                placeholder="Ví dụ: 200,000"
+                placeholder="Ví dụ: 1,000, 2,000, 24,000"
                 keyboardType="numeric"
                 autoFocus
               />
+              {topUpAmount && !validateAmountFormat(topUpAmount) && (
+                <Text style={styles.errorText}>
+                  Số tiền phải có 3 số cuối là 0
+                </Text>
+              )}
             </View>
 
             <View style={styles.modalFooter}>
@@ -259,11 +318,11 @@ const styles = StyleSheet.create({
   },
   gradient: {
     borderRadius: 15,
-    padding: 15,
+    padding: 12,
   },
   loadingContainer: {
     alignItems: "center",
-    paddingVertical: 25,
+    paddingVertical: 20,
   },
   loadingText: {
     color: "#FFFFFF",
@@ -274,56 +333,84 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   walletTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#FFFFFF",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   topUpButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   topUpButtonText: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 3,
+  },
+  historyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  historyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "600",
     marginLeft: 3,
   },
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   avatarContainer: {
-    marginRight: 10,
+    marginRight: 8,
   },
   nameContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.9)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   userName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "bold",
     color: "#2E7D32",
   },
   balanceContainer: {
-    marginTop: 8,
+    marginTop: 6,
+  },
+  balanceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 3,
   },
   balanceLabel: {
     fontSize: 12,
     color: "rgba(255, 255, 255, 0.8)",
-    marginBottom: 3,
+    fontWeight: "500",
+  },
+  eyeButton: {
+    padding: 3,
   },
   balanceAmount: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
   },
@@ -374,6 +461,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E0E0E0",
+  },
+  invalidInput: {
+    borderColor: "#FF6B6B",
+    borderWidth: 2,
+  },
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    marginTop: 5,
   },
   modalFooter: {
     flexDirection: "row",

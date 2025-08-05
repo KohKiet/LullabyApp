@@ -96,6 +96,35 @@ class TransactionHistoryService {
     }
   }
 
+  async getTransactionHistoryByAccount(accountID) {
+    try {
+      console.log(
+        "TransactionHistoryService: Getting transaction history for account:",
+        accountID
+      );
+      const url = `${API_CONFIG.BASE_URL}/api/TransactionHistory/GetAllByAccount/${accountID}`;
+
+      const result = await this.fetchWithTimeout(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log(
+        "TransactionHistoryService: GetByAccount result:",
+        result
+      );
+      return result;
+    } catch (error) {
+      console.error(
+        "Error getting transaction history by account:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
   async getTransactionHistoryById(transactionID) {
     try {
       console.log(
