@@ -1153,7 +1153,7 @@ export default function ProfileScreen() {
 
                 <View style={styles.careProfileActions}>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.addRelativeButton}
                     onPress={() =>
                       openRelativeForm(profile.careProfileID)
                     }>
@@ -1164,44 +1164,47 @@ export default function ProfileScreen() {
                     />
                     <Text
                       style={[
-                        styles.actionButtonText,
+                        styles.addRelativeButtonText,
                         { color: "#2196F3" },
                       ]}>
-                      Thêm Con
+                      Thêm thông tin con
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => openEditForm(profile)}>
-                    <Ionicons
-                      name="pencil"
-                      size={20}
-                      color="#4CAF50"
-                    />
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: "#4CAF50" },
-                      ]}>
-                      Chỉnh Sửa
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => deleteCareProfile(profile)}>
-                    <Ionicons
-                      name="trash"
-                      size={20}
-                      color="#FF6B6B"
-                    />
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: "#FF6B6B" },
-                      ]}>
-                      Xóa
-                    </Text>
-                  </TouchableOpacity>
+
+                  <View style={styles.editDeleteContainer}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => openEditForm(profile)}>
+                      <Ionicons
+                        name="pencil"
+                        size={20}
+                        color="#4CAF50"
+                      />
+                      <Text
+                        style={[
+                          styles.actionButtonText,
+                          { color: "#4CAF50" },
+                        ]}>
+                        Chỉnh Sửa
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => deleteCareProfile(profile)}>
+                      <Ionicons
+                        name="trash"
+                        size={20}
+                        color="#FF6B6B"
+                      />
+                      <Text
+                        style={[
+                          styles.actionButtonText,
+                          { color: "#FF6B6B" },
+                        ]}>
+                        Xóa
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </LinearGradient>
             ))}
@@ -1751,23 +1754,35 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={logout}>
-            <Text style={styles.logoutButtonText}>Đăng xuất</Text>
-          </TouchableOpacity>
+          <LinearGradient
+            colors={["#ec1c3f", "#FFD9E6"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.logoutButton}>
+            <TouchableOpacity
+              style={styles.logoutButtonContent}
+              onPress={logout}>
+              <Text style={styles.logoutButtonText}>Đăng xuất</Text>
+            </TouchableOpacity>
+          </LinearGradient>
 
           {/* Chỉ hiển thị "Thêm hồ sơ chăm sóc" cho Customer */}
           {!RoleService.isNursingSpecialist(
             userData.role_id || userData.roleID
           ) && (
-            <TouchableOpacity
-              style={styles.addCareProfileButton}
-              onPress={openCareProfileForm}>
-              <Text style={styles.addCareProfileButtonText}>
-                Thêm hồ sơ chăm sóc
-              </Text>
-            </TouchableOpacity>
+            <LinearGradient
+              colors={["#0e78ad", "#63c2f2"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.addCareProfileButton}>
+              <TouchableOpacity
+                style={styles.addCareProfileButtonContent}
+                onPress={openCareProfileForm}>
+                <Text style={styles.addCareProfileButtonText}>
+                  Thêm hồ sơ chăm sóc
+                </Text>
+              </TouchableOpacity>
+            </LinearGradient>
           )}
         </View>
 
@@ -2165,8 +2180,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   careProfileActions: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+    flexDirection: "column", // Thay đổi thành column để xếp dọc
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
@@ -2176,10 +2190,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8, // Giảm padding horizontal
     borderRadius: 6,
     backgroundColor: "#f8f9fa",
-    marginHorizontal: 5,
+    marginHorizontal: 2, // Giảm margin
+    flex: 1, // Để các nút có kích thước bằng nhau
+    justifyContent: "center", // Căn giữa nội dung
   },
   actionButtonText: {
     marginLeft: 5,
@@ -2388,5 +2404,40 @@ const styles = StyleSheet.create({
   selectedGenderOptionText: {
     color: "#4FC3F7",
     fontWeight: "bold",
+  },
+  addCareProfileButtonContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoutButtonContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addRelativeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 8, // Giảm padding horizontal
+    borderRadius: 6,
+    backgroundColor: "#f8f9fa",
+    marginHorizontal: 2, // Giảm margin
+    flex: 1, // Để các nút có kích thước bằng nhau
+    justifyContent: "center", // Căn giữa nội dung
+  },
+  addRelativeButtonText: {
+    marginLeft: 5,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  editDeleteContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingHorizontal: 0, // Đảm bảo không có padding thừa
   },
 });

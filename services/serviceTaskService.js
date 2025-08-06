@@ -22,7 +22,7 @@ class ServiceTaskService {
 
   async getAllServiceTasks() {
     try {
-      const url = `${TEMPLATE_ENDPOINTS.SERVICE_TASKS}/getall`;
+      const url = `${TEMPLATE_ENDPOINTS.SERVICE_TASKS}/GetAll`;
       console.log("ServiceTaskService: Fetching from URL:", url);
 
       const response = await this.fetchWithTimeout(url, {
@@ -75,54 +75,56 @@ class ServiceTaskService {
   // Lấy danh sách service tasks theo package service ID
   async getServiceTasksByPackageId(packageServiceID) {
     try {
-      const result = await this.getAllServiceTasks();
-      if (result.success) {
-        const tasks = result.data.filter(
-          (task) => task.package_ServiceID === packageServiceID
+      console.log(
+        "ServiceTaskService: Getting tasks for package ID:",
+        packageServiceID
+      );
+
+      const url = `${TEMPLATE_ENDPOINTS.SERVICE_TASKS}/getbypackage/${packageServiceID}`;
+      console.log("ServiceTaskService: Fetching from URL:", url);
+
+      const response = await this.fetchWithTimeout(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log(
+        "ServiceTaskService: Response status:",
+        response.status
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          "ServiceTaskService: Tasks received for package",
+          packageServiceID,
+          ":",
+          data.length,
+          "items"
         );
         return {
           success: true,
-          data: tasks,
+          data: data,
+        };
+      } else {
+        console.log(
+          "ServiceTaskService: HTTP Error:",
+          response.status,
+          response.statusText
+        );
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}`,
         };
       }
-
-      // Fallback to mock data if API fails
-      console.log(
-        "ServiceTaskService: Using mock data for package",
-        packageServiceID
-      );
-      return {
-        success: true,
-        data: [
-          {
-            serviceTaskID: 1,
-            child_ServiceID: 1,
-            package_ServiceID: 3,
-            description: "Massage giúp mẹ và bé giảm đau mỏi",
-            taskOrder: 1,
-            price: 15000,
-            status: "active",
-            quantity: 1,
-          },
-          {
-            serviceTaskID: 2,
-            child_ServiceID: 2,
-            package_ServiceID: 3,
-            description:
-              "Quan sát tình trạng vàng da của trẻ sơ sinh",
-            taskOrder: 2,
-            price: 5000,
-            status: "active",
-            quantity: 1,
-          },
-        ].filter(
-          (task) => task.package_ServiceID === packageServiceID
-        ),
-      };
     } catch (error) {
       console.log(
-        "ServiceTaskService: Error in getServiceTasksByPackageId, using mock data"
+        "ServiceTaskService: Network error, using mock data:",
+        error.message
       );
+      // Fallback to mock data if API fails
       return {
         success: true,
         data: [

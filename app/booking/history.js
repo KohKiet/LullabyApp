@@ -5,6 +5,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  FlatList,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,8 +15,12 @@ import {
 } from "react-native";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
+import CustomizePackageService from "../../services/customizePackageService";
+import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
+import NursingSpecialistService from "../../services/nursingSpecialistService";
 import ServiceTypeService from "../../services/serviceTypeService";
+import ZoneDetailService from "../../services/zoneDetailService";
 
 export default function BookingHistoryScreen() {
   const router = useRouter();
@@ -26,9 +32,27 @@ export default function BookingHistoryScreen() {
   const [bookingDetailsMap, setBookingDetailsMap] = useState({});
   const [showOnlyPaid, setShowOnlyPaid] = useState(false);
 
+  // Thêm state cho customize packages và tasks
+  const [customizePackagesMap, setCustomizePackagesMap] = useState(
+    {}
+  );
+  const [customizeTasksMap, setCustomizeTasksMap] = useState({});
+  const [nurses, setNurses] = useState([]);
+  const [zoneDetails, setZoneDetails] = useState([]);
+  const [services, setServices] = useState([]); // Cache services
+
+  // State cho modal chọn nurse
+  const [showNurseModal, setShowNurseModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [availableNurses, setAvailableNurses] = useState([]);
+  const [selectedStaffType, setSelectedStaffType] = useState(""); // "Nurse" hoặc "Specialist"
+
   useEffect(() => {
     if (accountID) {
       loadBookingHistory();
+      loadNurses();
+      loadZoneDetails();
+      loadServices();
     }
   }, [accountID]);
 
@@ -167,8 +191,342 @@ export default function BookingHistoryScreen() {
         Object.keys(detailsMap).length
       );
       setBookingDetailsMap(detailsMap);
+
+      // Load customize packages và tasks cho tất cả bookings
+      bookings.forEach(async (booking) => {
+        await loadCustomizePackages(booking.bookingID);
+        await loadCustomizeTasks(booking.bookingID);
+      });
     } catch (error) {
       console.error("Error loading booking details:", error);
+    }
+  };
+
+  const loadZoneDetails = async () => {
+    try {
+      const result = await ZoneDetailService.getAllZoneDetails();
+      if (result.success) {
+        setZoneDetails(result.data);
+      }
+    } catch (error) {
+      console.error("Error loading zone details:", error);
+    }
+  };
+
+  const loadNurses = async () => {
+    try {
+      const result =
+        await NursingSpecialistService.getAllNursingSpecialists();
+      if (result.success) {
+        setNurses(result.data);
+      }
+    } catch (error) {
+      console.error("Error loading nurses:", error);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const result = await ServiceTypeService.getServices();
+      if (result.success) {
+        setServices(result.data);
+      }
+    } catch (error) {
+      console.error("Error loading services:", error);
+    }
+  };
+
+  const loadCustomizePackages = async (bookingID) => {
+    try {
+      const result =
+        await CustomizePackageService.getCustomizePackagesByBookingId(
+          bookingID
+        );
+      if (result.success) {
+        setCustomizePackagesMap((prev) => ({
+          ...prev,
+          [bookingID]: result.data,
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading customize packages:", error);
+    }
+  };
+
+  const loadCustomizeTasks = async (bookingID) => {
+    try {
+      const result =
+        await CustomizeTaskService.getCustomizeTasksByBookingId(
+          bookingID
+        );
+      if (result.success) {
+        setCustomizeTasksMap((prev) => ({
+          ...prev,
+          [bookingID]: result.data,
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading customize tasks:", error);
+    }
+  };
+
+  const handlePayment = async (bookingID) => {
+    try {
+      // Chuyển đến trang thanh toán
+      router.push(`/payment?bookingId=${bookingID}`);
+    } catch (error) {
+      console.error("Error navigating to payment:", error);
+      Alert.alert("Lỗi", "Không thể chuyển đến trang thanh toán");
+    }
+  };
+
+  const handleSelectNurse = async (task) => {
+    try {
+      // Lấy care profile để biết zoneDetailID
+      const careProfile =
+        bookingDetailsMap[task.bookingID]?.careProfile;
+      if (!careProfile) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin hồ sơ chăm sóc");
+        return;
+      }
+
+      // Tìm zoneID từ zoneDetailID của care profile
+      const zoneDetail = zoneDetails.find(
+        (zd) => zd.zoneDetailID === careProfile.zoneDetailID
+      );
+      if (!zoneDetail) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin khu vực");
+        return;
+      }
+
+      // Lấy thông tin service để biết major
+      const customizePackages =
+        customizePackagesMap[task.bookingID] || [];
+      const packageForTask = customizePackages.find(
+        (pkg) => pkg.customizePackageID === task.customizePackageID
+      );
+
+      if (!packageForTask) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin gói dịch vụ");
+        return;
+      }
+
+      // Lấy thông tin service từ serviceID
+      const service = services.find(
+        (s) => s.serviceID === packageForTask.serviceID
+      );
+
+      if (!service) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin dịch vụ");
+        return;
+      }
+
+      // Xác định major cần thiết
+      const requiredMajor = service.major || "Nurse"; // Default là Nurse nếu không có
+
+      // Lọc nurses có cùng zoneID và major phù hợp
+      const availableNursesList = nurses.filter(
+        (nurse) =>
+          nurse.zoneID === zoneDetail.zoneID &&
+          nurse.major === requiredMajor
+      );
+
+      if (availableNursesList.length === 0) {
+        Alert.alert(
+          "Thông báo",
+          `Không có ${
+            requiredMajor === "Nurse"
+              ? "điều dưỡng viên"
+              : "tư vấn viên"
+          } nào trong khu vực này`
+        );
+        return;
+      }
+
+      // Lọc nurse active để ưu tiên
+      const activeNurses = availableNursesList.filter(
+        (nurse) => nurse.status === "active"
+      );
+
+      if (activeNurses.length === 0) {
+        Alert.alert(
+          "Thông báo",
+          `Chỉ có ${
+            requiredMajor === "Nurse"
+              ? "điều dưỡng viên"
+              : "tư vấn viên"
+          } không hoạt động trong khu vực này. Bạn có muốn tiếp tục?`
+        );
+      }
+
+      setSelectedTask(task);
+      setSelectedStaffType(requiredMajor);
+      setAvailableNurses(availableNursesList); // Hiển thị tất cả nurse
+      setShowNurseModal(true);
+    } catch (error) {
+      console.error("Error selecting nurse:", error);
+      Alert.alert("Lỗi", "Không thể chọn điều dưỡng viên");
+    }
+  };
+
+  const handleNurseSelect = async (nurse) => {
+    try {
+      const result = await CustomizeTaskService.updateNursing(
+        selectedTask.customizeTaskID,
+        nurse.nursingID
+      );
+
+      if (result.success) {
+        Alert.alert(
+          "Thành công",
+          `Đã chọn điều dưỡng viên: ${nurse.fullName}`
+        );
+        // Reload customize tasks
+        await loadCustomizeTasks(selectedTask.bookingID);
+        setShowNurseModal(false);
+        setSelectedTask(null);
+      } else {
+        Alert.alert(
+          "Lỗi",
+          result.error || "Không thể cập nhật điều dưỡng viên"
+        );
+      }
+    } catch (error) {
+      console.error("Error updating nurse:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật điều dưỡng viên");
+    }
+  };
+
+  const handleSelectNurseForBooking = async (bookingID) => {
+    try {
+      // Lấy care profile để biết zoneDetailID
+      const careProfile = bookingDetailsMap[bookingID]?.careProfile;
+      if (!careProfile) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin hồ sơ chăm sóc");
+        return;
+      }
+
+      // Tìm zoneID từ zoneDetailID của care profile
+      const zoneDetail = zoneDetails.find(
+        (zd) => zd.zoneDetailID === careProfile.zoneDetailID
+      );
+      if (!zoneDetail) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin khu vực");
+        return;
+      }
+
+      // Lấy thông tin service từ customize packages
+      const customizePackages = customizePackagesMap[bookingID] || [];
+      if (customizePackages.length === 0) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin gói dịch vụ");
+        return;
+      }
+
+      // Lấy package đầu tiên để xác định service
+      const packageForTask = customizePackages[0];
+
+      // Lấy thông tin service từ serviceID
+      const service = services.find(
+        (s) => s.serviceID === packageForTask.serviceID
+      );
+
+      if (!service) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin dịch vụ");
+        return;
+      }
+
+      // Xác định major cần thiết
+      const requiredMajor = service.major || "Nurse"; // Default là Nurse nếu không có
+
+      // Lọc nurses có cùng zoneID và major phù hợp
+      const availableNursesList = nurses.filter(
+        (nurse) =>
+          nurse.zoneID === zoneDetail.zoneID &&
+          nurse.major === requiredMajor
+      );
+
+      if (availableNursesList.length === 0) {
+        Alert.alert(
+          "Thông báo",
+          `Không có ${
+            requiredMajor === "Nurse"
+              ? "điều dưỡng viên"
+              : "tư vấn viên"
+          } nào trong khu vực này`
+        );
+        return;
+      }
+
+      // Lọc nurse active để ưu tiên
+      const activeNurses = availableNursesList.filter(
+        (nurse) => nurse.status === "active"
+      );
+
+      if (activeNurses.length === 0) {
+        Alert.alert(
+          "Thông báo",
+          `Chỉ có ${
+            requiredMajor === "Nurse"
+              ? "điều dưỡng viên"
+              : "tư vấn viên"
+          } không hoạt động trong khu vực này. Bạn có muốn tiếp tục?`
+        );
+      }
+
+      // Chọn ngẫu nhiên một nurse từ danh sách có thể chọn
+      const selectedNurse =
+        activeNurses.length > 0
+          ? activeNurses[
+              Math.floor(Math.random() * activeNurses.length)
+            ]
+          : availableNursesList[
+              Math.floor(Math.random() * availableNursesList.length)
+            ];
+
+      // Cập nhật tất cả các task trong booking với ID của nurse đã chọn
+      const tasksToUpdate = customizeTasksMap[bookingID] || [];
+
+      // Gọi API để cập nhật từng task
+      const updatePromises = tasksToUpdate.map((task) =>
+        CustomizeTaskService.updateNursing(
+          task.customizeTaskID,
+          selectedNurse.nursingID
+        )
+      );
+
+      const updateResults = await Promise.all(updatePromises);
+      const allSuccessful = updateResults.every(
+        (result) => result.success
+      );
+
+      if (allSuccessful) {
+        // Cập nhật state local
+        const updatedTasks = tasksToUpdate.map((task) => ({
+          ...task,
+          nursingID: selectedNurse.nursingID,
+        }));
+        setCustomizeTasksMap((prev) => ({
+          ...prev,
+          [bookingID]: updatedTasks,
+        }));
+
+        Alert.alert(
+          "Thành công",
+          `Đã chọn ${
+            requiredMajor === "Nurse"
+              ? "điều dưỡng viên"
+              : "tư vấn viên"
+          }: ${selectedNurse.fullName} cho lịch hẹn #${bookingID}`
+        );
+      } else {
+        Alert.alert("Lỗi", "Không thể cập nhật tất cả task");
+      }
+    } catch (error) {
+      console.error("Error selecting nurse for booking:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể chọn điều dưỡng viên cho lịch hẹn"
+      );
     }
   };
 
@@ -337,7 +695,8 @@ export default function BookingHistoryScreen() {
 
             {expandedBookings[booking.bookingID] && (
               <View style={styles.expandedContent}>
-                {details.extraData.type === "package" ? (
+                {/* Chỉ hiển thị "Dịch vụ đã chọn" khi là package (isPackage = true) */}
+                {details.extraData.type === "package" && (
                   <View style={styles.packageInfo}>
                     <Text style={styles.serviceName}>
                       {details.extraData.packageData?.serviceName ||
@@ -348,30 +707,133 @@ export default function BookingHistoryScreen() {
                         ""}
                     </Text>
                   </View>
-                ) : (
-                  <View style={styles.servicesList}>
-                    <Text style={styles.servicesTitle}>
-                      Dịch vụ đã chọn:
+                )}
+
+                {/* Customize Packages - luôn hiển thị */}
+                {customizePackagesMap[booking.bookingID] && (
+                  <View style={styles.customizePackagesSection}>
+                    <Text style={styles.sectionTitle}>
+                      Chi tiết gói dịch vụ:
                     </Text>
-                    {details.extraData.services?.map(
-                      (service, serviceIndex) => (
+                    {customizePackagesMap[booking.bookingID].map(
+                      (pkg, index) => (
                         <View
-                          key={serviceIndex}
-                          style={styles.serviceItem}>
-                          <Text style={styles.serviceName}>
-                            {service?.serviceName ||
-                              "Dịch vụ không xác định"}
+                          key={pkg.customizePackageID}
+                          style={styles.packageDetail}>
+                          <Text style={styles.packageName}>
+                            {(() => {
+                              // Lấy tên service thực tế từ serviceID
+                              const service = services.find(
+                                (s) => s.serviceID === pkg.serviceID
+                              );
+                              return (
+                                service?.serviceName ||
+                                pkg.name ||
+                                "Dịch vụ không xác định"
+                              );
+                            })()}
                           </Text>
-                          <Text style={styles.serviceQuantity}>
-                            Số lượng: {service?.quantity || 0}
-                          </Text>
+                          <View style={styles.packageDetails}>
+                            <Text style={styles.packagePrice}>
+                              Giá:{" "}
+                              {CustomizePackageService.formatPrice(
+                                pkg.price
+                              )}
+                            </Text>
+                            <Text style={styles.packageQuantity}>
+                              Số lượng: {pkg.quantity}
+                            </Text>
+                            {pkg.discount && (
+                              <Text style={styles.packageDiscount}>
+                                Giảm giá:{" "}
+                                {CustomizePackageService.formatPrice(
+                                  pkg.discount
+                                )}
+                              </Text>
+                            )}
+                            <Text style={styles.packageTotal}>
+                              Tổng:{" "}
+                              {CustomizePackageService.formatPrice(
+                                pkg.total
+                              )}
+                            </Text>
+                          </View>
                         </View>
                       )
                     )}
                   </View>
                 )}
+
+                {/* Customize Tasks - chỉ hiển thị cho booking đã thanh toán */}
+                {invoiceStatus === "paid" &&
+                  customizeTasksMap[booking.bookingID] && (
+                    <View style={styles.customizeTasksSection}>
+                      <Text style={styles.sectionTitle}>
+                        Chọn nhân viên:
+                      </Text>
+                      <View style={styles.taskDetail}>
+                        <View style={styles.taskActions}>
+                          {(() => {
+                            // Kiểm tra xem có task nào đã được gán nurse chưa
+                            const assignedTask = customizeTasksMap[
+                              booking.bookingID
+                            ].find((task) => task.nursingID);
+                            if (assignedTask) {
+                              const nurse = nurses.find(
+                                (n) =>
+                                  n.nursingID ===
+                                  assignedTask.nursingID
+                              );
+                              return (
+                                <Text style={styles.nurseAssigned}>
+                                  Điều dưỡng viên:{" "}
+                                  {nurse?.fullName ||
+                                    "Không xác định"}
+                                </Text>
+                              );
+                            } else {
+                              return (
+                                <TouchableOpacity
+                                  style={styles.selectNurseButton}
+                                  onPress={() =>
+                                    handleSelectNurseForBooking(
+                                      booking.bookingID
+                                    )
+                                  }>
+                                  <Text
+                                    style={
+                                      styles.selectNurseButtonText
+                                    }>
+                                    Chọn điều dưỡng viên/tư vấn viên
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            }
+                          })()}
+                        </View>
+                      </View>
+                    </View>
+                  )}
               </View>
             )}
+          </View>
+        )}
+
+        {/* Payment Button - chỉ hiển thị cho booking pending */}
+        {invoiceStatus === "pending" && (
+          <View style={styles.paymentSection}>
+            <TouchableOpacity
+              style={styles.paymentButton}
+              onPress={() => handlePayment(booking.bookingID)}>
+              <Ionicons
+                name="card-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={styles.paymentButtonText}>
+                Thanh toán ngay
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -483,6 +945,78 @@ export default function BookingHistoryScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Modal chọn nurse */}
+      <Modal
+        visible={showNurseModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowNurseModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Chọn{" "}
+                {selectedStaffType === "Nurse"
+                  ? "điều dưỡng viên"
+                  : "tư vấn viên"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowNurseModal(false)}
+                style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={availableNurses}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.nurseItem}
+                  onPress={() => handleNurseSelect(item)}>
+                  <View style={styles.nurseInfo}>
+                    <Text style={styles.nurseName}>
+                      {item.fullName}
+                    </Text>
+                    <Text style={styles.nurseDetails}>
+                      Chuyên môn: {item.major}
+                    </Text>
+                    <Text style={styles.nurseDetails}>
+                      Kinh nghiệm: {item.experience}
+                    </Text>
+                    <Text style={styles.nurseDetails}>
+                      Giới tính: {item.gender}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.nurseDetails,
+                        {
+                          color:
+                            item.status === "active"
+                              ? "#4CAF50"
+                              : "#FF6B6B",
+                        },
+                      ]}>
+                      Trạng thái:{" "}
+                      {item.status === "active"
+                        ? "Hoạt động"
+                        : "Không hoạt động"}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.nursingID.toString()}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContainer}
+            />
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -702,5 +1236,178 @@ const styles = StyleSheet.create({
   },
   filterButtonTextActive: {
     color: "white",
+  },
+  customizePackagesSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  packageDetail: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  packageName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5,
+  },
+  packageDetails: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  packagePrice: {
+    fontSize: 14,
+    color: "#FF6B6B",
+    fontWeight: "bold",
+  },
+  packageQuantity: {
+    fontSize: 14,
+    color: "#666",
+  },
+  packageDiscount: {
+    fontSize: 14,
+    color: "#FF6B6B",
+    fontWeight: "bold",
+  },
+  packageTotal: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "bold",
+  },
+  customizeTasksSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  taskDetail: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  taskHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  taskOrder: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  taskStatus: {
+    fontSize: 14,
+    color: "#666",
+  },
+  taskActions: {
+    marginTop: 5,
+  },
+  selectNurseButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    alignItems: "center",
+  },
+  selectNurseButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  nurseAssigned: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "bold",
+  },
+  paymentSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  paymentButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FF6B6B",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FF6B6B",
+  },
+  paymentButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    width: "80%",
+    maxHeight: "70%",
+    padding: 20,
+    alignItems: "center",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  closeButton: {
+    padding: 5,
+  },
+  listContainer: {
+    width: "100%",
+  },
+  nurseItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  nurseInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  nurseName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 2,
+  },
+  nurseDetails: {
+    fontSize: 13,
+    color: "#666",
   },
 });

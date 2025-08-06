@@ -134,8 +134,8 @@ export const TEMPLATE_ENDPOINTS = {
   TRANSACTION_HISTORIES: `${BASE_URL}/api/transactionhistories`,
   WALLETS: `${BASE_URL}/api/wallets`,
   WORK_SCHEDULES: `${BASE_URL}/api/workschedules`,
-  CUSTOMIZE_PACKAGES: `${BASE_URL}/api/customizepackages`,
-  CUSTOMIZE_TASKS: `${BASE_URL}/api/customizetasks`,
+  CUSTOMIZE_PACKAGES: `${BASE_URL}/api/CustomizePackage`,
+  CUSTOMIZE_TASKS: `${BASE_URL}/api/CustomizeTask`,
   NURSING_SPECIALIST_SERVICE_TYPES: `${BASE_URL}/api/nursingspecialist_servicetypes`,
 };
 

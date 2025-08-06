@@ -3,6 +3,10 @@ import { SERVICE_TYPE_ENDPOINTS } from "./apiConfig";
 const NETWORK_TIMEOUT = 10000;
 
 class ServiceTypeService {
+  constructor() {
+    this.cachedServices = null;
+  }
+
   async fetchWithTimeout(url, options, timeout = NETWORK_TIMEOUT) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);

@@ -95,7 +95,7 @@ class CareProfileService {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json-patch+json",
           },
           body: JSON.stringify(careProfileData),
         }
@@ -108,7 +108,8 @@ class CareProfileService {
         let errorMessage = "Create failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }
@@ -140,7 +141,8 @@ class CareProfileService {
         let errorMessage = "Update failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }
@@ -170,7 +172,8 @@ class CareProfileService {
         let errorMessage = "Delete failed";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
+          errorMessage =
+            errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
           // Ignore parse error, use default message
         }

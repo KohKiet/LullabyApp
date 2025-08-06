@@ -107,19 +107,43 @@ export default function PackageListModal({
   };
 
   const togglePackage = async (packageId) => {
+    console.log(
+      "PackageListModal: togglePackage called for packageId:",
+      packageId
+    );
+    console.log(
+      "PackageListModal: Current expandedPackages:",
+      Array.from(expandedPackages)
+    );
+
     const newExpanded = new Set(expandedPackages);
 
     if (newExpanded.has(packageId)) {
       // Collapse
+      console.log("PackageListModal: Collapsing package", packageId);
       newExpanded.delete(packageId);
     } else {
       // Expand - load tasks if not already loaded
+      console.log("PackageListModal: Expanding package", packageId);
       newExpanded.add(packageId);
       if (!packageTasks[packageId]) {
+        console.log(
+          "PackageListModal: Loading tasks for package",
+          packageId
+        );
         await loadPackageTasks(packageId);
+      } else {
+        console.log(
+          "PackageListModal: Tasks already loaded for package",
+          packageId
+        );
       }
     }
 
+    console.log(
+      "PackageListModal: New expandedPackages:",
+      Array.from(newExpanded)
+    );
     setExpandedPackages(newExpanded);
   };
 
@@ -223,11 +247,27 @@ export default function PackageListModal({
           packageId
         );
       console.log("PackageListModal: Tasks result:", result);
+      console.log("PackageListModal: Tasks data:", result.data);
+      console.log("PackageListModal: Tasks success:", result.success);
+
       if (result.success) {
-        setPackageTasks((prev) => ({
-          ...prev,
-          [packageId]: result.data,
-        }));
+        console.log(
+          "PackageListModal: Setting tasks for package",
+          packageId,
+          ":",
+          result.data
+        );
+        setPackageTasks((prev) => {
+          const newState = {
+            ...prev,
+            [packageId]: result.data,
+          };
+          console.log(
+            "PackageListModal: New packageTasks state:",
+            newState
+          );
+          return newState;
+        });
         console.log(
           "PackageListModal: Tasks loaded for package",
           packageId,
@@ -235,9 +275,17 @@ export default function PackageListModal({
           result.data.length,
           "items"
         );
+      } else {
+        console.log(
+          "PackageListModal: Failed to load tasks:",
+          result.error
+        );
       }
     } catch (error) {
-      console.error("Error loading package tasks:", error);
+      console.error(
+        "PackageListModal: Error loading package tasks:",
+        error
+      );
     }
   };
 
@@ -245,6 +293,19 @@ export default function PackageListModal({
     const isExpanded = expandedPackages.has(item.serviceID);
     const isSelected = selectedPackage === item.serviceID;
     const tasks = packageTasks[item.serviceID] || [];
+
+    console.log(
+      "PackageListModal: Rendering package",
+      item.serviceID
+    );
+    console.log("PackageListModal: isExpanded:", isExpanded);
+    console.log(
+      "PackageListModal: tasks for package",
+      item.serviceID,
+      ":",
+      tasks
+    );
+    console.log("PackageListModal: tasks.length:", tasks.length);
 
     return (
       <View
@@ -311,45 +372,77 @@ export default function PackageListModal({
             <Text style={styles.tasksTitle}>
               Các dịch vụ bao gồm:
             </Text>
-            {tasks.length > 0 ? (
-              tasks.map((task, index) => (
-                <View
-                  key={task.serviceTaskID}
-                  style={styles.taskItem}>
-                  <View style={styles.taskHeader}>
-                    <Text style={styles.taskOrder}>
-                      {task.taskOrder}.
-                    </Text>
-                    <Text style={styles.taskDescription}>
-                      {task.description}
-                    </Text>
-                    <View style={styles.taskPriceContainer}>
-                      <Text style={styles.taskPrice}>
-                        {ServiceTaskService.formatPrice(task.price)}
-                      </Text>
+            {(() => {
+              console.log(
+                "PackageListModal: Rendering tasks section for package",
+                item.serviceID
+              );
+              console.log(
+                "PackageListModal: tasks.length:",
+                tasks.length
+              );
+              console.log("PackageListModal: tasks:", tasks);
+
+              if (tasks.length > 0) {
+                console.log(
+                  "PackageListModal: Rendering",
+                  tasks.length,
+                  "tasks"
+                );
+                return tasks.map((task, index) => {
+                  console.log(
+                    "PackageListModal: Rendering task",
+                    index,
+                    ":",
+                    task
+                  );
+                  return (
+                    <View
+                      key={task.serviceTaskID}
+                      style={styles.taskItem}>
+                      <View style={styles.taskHeader}>
+                        <Text style={styles.taskOrder}>
+                          {task.taskOrder}.
+                        </Text>
+                        <Text style={styles.taskDescription}>
+                          {task.description}
+                        </Text>
+                        <View style={styles.taskPriceContainer}>
+                          <Text style={styles.taskPrice}>
+                            {ServiceTaskService.formatPrice(
+                              task.price
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.taskFooter}>
+                        <View style={styles.quantityContainer}>
+                          <Ionicons
+                            name="repeat-outline"
+                            size={14}
+                            color="#666"
+                          />
+                          <Text style={styles.quantity}>
+                            Số lượng: {task.quantity}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
+                  );
+                });
+              } else {
+                console.log(
+                  "PackageListModal: No tasks, showing loading message"
+                );
+                return (
+                  <View style={styles.noTasksContainer}>
+                    <Text style={styles.noTasksText}>
+                      Đang tải dịch vụ...
+                    </Text>
                   </View>
-                  <View style={styles.taskFooter}>
-                    <View style={styles.quantityContainer}>
-                      <Ionicons
-                        name="repeat-outline"
-                        size={14}
-                        color="#666"
-                      />
-                      <Text style={styles.quantity}>
-                        Số lượng: {task.quantity}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))
-            ) : (
-              <View style={styles.noTasksContainer}>
-                <Text style={styles.noTasksText}>
-                  Đang tải dịch vụ...
-                </Text>
-              </View>
-            )}
+                );
+              }
+            })()}
           </View>
         )}
       </View>
