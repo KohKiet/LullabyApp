@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AUTH_ENDPOINTS } from "./apiConfig";
+import { API_CONFIG, AUTH_ENDPOINTS } from "./apiConfig";
 
 // User storage key
 const USER_STORAGE_KEY = "user";
@@ -333,18 +333,18 @@ class AuthService {
   // Lấy thông tin chi tiết nursing specialist
   async fetchNursingSpecialistDetails(accountID) {
     try {
-      const response = await this.fetchWithTimeout(
-        `http://localhost:5294/api/nursingspecialists/getall`,
+      const nursingResponse = await this.fetchWithTimeout(
+        `${API_CONFIG.BASE_URL}/api/nursingspecialists/getall`,
         {
           method: "GET",
           headers: {
-            "Content-Type": "application/json",
+            Accept: "application/json",
           },
         }
       );
 
-      if (response.ok) {
-        const nursingSpecialists = await response.json();
+      if (nursingResponse.ok) {
+        const nursingSpecialists = await nursingResponse.json();
         const specialist = nursingSpecialists.find(
           (ns) => ns.accountID === accountID
         );
@@ -352,11 +352,11 @@ class AuthService {
         if (specialist) {
           // Lấy thông tin account
           const accountResponse = await this.fetchWithTimeout(
-            `http://localhost:5294/api/accounts/get/${accountID}`,
+            `${API_CONFIG.BASE_URL}/api/accounts/get/${accountID}`,
             {
               method: "GET",
               headers: {
-                "Content-Type": "application/json",
+                Accept: "application/json",
               },
             }
           );
@@ -387,7 +387,10 @@ class AuthService {
           };
         }
       } else {
-        return { success: false, error: `HTTP ${response.status}` };
+        return {
+          success: false,
+          error: `HTTP ${nursingResponse.status}`,
+        };
       }
     } catch (error) {
       return { success: false, error: error.message };

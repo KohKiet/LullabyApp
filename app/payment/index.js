@@ -186,7 +186,7 @@ export default function PaymentScreen() {
   const testAPICall = async () => {
     try {
       console.log("PaymentScreen: Testing API call...");
-      const url = `http://localhost:5294/api/Invoice`;
+      const url = `${API_CONFIG.BASE_URL}/api/Invoice`;
       console.log("PaymentScreen: Test URL:", url);
 
       const response = await fetch(url, {

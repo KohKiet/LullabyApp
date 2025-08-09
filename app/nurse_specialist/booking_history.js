@@ -71,7 +71,7 @@ export default function BookingHistoryScreen() {
       case "cancelled":
         return "Đã hủy";
       default:
-        return "Không xác định";
+        return "Chưa hoàn thành";
     }
   };
 

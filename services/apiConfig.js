@@ -8,27 +8,9 @@ const isAndroid = Platform.OS === "android";
 const isIOS = Platform.OS === "ios";
 
 // Base URL configuration
-let BASE_URL;
+const BASE_URL = "https://cool-dhawan.103-28-36-58.plesk.page";
 
-if (isDevelopment) {
-  // Development environment
-  if (isAndroid) {
-    // Android emulator uses 10.0.2.2 instead of localhost
-    BASE_URL = "http://10.0.2.2:5294";
-  } else if (isIOS) {
-    // iOS simulator can use localhost
-    BASE_URL = "http://localhost:5294";
-  } else {
-    // Web or other platforms
-    BASE_URL = "http://localhost:5294";
-  }
-} else {
-  // Production environment - replace with your actual production URL
-  BASE_URL = "https://your-production-api.com";
-}
-
-console.log("API Config: Platform:", Platform.OS);
-console.log("API Config: BASE_URL:", BASE_URL);
+console.log("API Config: Using production URL:", BASE_URL);
 console.log(
   "API Config: Service Types URL:",
   `${BASE_URL}/api/servicetypes/getall`

@@ -130,7 +130,7 @@ class ServiceTypeService {
           {
             serviceID: 1,
             serviceName: "Đo huyết áp tại nhà",
-            major: "nurse",
+            major: "Nurse",
             price: 1000,
             duration: 12,
             description:
@@ -141,7 +141,7 @@ class ServiceTypeService {
           {
             serviceID: 2,
             serviceName: "Theo dõi vàng da ở trẻ sơ sinh",
-            major: "nurse",
+            major: "Nurse",
             price: 5000,
             duration: 20,
             description:
@@ -152,10 +152,20 @@ class ServiceTypeService {
           {
             serviceID: 4,
             serviceName: "Massage thư giãn",
-            major: "nurse",
+            major: "Nurse",
             price: 15000,
             duration: 40,
             description: "Massage giúp mẹ và bé giảm đau mỏi",
+            isPackage: false,
+            status: "active",
+          },
+          {
+            serviceID: 5,
+            serviceName: "Tư vấn dinh dưỡng",
+            major: "Specialist",
+            price: 20000,
+            duration: 60,
+            description: "Tư vấn dinh dưỡng cho mẹ và bé",
             isPackage: false,
             status: "active",
           },
@@ -171,7 +181,7 @@ class ServiceTypeService {
           {
             serviceID: 1,
             serviceName: "Đo huyết áp tại nhà",
-            major: "nurse",
+            major: "Nurse",
             price: 1000,
             duration: 12,
             description:
@@ -182,7 +192,7 @@ class ServiceTypeService {
           {
             serviceID: 2,
             serviceName: "Theo dõi vàng da ở trẻ sơ sinh",
-            major: "nurse",
+            major: "Nurse",
             price: 5000,
             duration: 20,
             description:
@@ -193,10 +203,20 @@ class ServiceTypeService {
           {
             serviceID: 4,
             serviceName: "Massage thư giãn",
-            major: "nurse",
+            major: "Nurse",
             price: 15000,
             duration: 40,
             description: "Massage giúp mẹ và bé giảm đau mỏi",
+            isPackage: false,
+            status: "active",
+          },
+          {
+            serviceID: 5,
+            serviceName: "Tư vấn dinh dưỡng",
+            major: "Specialist",
+            price: 20000,
+            duration: 60,
+            description: "Tư vấn dinh dưỡng cho mẹ và bé",
             isPackage: false,
             status: "active",
           },

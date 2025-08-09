@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -204,9 +203,18 @@ export default function BookingHistoryScreen() {
 
   const loadZoneDetails = async () => {
     try {
+      console.log("Loading zone details...");
       const result = await ZoneDetailService.getAllZoneDetails();
+      console.log("Zone details result:", result);
       if (result.success) {
+        console.log(
+          "Zone details loaded successfully:",
+          result.data.length,
+          "zones"
+        );
         setZoneDetails(result.data);
+      } else {
+        console.log("Failed to load zone details:", result.error);
       }
     } catch (error) {
       console.error("Error loading zone details:", error);
@@ -215,10 +223,19 @@ export default function BookingHistoryScreen() {
 
   const loadNurses = async () => {
     try {
+      console.log("Loading nurses...");
       const result =
         await NursingSpecialistService.getAllNursingSpecialists();
+      console.log("Nurses result:", result);
       if (result.success) {
+        console.log(
+          "Nurses loaded successfully:",
+          result.data.length,
+          "nurses"
+        );
         setNurses(result.data);
+      } else {
+        console.log("Failed to load nurses:", result.error);
       }
     } catch (error) {
       console.error("Error loading nurses:", error);
@@ -227,12 +244,97 @@ export default function BookingHistoryScreen() {
 
   const loadServices = async () => {
     try {
+      console.log("Loading services...");
       const result = await ServiceTypeService.getServices();
+      console.log("Services result:", result);
       if (result.success) {
+        console.log(
+          "Services loaded successfully:",
+          result.data.length,
+          "services"
+        );
         setServices(result.data);
+      } else {
+        console.log("Failed to load services:", result.error);
       }
     } catch (error) {
       console.error("Error loading services:", error);
+    }
+  };
+
+  // Hàm lọc nurse khả dụng dựa trên lịch trình
+  const filterAvailableNurses = async (
+    nurses,
+    currentBookingID,
+    currentWorkdate
+  ) => {
+    try {
+      // Lấy tất cả customize tasks để kiểm tra lịch trình
+      const allCustomizeTasks = [];
+
+      // Lấy tất cả bookings để kiểm tra workdate
+      const allBookings = await BookingService.getAllBookings();
+      if (allBookings.success) {
+        // Lấy tất cả customize tasks cho tất cả bookings
+        for (const booking of allBookings.data) {
+          const tasksResult =
+            await CustomizeTaskService.getCustomizeTasksByBookingId(
+              booking.bookingID
+            );
+          if (tasksResult.success) {
+            allCustomizeTasks.push(...tasksResult.data);
+          }
+        }
+      }
+
+      // Lọc nurse không bị conflict và chưa được chọn trong booking hiện tại
+      const availableNurses = nurses.filter((nurse) => {
+        // 1. Kiểm tra xem nurse đã được chọn trong booking hiện tại chưa
+        const alreadySelectedInCurrentBooking =
+          allCustomizeTasks.find(
+            (task) =>
+              task.bookingID === currentBookingID &&
+              task.nursingID === nurse.nursingID
+          );
+
+        if (alreadySelectedInCurrentBooking) {
+          return false; // Nurse đã được chọn trong booking hiện tại
+        }
+
+        // 2. Kiểm tra xem nurse có bị conflict với booking khác không
+        const conflictingTask = allCustomizeTasks.find((task) => {
+          if (
+            task.bookingID !== currentBookingID &&
+            task.nursingID === nurse.nursingID
+          ) {
+            // Tìm booking tương ứng
+            const booking = allBookings.data.find(
+              (b) => b.bookingID === task.bookingID
+            );
+            if (booking && booking.workdate && currentWorkdate) {
+              // Kiểm tra xem có conflict thời gian không (cách nhau ít nhất 30 phút)
+              const currentTime = new Date(currentWorkdate);
+              const bookingTime = new Date(booking.workdate);
+              const timeDiff =
+                Math.abs(currentTime - bookingTime) / (1000 * 60); // Chuyển về phút
+
+              return timeDiff < 30; // Conflict nếu cách nhau ít hơn 30 phút
+            }
+          }
+          return false;
+        });
+
+        if (conflictingTask) {
+          return false; // Nurse bị conflict
+        }
+
+        return true; // Nurse khả dụng
+      });
+
+      return availableNurses;
+    } catch (error) {
+      console.error("Error filtering available nurses:", error);
+      return nurses; // Trả về tất cả nurses nếu có lỗi
     }
   };
 
@@ -312,23 +414,64 @@ export default function BookingHistoryScreen() {
       }
 
       // Lấy thông tin service từ serviceID
-      const service = services.find(
+      const serviceInfo = services.find(
         (s) => s.serviceID === packageForTask.serviceID
       );
 
-      if (!service) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin dịch vụ");
+      // Nếu không tìm thấy service, sử dụng fallback
+      if (!serviceInfo) {
+        const requiredMajor = "Nurse"; // Default fallback
+
+        // Lấy workdate từ booking
+        const currentBooking = bookings.find(
+          (b) => b.bookingID === task.bookingID
+        );
+        const currentWorkdate = currentBooking?.workdate;
+
+        // Lọc nurses có cùng zoneID và không bị conflict
+        const availableNursesList = await filterAvailableNurses(
+          nurses.filter(
+            (nurse) => nurse.zoneID === zoneDetail.zoneID
+          ),
+          task.bookingID,
+          currentWorkdate
+        );
+
+        if (availableNursesList.length === 0) {
+          Alert.alert(
+            "Thông báo",
+            "Không có điều dưỡng viên nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút."
+          );
+          return;
+        }
+
+        setSelectedTask(task);
+        setSelectedStaffType(requiredMajor);
+        setAvailableNurses(availableNursesList);
+        setShowNurseModal(true);
         return;
       }
 
       // Xác định major cần thiết
-      const requiredMajor = service.major || "Nurse"; // Default là Nurse nếu không có
+      const requiredMajor = serviceInfo.major || "Nurse"; // Default là Nurse nếu không có
 
-      // Lọc nurses có cùng zoneID và major phù hợp
-      const availableNursesList = nurses.filter(
+      // Lọc nurses có cùng zoneID, major phù hợp và không bị conflict
+      const nursesWithSameZoneAndMajor = nurses.filter(
         (nurse) =>
           nurse.zoneID === zoneDetail.zoneID &&
-          nurse.major === requiredMajor
+          nurse.major?.toLowerCase() === requiredMajor?.toLowerCase()
+      );
+
+      // Lấy workdate từ booking
+      const currentBooking = bookings.find(
+        (b) => b.bookingID === task.bookingID
+      );
+      const currentWorkdate = currentBooking?.workdate;
+
+      const availableNursesList = await filterAvailableNurses(
+        nursesWithSameZoneAndMajor,
+        task.bookingID,
+        currentWorkdate
       );
 
       if (availableNursesList.length === 0) {
@@ -338,30 +481,14 @@ export default function BookingHistoryScreen() {
             requiredMajor === "Nurse"
               ? "điều dưỡng viên"
               : "tư vấn viên"
-          } nào trong khu vực này`
+          } nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút.`
         );
         return;
       }
 
-      // Lọc nurse active để ưu tiên
-      const activeNurses = availableNursesList.filter(
-        (nurse) => nurse.status === "active"
-      );
-
-      if (activeNurses.length === 0) {
-        Alert.alert(
-          "Thông báo",
-          `Chỉ có ${
-            requiredMajor === "Nurse"
-              ? "điều dưỡng viên"
-              : "tư vấn viên"
-          } không hoạt động trong khu vực này. Bạn có muốn tiếp tục?`
-        );
-      }
-
       setSelectedTask(task);
       setSelectedStaffType(requiredMajor);
-      setAvailableNurses(availableNursesList); // Hiển thị tất cả nurse
+      setAvailableNurses(availableNursesList);
       setShowNurseModal(true);
     } catch (error) {
       console.error("Error selecting nurse:", error);
@@ -386,10 +513,21 @@ export default function BookingHistoryScreen() {
         setShowNurseModal(false);
         setSelectedTask(null);
       } else {
-        Alert.alert(
-          "Lỗi",
-          result.error || "Không thể cập nhật điều dưỡng viên"
-        );
+        // Xử lý lỗi conflict schedule
+        if (
+          result.error &&
+          result.error.includes("conflict schedule")
+        ) {
+          Alert.alert(
+            "Lỗi lịch trình",
+            "Điều dưỡng viên này đã được gán cho lịch hẹn khác trong cùng thời gian. Vui lòng chọn điều dưỡng viên khác hoặc đặt lịch cách nhau ít nhất 30 phút."
+          );
+        } else {
+          Alert.alert(
+            "Lỗi",
+            result.error || "Không thể cập nhật điều dưỡng viên"
+          );
+        }
       }
     } catch (error) {
       console.error("Error updating nurse:", error);
@@ -426,17 +564,75 @@ export default function BookingHistoryScreen() {
       const packageForTask = customizePackages[0];
 
       // Lấy thông tin service từ serviceID
-      const service = services.find(
+      const serviceInfo = services.find(
         (s) => s.serviceID === packageForTask.serviceID
       );
 
-      if (!service) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin dịch vụ");
+      // Nếu không tìm thấy service, sử dụng fallback
+      if (!serviceInfo) {
+        console.log(
+          "Service not found in handleSelectNurseForBooking, using fallback"
+        );
+        const requiredMajor = "Nurse"; // Default fallback
+
+        // Lọc nurses có cùng zoneID
+        const availableNursesList = nurses.filter(
+          (nurse) => nurse.zoneID === zoneDetail.zoneID
+        );
+
+        if (availableNursesList.length === 0) {
+          Alert.alert(
+            "Thông báo",
+            "Không có điều dưỡng viên nào trong khu vực này"
+          );
+          return;
+        }
+
+        // Chọn ngẫu nhiên một nurse từ danh sách có thể chọn
+        const selectedNurse =
+          availableNursesList[
+            Math.floor(Math.random() * availableNursesList.length)
+          ];
+
+        // Cập nhật tất cả các task trong booking với ID của nurse đã chọn
+        const tasksToUpdate = customizeTasksMap[bookingID] || [];
+
+        // Gọi API để cập nhật từng task
+        const updatePromises = tasksToUpdate.map((task) =>
+          CustomizeTaskService.updateNursing(
+            task.customizeTaskID,
+            selectedNurse.nursingID
+          )
+        );
+
+        const updateResults = await Promise.all(updatePromises);
+        const allSuccessful = updateResults.every(
+          (result) => result.success
+        );
+
+        if (allSuccessful) {
+          // Cập nhật state local
+          const updatedTasks = tasksToUpdate.map((task) => ({
+            ...task,
+            nursingID: selectedNurse.nursingID,
+          }));
+          setCustomizeTasksMap((prev) => ({
+            ...prev,
+            [bookingID]: updatedTasks,
+          }));
+
+          Alert.alert(
+            "Thành công",
+            `Đã chọn điều dưỡng viên: ${selectedNurse.fullName} cho lịch hẹn #${bookingID}`
+          );
+        } else {
+          Alert.alert("Lỗi", "Không thể cập nhật tất cả task");
+        }
         return;
       }
 
       // Xác định major cần thiết
-      const requiredMajor = service.major || "Nurse"; // Default là Nurse nếu không có
+      const requiredMajor = serviceInfo.major || "Nurse"; // Default là Nurse nếu không có
 
       // Lọc nurses có cùng zoneID và major phù hợp
       const availableNursesList = nurses.filter(
@@ -448,11 +644,11 @@ export default function BookingHistoryScreen() {
       if (availableNursesList.length === 0) {
         Alert.alert(
           "Thông báo",
-          `Không có ${
+          `Các ${
             requiredMajor === "Nurse"
               ? "điều dưỡng viên"
               : "tư vấn viên"
-          } nào trong khu vực này`
+          } đã được chọn trong khu vực này`
         );
         return;
       }
@@ -560,8 +756,10 @@ export default function BookingHistoryScreen() {
         return "Đã thanh toán";
       case "cancelled":
         return "Đã hủy";
+      case "isScheduled":
+        return "Đã phân công";
       case "unknown":
-        return "Không xác định";
+        return "Quá hạn";
       default:
         return status;
     }
@@ -575,6 +773,8 @@ export default function BookingHistoryScreen() {
         return "#4CAF50";
       case "cancelled":
         return "#FF6B6B";
+      case "isScheduled":
+        return "#4CAF50";
       case "unknown":
         return "#666";
       default:
@@ -722,14 +922,10 @@ export default function BookingHistoryScreen() {
                           style={styles.packageDetail}>
                           <Text style={styles.packageName}>
                             {(() => {
-                              // Lấy tên service thực tế từ serviceID
-                              const service = services.find(
-                                (s) => s.serviceID === pkg.serviceID
-                              );
+                              // Sử dụng dữ liệu từ API thay vì tìm kiếm trong services
+                              // Nếu có name từ API thì dùng, không thì dùng serviceID
                               return (
-                                service?.serviceName ||
-                                pkg.name ||
-                                "Dịch vụ không xác định"
+                                pkg.name || `Dịch vụ ${pkg.serviceID}`
                               );
                             })()}
                           </Text>
@@ -771,47 +967,177 @@ export default function BookingHistoryScreen() {
                       <Text style={styles.sectionTitle}>
                         Chọn nhân viên:
                       </Text>
-                      <View style={styles.taskDetail}>
-                        <View style={styles.taskActions}>
-                          {(() => {
-                            // Kiểm tra xem có task nào đã được gán nurse chưa
-                            const assignedTask = customizeTasksMap[
-                              booking.bookingID
-                            ].find((task) => task.nursingID);
-                            if (assignedTask) {
-                              const nurse = nurses.find(
-                                (n) =>
-                                  n.nursingID ===
-                                  assignedTask.nursingID
+
+                      {/* Debug info */}
+                      {__DEV__ && (
+                        <Text style={styles.debugText}>
+                          Debug: Services count: {services.length},
+                          Customize packages:{" "}
+                          {customizePackagesMap[booking.bookingID]
+                            ?.length || 0}
+                        </Text>
+                      )}
+
+                      {/* Nhóm tasks theo customizePackageID */}
+                      {(() => {
+                        const tasks =
+                          customizeTasksMap[booking.bookingID] || [];
+                        const packages =
+                          customizePackagesMap[booking.bookingID] ||
+                          [];
+
+                        console.log(
+                          "Tasks for booking",
+                          booking.bookingID,
+                          ":",
+                          tasks
+                        );
+                        console.log(
+                          "Packages for booking",
+                          booking.bookingID,
+                          ":",
+                          packages
+                        );
+
+                        // Nhóm tasks theo customizePackageID
+                        const tasksByPackage = {};
+                        tasks.forEach((task) => {
+                          if (
+                            !tasksByPackage[task.customizePackageID]
+                          ) {
+                            tasksByPackage[task.customizePackageID] =
+                              [];
+                          }
+                          tasksByPackage[
+                            task.customizePackageID
+                          ].push(task);
+                        });
+
+                        return Object.keys(tasksByPackage).map(
+                          (packageId) => {
+                            const packageTasks =
+                              tasksByPackage[packageId];
+                            const packageInfo = packages.find(
+                              (pkg) =>
+                                pkg.customizePackageID ===
+                                parseInt(packageId)
+                            );
+
+                            if (!packageInfo) {
+                              console.log(
+                                "Package info not found for ID:",
+                                packageId
                               );
-                              return (
-                                <Text style={styles.nurseAssigned}>
-                                  Điều dưỡng viên:{" "}
-                                  {nurse?.fullName ||
-                                    "Không xác định"}
-                                </Text>
-                              );
-                            } else {
-                              return (
-                                <TouchableOpacity
-                                  style={styles.selectNurseButton}
-                                  onPress={() =>
-                                    handleSelectNurseForBooking(
-                                      booking.bookingID
-                                    )
-                                  }>
-                                  <Text
-                                    style={
-                                      styles.selectNurseButtonText
-                                    }>
-                                    Chọn điều dưỡng viên/tư vấn viên
-                                  </Text>
-                                </TouchableOpacity>
-                              );
+                              return null;
                             }
-                          })()}
-                        </View>
-                      </View>
+
+                            // Lấy thông tin service từ package
+                            const serviceInfo = services.find(
+                              (s) =>
+                                s.serviceID === packageInfo.serviceID
+                            );
+                            const serviceName =
+                              serviceInfo?.serviceName ||
+                              `Dịch vụ ${packageInfo.serviceID}`;
+                            const major =
+                              serviceInfo?.major || "Nurse"; // Fallback về Nurse nếu không tìm thấy
+                            const quantity =
+                              packageInfo.quantity || 1;
+
+                            console.log(
+                              "Package",
+                              packageId,
+                              "serviceInfo:",
+                              serviceInfo,
+                              "major:",
+                              major
+                            );
+
+                            // Kiểm tra xem có task nào đã được gán nurse chưa
+                            const assignedTasks = packageTasks.filter(
+                              (task) => task.nursingID
+                            );
+                            const unassignedTasks =
+                              packageTasks.filter(
+                                (task) => !task.nursingID
+                              );
+
+                            return (
+                              <View
+                                key={packageId}
+                                style={styles.packageTasksContainer}>
+                                <Text
+                                  style={styles.packageServiceName}>
+                                  {serviceName} (Số lượng: {quantity})
+                                </Text>
+
+                                {/* Hiển thị các task đã được gán */}
+                                {assignedTasks.map((task, index) => {
+                                  const nurse = nurses.find(
+                                    (n) =>
+                                      n.nursingID === task.nursingID
+                                  );
+                                  return (
+                                    <View
+                                      key={task.customizeTaskID}
+                                      style={styles.assignedTaskItem}>
+                                      <Text
+                                        style={
+                                          styles.assignedTaskText
+                                        }>
+                                        {major === "Nurse"
+                                          ? "Điều dưỡng"
+                                          : "Tư vấn viên"}{" "}
+                                        {index + 1}:{" "}
+                                        {nurse?.fullName ||
+                                          "Không xác định"}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
+
+                                {/* Hiển thị các nút để thêm nurse cho các task chưa được gán */}
+                                {unassignedTasks.map(
+                                  (task, index) => (
+                                    <TouchableOpacity
+                                      key={task.customizeTaskID}
+                                      style={styles.addNurseButton}
+                                      onPress={() =>
+                                        handleSelectNurse(task)
+                                      }>
+                                      <Text
+                                        style={
+                                          styles.addNurseButtonText
+                                        }>
+                                        Thêm{" "}
+                                        {major === "Nurse"
+                                          ? "Điều dưỡng"
+                                          : "Chuyên gia tư vấn"}{" "}
+                                        {assignedTasks.length +
+                                          index +
+                                          1}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  )
+                                )}
+
+                                {/* Nếu tất cả task đã được gán, hiển thị thông báo */}
+                                {unassignedTasks.length === 0 &&
+                                  assignedTasks.length > 0 && (
+                                    <Text
+                                      style={styles.allAssignedText}>
+                                      Đã chọn đủ{" "}
+                                      {major === "Nurse"
+                                        ? "điều dưỡng viên"
+                                        : "tư vấn viên"}{" "}
+                                      cho dịch vụ này
+                                    </Text>
+                                  )}
+                              </View>
+                            );
+                          }
+                        );
+                      })()}
                     </View>
                   )}
               </View>
@@ -968,52 +1294,67 @@ export default function BookingHistoryScreen() {
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={availableNurses}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.nurseItem}
-                  onPress={() => handleNurseSelect(item)}>
-                  <View style={styles.nurseInfo}>
-                    <Text style={styles.nurseName}>
-                      {item.fullName}
-                    </Text>
-                    <Text style={styles.nurseDetails}>
-                      Chuyên môn: {item.major}
-                    </Text>
-                    <Text style={styles.nurseDetails}>
-                      Kinh nghiệm: {item.experience}
-                    </Text>
-                    <Text style={styles.nurseDetails}>
-                      Giới tính: {item.gender}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.nurseDetails,
-                        {
-                          color:
-                            item.status === "active"
-                              ? "#4CAF50"
-                              : "#FF6B6B",
-                        },
-                      ]}>
-                      Trạng thái:{" "}
-                      {item.status === "active"
-                        ? "Hoạt động"
-                        : "Không hoạt động"}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.nursingID.toString()}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContainer}
-            />
+            {availableNurses.length === 0 ? (
+              <View style={styles.emptyListContainer}>
+                <Text style={styles.emptyListText}>
+                  Không có{" "}
+                  {selectedStaffType === "Nurse"
+                    ? "điều dưỡng viên"
+                    : "tư vấn viên"}{" "}
+                  nào khả dụng
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.scrollView}
+                showsVerticalScrollIndicator={true}
+                contentContainerStyle={styles.scrollViewContent}>
+                {availableNurses.map((item, index) => (
+                  <TouchableOpacity
+                    key={
+                      item.nursingID?.toString() || index.toString()
+                    }
+                    style={styles.nurseItem}
+                    onPress={() => handleNurseSelect(item)}>
+                    <View style={styles.nurseInfo}>
+                      <Text style={styles.nurseName}>
+                        {item.fullName || `Nurse ${index + 1}`}
+                      </Text>
+                      <Text style={styles.nurseDetails}>
+                        {item.major || "Không xác định"}
+                      </Text>
+                      <Text style={styles.nurseDetails}>
+                        Kinh nghiệm:{" "}
+                        {item.experience || "Không xác định"}
+                      </Text>
+                      <Text style={styles.nurseDetails}>
+                        Giới tính: {item.gender || "Không xác định"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.nurseDetails,
+                          {
+                            color:
+                              item.status === "active"
+                                ? "#4CAF50"
+                                : "#FF6B6B",
+                          },
+                        ]}>
+                        Trạng thái:{" "}
+                        {item.status === "active"
+                          ? "Hoạt động"
+                          : "Không hoạt động"}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -1364,8 +1705,8 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: "white",
     borderRadius: 15,
-    width: "80%",
-    maxHeight: "70%",
+    width: "90%",
+    maxHeight: "80%",
     padding: 20,
     alignItems: "center",
   },
@@ -1386,15 +1727,20 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     width: "100%",
+    paddingVertical: 10,
   },
   nurseItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 15,
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
+    backgroundColor: "#F8F9FA",
+    marginBottom: 5,
+    borderRadius: 8,
+    width: "100%",
   },
   nurseInfo: {
     flex: 1,
@@ -1409,5 +1755,63 @@ const styles = StyleSheet.create({
   nurseDetails: {
     fontSize: 13,
     color: "#666",
+  },
+  packageTasksContainer: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  packageServiceName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+  },
+  assignedTaskItem: {
+    backgroundColor: "#E0F2F7",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 5,
+  },
+  assignedTaskText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  addNurseButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    alignItems: "center",
+    marginTop: 5,
+  },
+  addNurseButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  allAssignedText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 10,
+    fontStyle: "italic",
+  },
+  emptyListContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyListText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+  },
+  scrollView: {
+    width: "100%",
+  },
+  scrollViewContent: {
+    paddingBottom: 20,
   },
 });
