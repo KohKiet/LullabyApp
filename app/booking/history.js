@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -12,18 +12,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AuthService from "../../services/authService";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizePackageService from "../../services/customizePackageService";
 import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
+import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import ZoneDetailService from "../../services/zoneDetailService";
 
 export default function BookingHistoryScreen() {
   const router = useRouter();
-  const { accountID } = useLocalSearchParams();
+  const [userData, setUserData] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedBookings, setExpandedBookings] = useState({});
@@ -39,6 +41,7 @@ export default function BookingHistoryScreen() {
   const [nurses, setNurses] = useState([]);
   const [zoneDetails, setZoneDetails] = useState([]);
   const [services, setServices] = useState([]); // Cache services
+  const [serviceTasks, setServiceTasks] = useState([]); // Cache service tasks
 
   // State cho modal chọn nurse
   const [showNurseModal, setShowNurseModal] = useState(false);
@@ -47,17 +50,34 @@ export default function BookingHistoryScreen() {
   const [selectedStaffType, setSelectedStaffType] = useState(""); // "Nurse" hoặc "Specialist"
 
   useEffect(() => {
-    if (accountID) {
-      loadBookingHistory();
-      loadNurses();
-      loadZoneDetails();
-      loadServices();
-    }
-  }, [accountID]);
+    loadUserData();
+  }, []);
 
-  const loadBookingHistory = async () => {
+  const loadUserData = async () => {
+    try {
+      const user = await AuthService.getUserData();
+      if (user) {
+        setUserData(user);
+        await loadBookingHistory(user);
+        await loadNurses();
+        await loadZoneDetails();
+        await loadServices();
+        await loadServiceTasks();
+      } else {
+        Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+        router.replace("/auth/login");
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      router.replace("/auth/login");
+    }
+  };
+
+  const loadBookingHistory = async (user) => {
     try {
       setIsLoading(true);
+      const accountID = user.accountID || user.id;
       console.log("Loading booking history for account:", accountID);
 
       // Lấy care profiles của account hiện tại
@@ -75,58 +95,58 @@ export default function BookingHistoryScreen() {
         console.log("User care profile IDs:", userCareProfileIDs);
       }
 
-      // Lấy tất cả bookings
-      const bookingsResult = await BookingService.getAllBookings();
-      console.log("All bookings result:", bookingsResult);
+      if (userCareProfileIDs.length === 0) {
+        console.log("No care profiles found for user");
+        setBookings([]);
+        setIsLoading(false);
+        return;
+      }
 
-      if (bookingsResult.success) {
-        // Lấy tất cả invoices để kiểm tra trạng thái thanh toán
-        const invoicesResult = await InvoiceService.getAllInvoices();
-        console.log("Invoices result:", invoicesResult);
+      // Lấy bookings của user hiện tại dựa trên careProfileID
+      const userBookings = [];
+      for (const careProfileID of userCareProfileIDs) {
+        try {
+          const result =
+            await BookingService.getBookingsByCareProfileId(
+              careProfileID
+            );
+          if (result.success && result.data) {
+            userBookings.push(...result.data);
+          }
+        } catch (error) {
+          console.error(
+            `Error loading bookings for care profile ${careProfileID}:`,
+            error
+          );
+        }
+      }
 
-        let allUserBookings = [];
+      console.log("User bookings loaded:", userBookings);
+
+      if (userBookings.length > 0) {
+        // Lấy invoices cho các booking của user
+        const userBookingIDs = userBookings.map((b) => b.bookingID);
+        const invoicesResult =
+          await InvoiceService.getInvoicesByBookingIds(
+            userBookingIDs
+          );
 
         if (invoicesResult.success) {
-          // Tạo map bookingID -> invoice status
           const invoiceMap = {};
           invoicesResult.data.forEach((invoice) => {
             invoiceMap[invoice.bookingID] = invoice.status;
           });
           setInvoiceMap(invoiceMap);
-
-          // Lọc các booking thuộc về user hiện tại
-          allUserBookings = bookingsResult.data.filter((booking) => {
-            // Nếu user không có care profiles, hiển thị tất cả booking
-            if (userCareProfileIDs.length === 0) {
-              console.log(
-                `User has no care profiles, showing all bookings. Booking ${booking.bookingID}: careProfileID = ${booking.careProfileID}`
-              );
-              return true;
-            }
-
-            const belongsToUser = userCareProfileIDs.includes(
-              booking.careProfileID
-            );
-            console.log(
-              `Booking ${booking.bookingID}: careProfileID = ${booking.careProfileID}, belongsToUser = ${belongsToUser}`
-            );
-            return belongsToUser;
-          });
-        } else {
-          // Nếu không lấy được invoices, lấy tất cả booking
-          allUserBookings = bookingsResult.data;
         }
 
-        console.log("All user bookings:", allUserBookings);
-        setBookings(allUserBookings);
-        await loadAllBookingDetails(allUserBookings);
+        setBookings(userBookings);
+        await loadAllBookingDetails(userBookings);
       } else {
-        console.log("No bookings found");
         setBookings([]);
       }
     } catch (error) {
       console.error("Error loading booking history:", error);
-      Alert.alert("Lỗi", "Không thể tải lịch sử lịch hẹn");
+      Alert.alert("Lỗi", "Không thể tải lịch sử đặt lịch");
       setBookings([]);
     } finally {
       setIsLoading(false);
@@ -201,64 +221,68 @@ export default function BookingHistoryScreen() {
     }
   };
 
-  const loadZoneDetails = async () => {
-    try {
-      console.log("Loading zone details...");
-      const result = await ZoneDetailService.getAllZoneDetails();
-      console.log("Zone details result:", result);
-      if (result.success) {
-        console.log(
-          "Zone details loaded successfully:",
-          result.data.length,
-          "zones"
-        );
-        setZoneDetails(result.data);
-      } else {
-        console.log("Failed to load zone details:", result.error);
-      }
-    } catch (error) {
-      console.error("Error loading zone details:", error);
-    }
-  };
-
   const loadNurses = async () => {
     try {
-      console.log("Loading nurses...");
       const result =
         await NursingSpecialistService.getAllNursingSpecialists();
-      console.log("Nurses result:", result);
       if (result.success) {
-        console.log(
-          "Nurses loaded successfully:",
-          result.data.length,
-          "nurses"
-        );
         setNurses(result.data);
       } else {
-        console.log("Failed to load nurses:", result.error);
+        setNurses([]);
       }
     } catch (error) {
       console.error("Error loading nurses:", error);
+      setNurses([]);
+    }
+  };
+
+  const loadZoneDetails = async () => {
+    try {
+      const result = await ZoneDetailService.getAllZoneDetails();
+      if (result.success) {
+        setZoneDetails(result.data);
+      } else {
+        setZoneDetails([]);
+      }
+    } catch (error) {
+      console.error("Error loading zone details:", error);
+      setZoneDetails([]);
     }
   };
 
   const loadServices = async () => {
     try {
       console.log("Loading services...");
-      const result = await ServiceTypeService.getServices();
-      console.log("Services result:", result);
+      const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        console.log(
-          "Services loaded successfully:",
-          result.data.length,
-          "services"
-        );
+        console.log("Services loaded:", result.data.length, "items");
+        console.log("Sample service:", result.data[0]);
         setServices(result.data);
       } else {
         console.log("Failed to load services:", result.error);
       }
     } catch (error) {
       console.error("Error loading services:", error);
+    }
+  };
+
+  const loadServiceTasks = async () => {
+    try {
+      console.log("Loading service tasks...");
+      const result = await ServiceTaskService.getAllServiceTasks();
+      if (result.success) {
+        console.log(
+          "Service tasks loaded:",
+          result.data.length,
+          "items"
+        );
+        console.log("Sample service task:", result.data[0]);
+        setServiceTasks(result.data);
+      } else {
+        console.log("Failed to load service tasks:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading service tasks:", error);
     }
   };
 
@@ -357,15 +381,28 @@ export default function BookingHistoryScreen() {
 
   const loadCustomizeTasks = async (bookingID) => {
     try {
+      console.log(
+        `Loading customize tasks for booking ${bookingID}...`
+      );
       const result =
         await CustomizeTaskService.getCustomizeTasksByBookingId(
           bookingID
         );
       if (result.success) {
+        console.log(
+          `Customize tasks for booking ${bookingID}:`,
+          result.data
+        );
+        console.log("Sample task structure:", result.data[0]);
         setCustomizeTasksMap((prev) => ({
           ...prev,
           [bookingID]: result.data,
         }));
+      } else {
+        console.log(
+          `Failed to load tasks for booking ${bookingID}:`,
+          result.error
+        );
       }
     } catch (error) {
       console.error("Error loading customize tasks:", error);
@@ -374,11 +411,305 @@ export default function BookingHistoryScreen() {
 
   const handlePayment = async (bookingID) => {
     try {
-      // Chuyển đến trang thanh toán
-      router.push(`/payment?bookingId=${bookingID}`);
+      // Kiểm tra tài khoản trước khi thanh toán
+      const userResult = await AuthService.getUserData();
+      if (!userResult) {
+        Alert.alert(
+          "Lỗi",
+          "Không thể kiểm tra tài khoản. Vui lòng thử lại.",
+          [{ text: "OK", style: "default" }]
+        );
+        return;
+      }
+
+      // Lấy số dư tài khoản từ API thực tế
+      const accountID = userResult.accountID || userResult.id;
+      const walletID = userResult.walletID;
+
+      console.log("User data:", userResult);
+      console.log("Account ID to use:", accountID);
+      console.log("Wallet ID to use:", walletID);
+
+      if (!accountID && !walletID) {
+        Alert.alert(
+          "Lỗi",
+          "Không tìm thấy ID tài khoản hoặc wallet.",
+          [{ text: "OK", style: "default" }]
+        );
+        return;
+      }
+
+      let accountBalance = 0;
+      let walletData = null;
+
+      try {
+        // Thử gọi API với walletID trước (nếu có)
+        let walletUrl = "";
+        let success = false;
+
+        if (walletID) {
+          walletUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${walletID}`;
+          console.log("Trying Wallet API with walletID:", walletUrl);
+
+          const walletResponse = await fetch(walletUrl);
+          console.log(
+            "Wallet API response status (walletID):",
+            walletResponse.status
+          );
+
+          if (walletResponse.ok) {
+            walletData = await walletResponse.json();
+            accountBalance = walletData.amount || 0;
+            success = true;
+            console.log(
+              "Success with walletID! Wallet data:",
+              walletData
+            );
+          }
+        }
+
+        // Nếu walletID thất bại hoặc không có, thử với accountID
+        if (!success) {
+          walletUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${accountID}`;
+          console.log("Trying Wallet API with accountID:", walletUrl);
+
+          const walletResponse = await fetch(walletUrl);
+          console.log(
+            "Wallet API response status (accountID):",
+            walletResponse.status
+          );
+
+          if (walletResponse.ok) {
+            walletData = await walletResponse.json();
+            accountBalance = walletData.amount || 0;
+            success = true;
+            console.log(
+              "Success with accountID! Wallet data:",
+              walletData
+            );
+          }
+        }
+
+        // Nếu cả 2 đều thất bại, thử với một số ID khác có thể
+        if (!success) {
+          console.log(
+            "Both attempts failed. Trying alternative IDs..."
+          );
+
+          // Thử với ID từ 1-5 (có thể có wallet nào đó)
+          for (let testID = 1; testID <= 5; testID++) {
+            if (testID === accountID) continue; // Bỏ qua accountID đã thử
+
+            const testUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${testID}`;
+            console.log(`Trying alternative ID ${testID}:`, testUrl);
+
+            try {
+              const testResponse = await fetch(testUrl);
+              console.log(
+                `Test ID ${testID} response status:`,
+                testResponse.status
+              );
+
+              if (testResponse.ok) {
+                const testData = await testResponse.json();
+                console.log(
+                  `Test ID ${testID} successful! Data:`,
+                  testData
+                );
+
+                // Kiểm tra xem có phải wallet của user này không
+                if (testData.accountID === accountID) {
+                  walletData = testData;
+                  accountBalance = testData.amount || 0;
+                  success = true;
+                  console.log(
+                    `Found matching wallet! ID: ${testID}, Data:`,
+                    testData
+                  );
+                  break;
+                }
+              }
+            } catch (testError) {
+              console.log(
+                `Test ID ${testID} failed:`,
+                testError.message
+              );
+            }
+          }
+        }
+
+        if (!success) {
+          throw new Error(
+            `All attempts failed. Last tried: ${walletUrl}`
+          );
+        }
+
+        console.log("Final wallet data:", walletData);
+        console.log("Final account balance:", accountBalance);
+      } catch (walletError) {
+        console.error("Error fetching wallet:", walletError);
+
+        // Fallback: Sử dụng giá trị mặc định nếu API thất bại
+        accountBalance = 100000; // 100,000 VND fallback
+        console.log("Using fallback balance:", accountBalance);
+
+        Alert.alert(
+          "Cảnh báo",
+          "Không thể kiểm tra số dư tài khoản từ server.\n\n" +
+            "Sử dụng số dư mặc định để tiếp tục.\n\n" +
+            "Vui lòng kiểm tra lại sau.",
+          [
+            {
+              text: "Tiếp tục",
+              style: "default",
+              onPress: () =>
+                console.log("Continuing with fallback balance"),
+            },
+          ]
+        );
+      }
+
+      const booking = bookings.find((b) => b.bookingID === bookingID);
+
+      if (!booking) {
+        Alert.alert("Lỗi", "Không tìm thấy thông tin đặt lịch.", [
+          { text: "OK", style: "default" },
+        ]);
+        return;
+      }
+
+      // Tính tổng tiền cần thanh toán
+      let totalAmount = booking.amount;
+      if (booking.extra && booking.extra > 0) {
+        totalAmount =
+          booking.amount + (booking.amount * booking.extra) / 100;
+      }
+
+      console.log("Booking amount:", booking.amount);
+      console.log("Extra fee:", booking.extra);
+      console.log("Total amount:", totalAmount);
+
+      // Kiểm tra số dư tài khoản
+      if (accountBalance < totalAmount) {
+        const shortfall = totalAmount - accountBalance;
+        Alert.alert(
+          "Số dư không đủ",
+          `Số dư hiện tại: ${ServiceTypeService.formatPrice(
+            accountBalance
+          )}\n\n` +
+            `Số tiền cần thanh toán: ${ServiceTypeService.formatPrice(
+              totalAmount
+            )}\n\n` +
+            `Thiếu: ${ServiceTypeService.formatPrice(
+              shortfall
+            )}\n\n` +
+            "Vui lòng nạp thêm tiền vào tài khoản để tiếp tục thanh toán.",
+          [
+            {
+              text: "Hủy",
+              style: "cancel",
+              onPress: () =>
+                console.log(
+                  "Payment cancelled due to insufficient balance"
+                ),
+            },
+            {
+              text: "Nạp tiền",
+              style: "default",
+              onPress: () => {
+                // TODO: Navigate to top-up screen
+                Alert.alert(
+                  "Thông báo",
+                  "Chức năng nạp tiền sẽ được cập nhật sau.",
+                  [{ text: "OK", style: "default" }]
+                );
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      // Hiển thị xác nhận thanh toán
+      Alert.alert(
+        "Xác nhận thanh toán",
+        `Bạn có chắc chắn muốn thanh toán cho lịch hẹn #${bookingID}?\n\n` +
+          `Số tiền: ${ServiceTypeService.formatPrice(
+            totalAmount
+          )}\n` +
+          `Số dư hiện tại: ${ServiceTypeService.formatPrice(
+            accountBalance
+          )}`,
+        [
+          {
+            text: "Hủy",
+            style: "cancel",
+            onPress: () => console.log("Payment cancelled"),
+          },
+          {
+            text: "Thanh toán",
+            style: "default",
+            onPress: async () => {
+              try {
+                // Gọi API thanh toán
+                const response = await fetch(
+                  "https://cool-dhawan.103-28-36-58.plesk.page/api/Invoice",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      bookingID: bookingID,
+                      content: `Thanh toán cho lịch hẹn #${bookingID}`,
+                    }),
+                  }
+                );
+
+                if (response.ok) {
+                  const result = await response.json();
+                  // Thay thế message từ server nếu là "Invoice paid successfully."
+                  const displayMessage =
+                    result.message === "Invoice paid successfully."
+                      ? "Thanh toán hóa đơn thành công"
+                      : result.message ||
+                        "Thanh toán hóa đơn thành công";
+
+                  Alert.alert("Thành công", displayMessage, [
+                    {
+                      text: "OK",
+                      style: "default",
+                      onPress: () => {
+                        // Reload booking history để cập nhật status
+                        loadUserData();
+                      },
+                    },
+                  ]);
+                } else {
+                  const errorData = await response.json();
+                  Alert.alert(
+                    "Lỗi",
+                    errorData.message ||
+                      "Thanh toán thất bại. Vui lòng thử lại."
+                  );
+                }
+              } catch (error) {
+                console.error("Payment error:", error);
+                Alert.alert(
+                  "Lỗi",
+                  "Có lỗi xảy ra khi thanh toán. Vui lòng thử lại."
+                );
+              }
+            },
+          },
+        ]
+      );
     } catch (error) {
-      console.error("Error navigating to payment:", error);
-      Alert.alert("Lỗi", "Không thể chuyển đến trang thanh toán");
+      console.error("Payment preparation error:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể chuẩn bị thanh toán. Vui lòng thử lại."
+      );
     }
   };
 
@@ -498,36 +829,38 @@ export default function BookingHistoryScreen() {
 
   const handleNurseSelect = async (nurse) => {
     try {
-      const result = await CustomizeTaskService.updateNursing(
-        selectedTask.customizeTaskID,
-        nurse.nursingID
+      // Sử dụng API mới để cập nhật điều dưỡng
+      const response = await fetch(
+        `https://cool-dhawan.103-28-36-58.plesk.page/api/CustomizeTask/UpdateNursing/${selectedTask.customizeTaskID}/${nurse.nursingID}`,
+        {
+          method: "PUT",
+          headers: {
+            accept: "*/*",
+          },
+        }
       );
 
-      if (result.success) {
+      if (response.ok) {
+        const result = await response.json();
+        console.log("Nurse assignment result:", result);
+
         Alert.alert(
           "Thành công",
           `Đã chọn điều dưỡng viên: ${nurse.fullName}`
         );
-        // Reload customize tasks
+
+        // Reload customize tasks để cập nhật UI
         await loadCustomizeTasks(selectedTask.bookingID);
         setShowNurseModal(false);
         setSelectedTask(null);
       } else {
-        // Xử lý lỗi conflict schedule
-        if (
-          result.error &&
-          result.error.includes("conflict schedule")
-        ) {
-          Alert.alert(
-            "Lỗi lịch trình",
-            "Điều dưỡng viên này đã được gán cho lịch hẹn khác trong cùng thời gian. Vui lòng chọn điều dưỡng viên khác hoặc đặt lịch cách nhau ít nhất 30 phút."
-          );
-        } else {
-          Alert.alert(
-            "Lỗi",
-            result.error || "Không thể cập nhật điều dưỡng viên"
-          );
-        }
+        const errorData = await response.json();
+        console.error("Error response:", errorData);
+
+        Alert.alert(
+          "Lỗi",
+          errorData.message || "Không thể cập nhật điều dưỡng viên"
+        );
       }
     } catch (error) {
       console.error("Error updating nurse:", error);
@@ -758,7 +1091,9 @@ export default function BookingHistoryScreen() {
         return "Đã hủy";
       case "isScheduled":
         return "Đã phân công";
-      case "unknown":
+      case "completed":
+        return "Hoàn thành";
+      case "overdue":
         return "Quá hạn";
       default:
         return status;
@@ -775,7 +1110,9 @@ export default function BookingHistoryScreen() {
         return "#FF6B6B";
       case "isScheduled":
         return "#4CAF50";
-      case "unknown":
+      case "completed":
+        return "#2196F3";
+      case "overdue":
         return "#666";
       default:
         return "#666";
@@ -789,8 +1126,7 @@ export default function BookingHistoryScreen() {
 
     // Chỉ hiển thị booking đã thanh toán
     return bookings.filter((booking) => {
-      const invoiceStatus = invoiceMap[booking.bookingID];
-      return invoiceStatus === "paid";
+      return booking.status === "paid";
     });
   };
 
@@ -805,7 +1141,7 @@ export default function BookingHistoryScreen() {
     }
 
     const details = bookingDetailsMap[booking.bookingID];
-    const invoiceStatus = invoiceMap[booking.bookingID] || "unknown";
+    const bookingStatus = booking.status; // Use booking.status directly
 
     // Nếu details chưa load xong, hiển thị loading
     if (!details) {
@@ -838,10 +1174,10 @@ export default function BookingHistoryScreen() {
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: getStatusColor(invoiceStatus) },
+              { backgroundColor: getStatusColor(bookingStatus) },
             ]}>
             <Text style={styles.statusText}>
-              {formatStatus(invoiceStatus)}
+              {formatStatus(bookingStatus)}
             </Text>
           </View>
         </View>
@@ -856,11 +1192,76 @@ export default function BookingHistoryScreen() {
             </View>
           )}
 
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Số tiền:</Text>
-            <Text style={styles.amountValue}>
-              {ServiceTypeService.formatPrice(booking.amount || 0)}
-            </Text>
+          {/* Cải thiện hiển thị giá */}
+          <View style={styles.priceBreakdown}>
+            {/* Chỉ hiện "Giá ban đầu" khi có phí phát sinh */}
+            {booking.extra &&
+              booking.extra > 0 &&
+              customizePackagesMap[booking.bookingID] && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>Giá ban đầu:</Text>
+                  <Text style={styles.originalPrice}>
+                    {(() => {
+                      const packages =
+                        customizePackagesMap[booking.bookingID] || [];
+                      const totalOriginalPrice = packages.reduce(
+                        (sum, pkg) => sum + (pkg.total || 0),
+                        0
+                      );
+                      return ServiceTypeService.formatPrice(
+                        totalOriginalPrice
+                      );
+                    })()}
+                  </Text>
+                </View>
+              )}
+
+            {/* Phí phát sinh từ booking.extra (phần trăm) */}
+            {booking.extra && booking.extra > 0 && (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>
+                  Phí phát sinh ({booking.extra}%):
+                </Text>
+                <Text style={styles.extraFeePrice}>
+                  +
+                  {ServiceTypeService.formatPrice(
+                    (() => {
+                      const packages =
+                        customizePackagesMap[booking.bookingID] || [];
+                      const totalOriginalPrice = packages.reduce(
+                        (sum, pkg) => sum + (pkg.total || 0),
+                        0
+                      );
+                      return (
+                        (totalOriginalPrice * booking.extra) / 100
+                      );
+                    })()
+                  )}
+                </Text>
+              </View>
+            )}
+
+            {/* Tổng tiền = Giá ban đầu + Phí phát sinh (hoặc chỉ giá ban đầu nếu không có phí) */}
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Tổng tiền:</Text>
+              <Text style={styles.totalPrice}>
+                {ServiceTypeService.formatPrice(
+                  (() => {
+                    const packages =
+                      customizePackagesMap[booking.bookingID] || [];
+                    const totalOriginalPrice = packages.reduce(
+                      (sum, pkg) => sum + (pkg.total || 0),
+                      0
+                    );
+                    const extraFees =
+                      booking.extra && booking.extra > 0
+                        ? (totalOriginalPrice * booking.extra) / 100
+                        : 0;
+                    return totalOriginalPrice + extraFees;
+                  })()
+                )}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.detailRow}>
@@ -915,6 +1316,7 @@ export default function BookingHistoryScreen() {
                     <Text style={styles.sectionTitle}>
                       Chi tiết gói dịch vụ:
                     </Text>
+
                     {customizePackagesMap[booking.bookingID].map(
                       (pkg, index) => (
                         <View
@@ -922,13 +1324,38 @@ export default function BookingHistoryScreen() {
                           style={styles.packageDetail}>
                           <Text style={styles.packageName}>
                             {(() => {
-                              // Sử dụng dữ liệu từ API thay vì tìm kiếm trong services
-                              // Nếu có name từ API thì dùng, không thì dùng serviceID
+                              // Tìm thông tin service từ services cache
+                              const serviceInfo = services.find(
+                                (s) => s.serviceID === pkg.serviceID
+                              );
+                              if (serviceInfo) {
+                                return serviceInfo.serviceName;
+                              }
                               return (
                                 pkg.name || `Dịch vụ ${pkg.serviceID}`
                               );
                             })()}
                           </Text>
+
+                          {/* Mô tả dịch vụ nếu có */}
+                          {(() => {
+                            const serviceInfo = services.find(
+                              (s) => s.serviceID === pkg.serviceID
+                            );
+                            if (
+                              serviceInfo &&
+                              serviceInfo.description
+                            ) {
+                              return (
+                                <Text
+                                  style={styles.packageDescription}>
+                                  {serviceInfo.description}
+                                </Text>
+                              );
+                            }
+                            return null;
+                          })()}
+
                           <View style={styles.packageDetails}>
                             <Text style={styles.packagePrice}>
                               Giá:{" "}
@@ -936,10 +1363,7 @@ export default function BookingHistoryScreen() {
                                 pkg.price
                               )}
                             </Text>
-                            <Text style={styles.packageQuantity}>
-                              Số lượng: {pkg.quantity}
-                            </Text>
-                            {pkg.discount && (
+                            {pkg.discount && pkg.discount > 0 && (
                               <Text style={styles.packageDiscount}>
                                 Giảm giá:{" "}
                                 {CustomizePackageService.formatPrice(
@@ -954,6 +1378,119 @@ export default function BookingHistoryScreen() {
                               )}
                             </Text>
                           </View>
+
+                          {/* Hiển thị các service con (customize tasks) của package này */}
+                          {customizeTasksMap[booking.bookingID] && (
+                            <View style={styles.serviceTasksSection}>
+                              <Text style={styles.serviceTasksTitle}>
+                                Chi tiết các dịch vụ con:
+                              </Text>
+                              {customizeTasksMap[booking.bookingID]
+                                .filter(
+                                  (task) =>
+                                    task.customizePackageID ===
+                                    pkg.customizePackageID
+                                )
+                                .map((task, taskIndex) => {
+                                  // Tìm thông tin service từ serviceID của task
+                                  // CustomizeTask có serviceID để liên kết với ServiceTypes
+                                  const serviceInfo = services.find(
+                                    (s) =>
+                                      s.serviceID === task.serviceID
+                                  );
+
+                                  // Tìm thông tin điều dưỡng nếu đã được gán
+                                  const assignedNurse = task.nursingID
+                                    ? nurses.find(
+                                        (n) =>
+                                          n.nursingID ===
+                                          task.nursingID
+                                      )
+                                    : null;
+
+                                  return (
+                                    <View
+                                      key={task.customizeTaskID}
+                                      style={styles.serviceTaskItem}>
+                                      <View
+                                        style={
+                                          styles.serviceTaskHeader
+                                        }>
+                                        <Text
+                                          style={
+                                            styles.serviceTaskName
+                                          }>
+                                          {taskIndex + 1}.{" "}
+                                          {serviceInfo?.serviceName ||
+                                            `Dịch vụ ${task.serviceID}`}
+                                        </Text>
+                                        <Text
+                                          style={
+                                            styles.serviceTaskOrder
+                                          }>
+                                          Thứ tự: {task.taskOrder}
+                                        </Text>
+                                      </View>
+
+                                      <Text
+                                        style={
+                                          styles.serviceTaskStatus
+                                        }>
+                                        Trạng thái:{" "}
+                                        {formatStatus(task.status)}
+                                      </Text>
+
+                                      {/* Hiển thị điều dưỡng đã được gán */}
+                                      {assignedNurse ? (
+                                        <View
+                                          style={
+                                            styles.assignedNurseInfo
+                                          }>
+                                          <Text
+                                            style={
+                                              styles.assignedNurseLabel
+                                            }>
+                                            Điều dưỡng đã chọn:
+                                          </Text>
+                                          <Text
+                                            style={
+                                              styles.assignedNurseName
+                                            }>
+                                            {assignedNurse.fullName}
+                                          </Text>
+                                        </View>
+                                      ) : (
+                                        <View
+                                          style={
+                                            styles.noNurseAssigned
+                                          }>
+                                          <Text
+                                            style={
+                                              styles.noNurseText
+                                            }>
+                                            Chưa có điều dưỡng
+                                          </Text>
+                                          <TouchableOpacity
+                                            style={
+                                              styles.assignNurseButton
+                                            }
+                                            onPress={() =>
+                                              handleSelectNurse(task)
+                                            }>
+                                            <Text
+                                              style={
+                                                styles.assignNurseButtonText
+                                              }>
+                                              Chọn điều dưỡng
+                                            </Text>
+                                          </TouchableOpacity>
+                                        </View>
+                                      )}
+                                    </View>
+                                  );
+                                })}
+                            </View>
+                          )}
                         </View>
                       )
                     )}
@@ -961,22 +1498,12 @@ export default function BookingHistoryScreen() {
                 )}
 
                 {/* Customize Tasks - chỉ hiển thị cho booking đã thanh toán */}
-                {invoiceStatus === "paid" &&
+                {bookingStatus === "paid" &&
                   customizeTasksMap[booking.bookingID] && (
                     <View style={styles.customizeTasksSection}>
                       <Text style={styles.sectionTitle}>
                         Chọn nhân viên:
                       </Text>
-
-                      {/* Debug info */}
-                      {__DEV__ && (
-                        <Text style={styles.debugText}>
-                          Debug: Services count: {services.length},
-                          Customize packages:{" "}
-                          {customizePackagesMap[booking.bookingID]
-                            ?.length || 0}
-                        </Text>
-                      )}
 
                       {/* Nhóm tasks theo customizePackageID */}
                       {(() => {
@@ -985,19 +1512,6 @@ export default function BookingHistoryScreen() {
                         const packages =
                           customizePackagesMap[booking.bookingID] ||
                           [];
-
-                        console.log(
-                          "Tasks for booking",
-                          booking.bookingID,
-                          ":",
-                          tasks
-                        );
-                        console.log(
-                          "Packages for booking",
-                          booking.bookingID,
-                          ":",
-                          packages
-                        );
 
                         // Nhóm tasks theo customizePackageID
                         const tasksByPackage = {};
@@ -1024,10 +1538,6 @@ export default function BookingHistoryScreen() {
                             );
 
                             if (!packageInfo) {
-                              console.log(
-                                "Package info not found for ID:",
-                                packageId
-                              );
                               return null;
                             }
 
@@ -1044,15 +1554,6 @@ export default function BookingHistoryScreen() {
                             const quantity =
                               packageInfo.quantity || 1;
 
-                            console.log(
-                              "Package",
-                              packageId,
-                              "serviceInfo:",
-                              serviceInfo,
-                              "major:",
-                              major
-                            );
-
                             // Kiểm tra xem có task nào đã được gán nurse chưa
                             const assignedTasks = packageTasks.filter(
                               (task) => task.nursingID
@@ -1068,7 +1569,7 @@ export default function BookingHistoryScreen() {
                                 style={styles.packageTasksContainer}>
                                 <Text
                                   style={styles.packageServiceName}>
-                                  {serviceName} (Số lượng: {quantity})
+                                  {serviceName}
                                 </Text>
 
                                 {/* Hiển thị các task đã được gán */}
@@ -1096,31 +1597,6 @@ export default function BookingHistoryScreen() {
                                   );
                                 })}
 
-                                {/* Hiển thị các nút để thêm nurse cho các task chưa được gán */}
-                                {unassignedTasks.map(
-                                  (task, index) => (
-                                    <TouchableOpacity
-                                      key={task.customizeTaskID}
-                                      style={styles.addNurseButton}
-                                      onPress={() =>
-                                        handleSelectNurse(task)
-                                      }>
-                                      <Text
-                                        style={
-                                          styles.addNurseButtonText
-                                        }>
-                                        Thêm{" "}
-                                        {major === "Nurse"
-                                          ? "Điều dưỡng"
-                                          : "Chuyên gia tư vấn"}{" "}
-                                        {assignedTasks.length +
-                                          index +
-                                          1}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  )
-                                )}
-
                                 {/* Nếu tất cả task đã được gán, hiển thị thông báo */}
                                 {unassignedTasks.length === 0 &&
                                   assignedTasks.length > 0 && (
@@ -1146,7 +1622,7 @@ export default function BookingHistoryScreen() {
         )}
 
         {/* Payment Button - chỉ hiển thị cho booking pending */}
-        {invoiceStatus === "pending" && (
+        {bookingStatus === "pending" && (
           <View style={styles.paymentSection}>
             <TouchableOpacity
               style={styles.paymentButton}
@@ -1175,7 +1651,7 @@ export default function BookingHistoryScreen() {
         style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>
-            Đang tải lịch sử lịch hẹn...
+            Đang tải lịch sử đặt lịch...
           </Text>
         </View>
       </LinearGradient>
@@ -1193,7 +1669,7 @@ export default function BookingHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lịch sử lịch hẹn</Text>
+        <Text style={styles.headerTitle}>Lịch sử đặt lịch</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -1247,7 +1723,7 @@ export default function BookingHistoryScreen() {
             <Text style={styles.emptySubtitle}>
               {showOnlyPaid
                 ? "Các lịch hẹn đã thanh toán sẽ hiển thị ở đây"
-                : "Lịch sử lịch hẹn sẽ hiển thị ở đây"}
+                : "Lịch sử đặt lịch sẽ hiển thị ở đây"}
             </Text>
           </View>
         ) : (
@@ -1602,6 +2078,11 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 5,
   },
+  packageDescription: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 5,
+  },
   packageDetails: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1813,5 +2294,191 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     paddingBottom: 20,
+  },
+  debugText: {
+    fontSize: 12,
+    color: "#999",
+    fontStyle: "italic",
+    marginBottom: 10,
+  },
+  extraFeeNote: {
+    fontSize: 12,
+    color: "red",
+    fontStyle: "italic",
+    marginTop: 5,
+  },
+  priceBreakdown: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 5,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  originalPrice: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  extraFeePrice: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#FF6B6B",
+  },
+  totalPrice: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FF6B6B",
+  },
+  packageSummary: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5,
+  },
+  summaryAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FF6B6B",
+  },
+  priceSummaryCard: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  priceSummaryTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5,
+  },
+  priceSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 3,
+  },
+  priceSummaryLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  priceSummaryValue: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  priceSummaryTotal: {
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    marginTop: 5,
+  },
+  priceSummaryTotalValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FF6B6B",
+  },
+  debugInfo: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: "#F0F0F0",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DDD",
+  },
+  serviceTasksSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  serviceTasksTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  serviceTaskItem: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  serviceTaskHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  serviceTaskName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  serviceTaskOrder: {
+    fontSize: 13,
+    color: "#666",
+  },
+  serviceTaskStatus: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 5,
+  },
+  assignedNurseInfo: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  assignedNurseLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5,
+  },
+  assignedNurseName: {
+    fontSize: 14,
+    color: "#4CAF50",
+    fontWeight: "bold",
+  },
+  noNurseAssigned: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  noNurseText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  assignNurseButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    alignItems: "center",
+  },
+  assignNurseButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
   },
 });

@@ -32,12 +32,45 @@ export default function PaymentScreen() {
   const [invoiceData, setInvoiceData] = useState(null);
   const [isProcessingPayment, setIsProcessingPayment] =
     useState(false);
+  const [services, setServices] = useState([]); // Thêm state cho services
 
   useEffect(() => {
+    console.log(
+      "PaymentScreen: useEffect triggered with bookingId:",
+      bookingId
+    );
     if (bookingId) {
+      console.log("PaymentScreen: Starting loadBookingData...");
       loadBookingData();
+
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.log(
+          "PaymentScreen: Loading timeout reached, forcing fallback"
+        );
+        if (isLoading) {
+          setIsLoading(false);
+          loadFromAsyncStorage();
+        }
+      }, 10000); // 10 seconds timeout
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      console.log("PaymentScreen: No bookingId provided");
     }
   }, [bookingId]);
+
+  // Debug state changes
+  useEffect(() => {
+    console.log(
+      "PaymentScreen: State changed - isLoading:",
+      isLoading,
+      "bookingData:",
+      !!bookingData,
+      "extraData:",
+      !!extraData
+    );
+  }, [isLoading, bookingData, extraData]);
 
   const loadBookingData = async () => {
     try {
@@ -47,21 +80,45 @@ export default function PaymentScreen() {
         bookingId
       );
 
+      // 1. Gọi API để lấy booking data
+      console.log("PaymentScreen: Calling getBookingById...");
       const result = await BookingService.getBookingById(bookingId);
       console.log("PaymentScreen: Booking data result:", result);
 
       if (result.success) {
+        console.log(
+          "PaymentScreen: API call successful, setting booking data"
+        );
+        console.log("PaymentScreen: Full API response:", result);
+        console.log("PaymentScreen: API response data:", result.data);
+        console.log(
+          "PaymentScreen: API response data.amount:",
+          result.data.amount
+        );
+        console.log(
+          "PaymentScreen: API response data.bookingID:",
+          result.data.bookingID
+        );
         setBookingData(result.data);
+        console.log(
+          "PaymentScreen: Set booking data from API:",
+          result.data
+        );
 
-        // Load care profile data
+        // 2. Load care profile data từ API
         if (result.data.careProfileID) {
+          console.log("PaymentScreen: Loading care profile data...");
           await loadCareProfileData(result.data.careProfileID);
         }
 
-        // Load invoice data
+        // 3. Load invoice data
+        console.log("PaymentScreen: Loading invoice data...");
         await loadInvoiceData(bookingId);
 
-        // Load extra data từ AsyncStorage
+        // 4. Load extra data từ AsyncStorage để bổ sung thông tin
+        console.log(
+          "PaymentScreen: Loading extra data from AsyncStorage..."
+        );
         try {
           const storedData = await AsyncStorage.getItem(
             `booking_${bookingId}`
@@ -76,11 +133,26 @@ export default function PaymentScreen() {
 
             // Nếu là package, load package tasks
             if (
-              parsedData.type === "package" &&
-              parsedData.packageId
+              parsedData.serviceType === "package" &&
+              parsedData.packageData?.serviceID
             ) {
-              await loadPackageTasks(parsedData.packageId);
+              console.log("PaymentScreen: Loading package tasks...");
+              await loadPackageTasks(
+                parsedData.packageData.serviceID
+              );
             }
+
+            // Load services để hiển thị thông tin
+            if (parsedData.serviceType === "service") {
+              console.log(
+                "PaymentScreen: Loading services for display..."
+              );
+              await loadServices();
+            }
+          } else {
+            console.log(
+              "PaymentScreen: No extra data found in AsyncStorage"
+            );
           }
         } catch (error) {
           console.error(
@@ -89,11 +161,84 @@ export default function PaymentScreen() {
           );
         }
       } else {
-        Alert.alert("Lỗi", "Không thể tải thông tin booking");
-        router.back();
+        // Nếu API fail, thử dùng AsyncStorage
+        console.log(
+          "PaymentScreen: API failed, trying AsyncStorage fallback"
+        );
+        await loadFromAsyncStorage();
       }
     } catch (error) {
       console.error("Error loading booking data:", error);
+      // Nếu có lỗi, thử dùng AsyncStorage
+      console.log(
+        "PaymentScreen: Error occurred, trying AsyncStorage fallback"
+      );
+      await loadFromAsyncStorage();
+    } finally {
+      console.log("PaymentScreen: Setting isLoading to false");
+      setIsLoading(false);
+    }
+  };
+
+  const loadFromAsyncStorage = async () => {
+    try {
+      const storedData = await AsyncStorage.getItem(
+        `booking_${bookingId}`
+      );
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        setExtraData(parsedData);
+        console.log(
+          "PaymentScreen: Loaded data from AsyncStorage fallback:",
+          parsedData
+        );
+
+        // Load services nếu là service booking
+        if (parsedData.serviceType === "service") {
+          console.log(
+            "PaymentScreen: Loading services in fallback..."
+          );
+          await loadServices();
+        }
+
+        // Tạo mock booking data từ extra data
+        const mockBookingData = {
+          bookingID: parsedData.bookingID,
+          careProfileID: parsedData.memberData?.careProfileID,
+          createdAt: parsedData.createdAt || new Date().toISOString(),
+          status: "pending",
+          amount: parsedData.totalAmount || 0,
+          workdate: parsedData.workdate || new Date().toISOString(),
+        };
+        setBookingData(mockBookingData);
+        console.log(
+          "PaymentScreen: Set mock booking data:",
+          mockBookingData
+        );
+
+        // Load care profile data từ stored data
+        if (parsedData.memberData) {
+          setCareProfileData(parsedData.memberData);
+          console.log(
+            "PaymentScreen: Set care profile data:",
+            parsedData.memberData
+          );
+        }
+
+        // Nếu là package, load package tasks
+        if (
+          parsedData.serviceType === "package" &&
+          parsedData.packageData?.serviceID
+        ) {
+          await loadPackageTasks(parsedData.packageData.serviceID);
+        }
+      } else {
+        console.log("PaymentScreen: No stored data found");
+        Alert.alert("Lỗi", "Không tìm thấy thông tin booking");
+        router.back();
+      }
+    } catch (error) {
+      console.error("Error loading from AsyncStorage:", error);
       Alert.alert("Lỗi", "Có lỗi xảy ra khi tải thông tin booking");
       router.back();
     } finally {
@@ -160,21 +305,30 @@ export default function PaymentScreen() {
 
   const loadPackageTasks = async (packageId) => {
     try {
-      console.log(
-        "PaymentScreen: Loading package tasks for ID:",
-        packageId
-      );
       const result =
-        await ServiceTaskService.getServiceTasksByPackageId(
+        await ServiceTaskService.getServiceTasksByServiceId(
           packageId
         );
-      console.log("PaymentScreen: Package tasks result:", result);
-
       if (result.success) {
         setPackageTasks(result.data);
       }
     } catch (error) {
       console.error("Error loading package tasks:", error);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const result = await ServiceTypeService.getAllServiceTypes();
+      if (result.success) {
+        // Filter only services (not packages)
+        const servicesOnly = result.data.filter(
+          (service) => !service.isPackage
+        );
+        setServices(servicesOnly);
+      }
+    } catch (error) {
+      console.error("Error loading services:", error);
     }
   };
 
@@ -287,7 +441,14 @@ export default function PaymentScreen() {
       ) {
         // Reload invoice data để cập nhật trạng thái
         await loadInvoiceData(bookingId);
-        Alert.alert("Thành công", "Thanh toán thành công!", [
+
+        // Thay thế message từ server nếu là "Invoice paid successfully."
+        const displayMessage =
+          data.message === "Invoice paid successfully."
+            ? "Thanh toán hóa đơn thành công"
+            : data.message;
+
+        Alert.alert("Thành công", displayMessage, [
           {
             text: "OK",
             onPress: () => router.replace("/"),
@@ -397,7 +558,12 @@ export default function PaymentScreen() {
   };
 
   const renderPackageDetails = () => {
-    if (!extraData || extraData.type !== "package") return null;
+    console.log(
+      "PaymentScreen: renderPackageDetails called - extraData:",
+      extraData
+    );
+    if (!extraData || extraData.serviceType !== "package")
+      return null;
 
     return (
       <View style={styles.packageSection}>
@@ -407,16 +573,30 @@ export default function PaymentScreen() {
 
         <View style={styles.packageInfo}>
           <Text style={styles.packageName}>
-            {extraData.packageData?.serviceName || "Gói dịch vụ"}
+            {(() => {
+              console.log(
+                "PaymentScreen: Package name - extraData.packageData:",
+                extraData.packageData
+              );
+              return (
+                extraData.packageData?.serviceName || "Gói dịch vụ"
+              );
+            })()}
           </Text>
           <Text style={styles.packageDescription}>
             {extraData.packageData?.description || ""}
           </Text>
           <View style={styles.packageMeta}>
             <Text style={styles.packagePrice}>
-              {ServiceTypeService.formatPrice(
-                extraData.packageData?.price || 0
-              )}
+              {(() => {
+                console.log(
+                  "PaymentScreen: Package price - extraData.packageData.price:",
+                  extraData.packageData?.price
+                );
+                return ServiceTypeService.formatPrice(
+                  extraData.packageData?.price || 0
+                );
+              })()}
             </Text>
             <Text style={styles.packageDuration}>
               {ServiceTypeService.formatDuration(
@@ -476,26 +656,36 @@ export default function PaymentScreen() {
   };
 
   const renderServiceDetails = () => {
-    if (!extraData || extraData.type !== "service") return null;
+    if (!extraData || extraData.serviceType !== "service")
+      return null;
 
     return (
       <View style={styles.servicesSection}>
         <Text style={styles.sectionTitle}>Dịch vụ đã chọn</Text>
-        {extraData.services.map((service, index) => (
-          <View key={index} style={styles.serviceItem}>
-            <Text style={styles.serviceName}>
-              {service.serviceName}
-            </Text>
-            <View style={styles.serviceDetails}>
-              <Text style={styles.servicePrice}>
-                {ServiceTypeService.formatPrice(service.price)}
-              </Text>
-              <Text style={styles.serviceQuantity}>
-                Số lượng: {service.quantity}
-              </Text>
-            </View>
-          </View>
-        ))}
+        {extraData.services &&
+          extraData.services.map((service, index) => {
+            const serviceData = services.find(
+              (s) => s.serviceID === service.serviceID
+            );
+
+            return (
+              <View key={index} style={styles.serviceItem}>
+                <Text style={styles.serviceName}>
+                  {serviceData?.serviceName || `Dịch vụ ${index + 1}`}
+                </Text>
+                <View style={styles.serviceDetails}>
+                  <Text style={styles.servicePrice}>
+                    {ServiceTypeService.formatPrice(
+                      serviceData?.price || 0
+                    )}
+                  </Text>
+                  <Text style={styles.serviceQuantity}>
+                    Số lượng: {service.quantity}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
       </View>
     );
   };
@@ -576,34 +766,53 @@ export default function PaymentScreen() {
 
           <View style={styles.bookingDetails}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Mã booking:</Text>
+              <Text style={styles.detailLabel}>Mã thanh toán:</Text>
               <Text style={styles.detailValue}>
-                #{bookingData.bookingID}
+                {(() => {
+                  // Sử dụng extraData.bookingID nếu có, fallback về bookingData.bookingID
+                  const bookingID =
+                    extraData?.bookingID ||
+                    bookingData?.bookingID ||
+                    "N/A";
+                  return `#${bookingID}`;
+                })()}
               </Text>
             </View>
 
-            {careProfileData && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>
-                  Hồ sơ chăm sóc:
-                </Text>
-                <Text style={styles.detailValue}>
-                  {careProfileData.profileName}
-                </Text>
-              </View>
-            )}
+            {(() => {
+              const profileData =
+                extraData?.memberData || careProfileData;
+              return profileData ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>
+                    Hồ sơ chăm sóc:
+                  </Text>
+                  <Text style={styles.detailValue}>
+                    {profileData.profileName}
+                  </Text>
+                </View>
+              ) : null;
+            })()}
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Thời gian đặt:</Text>
               <Text style={styles.detailValue}>
-                {formatDateTime(bookingData.workdate)}
+                {(() => {
+                  const workdate =
+                    extraData?.workdate || bookingData?.workdate;
+                  return formatDateTime(workdate);
+                })()}
               </Text>
             </View>
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Ngày tạo:</Text>
               <Text style={styles.detailValue}>
-                {formatDateOnly(bookingData.createdAt)}
+                {(() => {
+                  const createdAt =
+                    extraData?.createdAt || bookingData?.createdAt;
+                  return formatDateOnly(createdAt);
+                })()}
               </Text>
             </View>
           </View>
@@ -619,9 +828,54 @@ export default function PaymentScreen() {
           <View style={styles.amountRow}>
             <Text style={styles.amountLabel}>Tổng tiền:</Text>
             <Text style={styles.amountValue}>
-              {ServiceTypeService.formatPrice(bookingData.amount)}
+              {(() => {
+                // Logic tính tổng thanh toán theo API response
+                let finalAmount = 0;
+
+                if (
+                  bookingData?.extra !== null &&
+                  bookingData?.extra !== undefined
+                ) {
+                  // Nếu có extra, tính: amount + (amount * extra)/100
+                  const baseAmount = bookingData.amount || 0;
+                  const extraPercent = bookingData.extra || 0;
+                  finalAmount =
+                    baseAmount + (baseAmount * extraPercent) / 100;
+                } else {
+                  // Nếu extra = null, sử dụng amount trực tiếp
+                  finalAmount =
+                    bookingData?.amount ||
+                    extraData?.totalAmount ||
+                    0;
+                }
+
+                return ServiceTypeService.formatPrice(finalAmount);
+              })()}
             </Text>
           </View>
+
+          {/* Hiển thị extra nếu có */}
+          {bookingData?.extra !== null &&
+            bookingData?.extra !== undefined && (
+              <View style={styles.extraRow}>
+                <Text style={styles.extraLabel}>Phí phát sinh:</Text>
+                <Text style={styles.extraValue}>
+                  {(() => {
+                    const baseAmount = bookingData.amount || 0;
+                    const extraPercent = bookingData.extra || 0;
+                    const extraAmount =
+                      (baseAmount * extraPercent) / 100;
+                    return ServiceTypeService.formatPrice(
+                      extraAmount
+                    );
+                  })()}
+                  <Text style={styles.extraPercent}>
+                    {" "}
+                    ({bookingData.extra}%)
+                  </Text>
+                </Text>
+              </View>
+            )}
 
           {invoiceData && (
             <View style={styles.invoiceInfo}>
@@ -1019,5 +1273,29 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  extraRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  extraLabel: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  extraValue: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#FF6B6B",
+  },
+  extraPercent: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 5,
   },
 });

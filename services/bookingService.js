@@ -69,6 +69,60 @@ class BookingService {
     }
   }
 
+  // Lấy bookings theo careProfileID
+  async getBookingsByCareProfileId(careProfileID) {
+    try {
+      const url = `${TEMPLATE_ENDPOINTS.BOOKINGS}/GetAll`;
+      console.log(
+        "BookingService: Fetching bookings for careProfileID:",
+        careProfileID
+      );
+
+      const response = await this.fetchWithTimeout(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const allBookings = await response.json();
+        // Lọc bookings theo careProfileID
+        const userBookings = allBookings.filter(
+          (booking) => booking.careProfileID === careProfileID
+        );
+
+        console.log(
+          "BookingService: Found",
+          userBookings.length,
+          "bookings for careProfileID",
+          careProfileID
+        );
+
+        return {
+          success: true,
+          data: userBookings,
+        };
+      } else {
+        console.log(
+          "BookingService: HTTP Error:",
+          response.status,
+          response.statusText
+        );
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+    } catch (error) {
+      console.log("BookingService: Network error:", error.message);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
   // Tạo booking cho dịch vụ lẻ (nhiều dịch vụ)
   async createServiceBooking(bookingData) {
     try {

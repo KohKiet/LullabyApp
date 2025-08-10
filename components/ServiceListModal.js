@@ -20,6 +20,7 @@ export default function ServiceListModal({
   title,
   isLoading,
   onBooking,
+  selectedCareProfile,
 }) {
   const [selectedServices, setSelectedServices] = useState({});
   // Thêm state cho chọn ngày/giờ
@@ -177,6 +178,7 @@ export default function ServiceListModal({
         services: selectedServicesList,
         totalAmount: totalAmount,
         workdate: localISOString,
+        careProfileID: selectedCareProfile?.careProfileID,
       });
       if (result && result.success) {
         resetSelection();
@@ -328,6 +330,9 @@ export default function ServiceListModal({
                 <Text style={styles.totalAmount}>
                   Tổng tiền:{" "}
                   {ServiceTypeService.formatPrice(totalAmount)}
+                </Text>
+                <Text style={styles.extraFeeNote}>
+                  Chưa bao gồm phí phát sinh (nếu có)
                 </Text>
               </View>
               {renderDateTimeSection()}
@@ -602,6 +607,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#4CAF50",
+  },
+  extraFeeNote: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 5,
+    fontStyle: "italic",
   },
   bookingButton: {
     backgroundColor: "#4CAF50",

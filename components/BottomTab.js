@@ -1,23 +1,40 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import AuthService from "../services/authService";
+import NotificationService from "../services/notificationService";
 
 export default function BottomTab() {
   const router = useRouter();
   const [userData, setUserData] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const intervalRef = useRef(null);
 
   useEffect(() => {
     loadUserData();
+
+    // Listen for notification count updates
+    const handleNotificationUpdate = () => {
+      loadNotificationCount();
+    };
+
+    // Add global event listener
+    global.notificationUpdate = handleNotificationUpdate;
+
+    return () => {
+      global.notificationUpdate = null;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, []);
 
   // Reload user data và notification count khi screen được focus
@@ -32,14 +49,22 @@ export default function BottomTab() {
   useEffect(() => {
     if (userData) {
       loadNotificationCount();
+
+      // Auto-refresh notification count every 30 seconds
+      intervalRef.current = setInterval(loadNotificationCount, 30000);
+
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      };
     }
   }, [userData]);
 
   const loadUserData = async () => {
     try {
-      const userDataString = await AsyncStorage.getItem("user");
-      if (userDataString) {
-        const user = JSON.parse(userDataString);
+      const user = await AuthService.getUserData();
+      if (user) {
         setUserData(user);
       }
     } catch (error) {
@@ -49,86 +74,34 @@ export default function BottomTab() {
 
   const loadNotificationCount = async () => {
     try {
-      // Mock data - trong thực tế sẽ gọi API
-      const mockNotifications = [
-        {
-          notificationId: 1,
-          accountId: 1,
-          message: "Bạn có lịch hẹn mới vào ngày mai",
-          createdAt: "2024-01-01T00:00:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 2,
-          accountId: 1,
-          message: "Lịch hẹn của bạn đã được xác nhận",
-          createdAt: "2024-01-02T10:30:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 3,
-          accountId: 1,
-          message: "Cập nhật thông tin profile của bạn",
-          createdAt: "2024-01-04T14:20:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 4,
-          accountId: 2,
-          message: "Bạn có lịch làm việc mới được giao",
-          createdAt: "2024-01-03T08:15:00Z",
-          isRead: true,
-        },
-        {
-          notificationId: 5,
-          accountId: 2,
-          message: "Lịch hẹn với khách hàng đã hoàn thành",
-          createdAt: "2024-01-05T16:45:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 6,
-          accountId: 3,
-          message: "Bạn có tin nhắn mới từ khách hàng",
-          createdAt: "2024-01-06T09:30:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 7,
-          accountId: 4,
-          message: "Lịch hẹn mới được đặt cho bạn",
-          createdAt: "2024-01-07T11:15:00Z",
-          isRead: false,
-        },
-        {
-          notificationId: 8,
-          accountId: 4,
-          message: "Cập nhật lịch làm việc tuần tới",
-          createdAt: "2024-01-08T16:45:00Z",
-          isRead: false,
-        },
-      ];
-
-      if (userData && userData.id) {
-        // Đếm số notification chưa đọc cho user hiện tại
-        const userNotifications = mockNotifications.filter(
-          (notification) =>
-            notification.accountId === userData.id &&
-            !notification.isRead
+      if (userData && (userData.accountID || userData.id)) {
+        const accountID = userData.accountID || userData.id;
+        const result = await NotificationService.getUnreadCount(
+          accountID
         );
-        setUnreadCount(userNotifications.length);
+
+        if (result.success) {
+          setUnreadCount(result.count);
+        } else {
+          console.error(
+            "Error loading notification count:",
+            result.error
+          );
+          // Don't reset to 0 on API error, keep previous count
+        }
       } else {
         setUnreadCount(0);
       }
     } catch (error) {
-      setUnreadCount(0);
+      console.error("Error loading notification count:", error);
+      // Don't reset to 0 on network error, keep previous count
     }
   };
 
   const handleProfilePress = async () => {
     try {
-      const userDataString = await AsyncStorage.getItem("user");
-      if (userDataString) {
+      const user = await AuthService.getUserData();
+      if (user) {
         router.push("/profile");
       } else {
         router.push("/auth/login");

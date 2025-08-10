@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Calendar, LocaleConfig } from "react-native-calendars";
 import AuthService from "../../services/authService";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
@@ -19,13 +20,58 @@ import RelativeService from "../../services/relativeService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import WorkScheduleService from "../../services/workScheduleService";
 
-export default function BookingHistoryScreen() {
+// Configure Vietnamese locale for calendar
+LocaleConfig.locales["vi"] = {
+  monthNames: [
+    "Tháng 1",
+    "Tháng 2",
+    "Tháng 3",
+    "Tháng 4",
+    "Tháng 5",
+    "Tháng 6",
+    "Tháng 7",
+    "Tháng 8",
+    "Tháng 9",
+    "Tháng 10",
+    "Tháng 11",
+    "Tháng 12",
+  ],
+  monthNamesShort: [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "T7",
+    "T8",
+    "T9",
+    "T10",
+    "T11",
+    "T12",
+  ],
+  dayNames: [
+    "Chủ nhật",
+    "Thứ hai",
+    "Thứ ba",
+    "Thứ tư",
+    "Thứ năm",
+    "Thứ sáu",
+    "Thứ bảy",
+  ],
+  dayNamesShort: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
+  today: "Hôm nay",
+};
+LocaleConfig.defaultLocale = "vi";
+
+export default function WorkScheduleScreen() {
   const router = useRouter();
   const [workSchedules, setWorkSchedules] = useState([]);
-  const [filteredSchedules, setFilteredSchedules] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState(null);
-  const [selectedFilter, setSelectedFilter] = useState("all"); // all, completed, waiting, cancelled
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSchedules, setSelectedSchedules] = useState([]);
+  const [todaySchedules, setTodaySchedules] = useState([]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [scheduleDetails, setScheduleDetails] = useState({
@@ -36,14 +82,7 @@ export default function BookingHistoryScreen() {
     relatives: [],
   });
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-
-  // Statistics
-  const [stats, setStats] = useState({
-    total: 0,
-    completed: 0,
-    waiting: 0,
-    cancelled: 0,
-  });
+  const [markedDates, setMarkedDates] = useState({});
 
   useFocusEffect(
     useCallback(() => {
@@ -54,14 +93,15 @@ export default function BookingHistoryScreen() {
   const loadUserData = async () => {
     try {
       const user = await AuthService.getUserData();
-      console.log("BookingHistoryScreen: User data loaded:", user);
+      console.log("WorkScheduleScreen: User data loaded:", user);
 
       if (user) {
         setUserData(user);
+        // Get nursingID - try different property names
         const nursingID =
           user.nursingID || user.nursing_id || user.id;
         console.log(
-          "BookingHistoryScreen: Extracted nursingID:",
+          "WorkScheduleScreen: Extracted nursingID:",
           nursingID
         );
 
@@ -69,8 +109,9 @@ export default function BookingHistoryScreen() {
           loadWorkSchedules(nursingID);
         } else {
           console.log(
-            "BookingHistoryScreen: No nursingID found in user data"
+            "WorkScheduleScreen: No nursingID found in user data"
           );
+          // Still try to load all schedules to see what's available
           loadWorkSchedules(1); // Try with ID 1 for testing
         }
       } else {
@@ -79,7 +120,7 @@ export default function BookingHistoryScreen() {
       }
     } catch (error) {
       console.error(
-        "BookingHistoryScreen: Error loading user data:",
+        "WorkScheduleScreen: Error loading user data:",
         error
       );
       Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
@@ -91,7 +132,7 @@ export default function BookingHistoryScreen() {
     try {
       setIsLoading(true);
       console.log(
-        "BookingHistoryScreen: Loading work schedules for nursingID:",
+        "WorkScheduleScreen: Loading work schedules for nursingID:",
         nursingID
       );
 
@@ -102,98 +143,98 @@ export default function BookingHistoryScreen() {
 
       if (result.success) {
         console.log(
-          "BookingHistoryScreen: Raw filtered schedules:",
+          "WorkScheduleScreen: Raw filtered schedules:",
           result.data
         );
         setWorkSchedules(result.data);
-        calculateStats(result.data);
-        applyFilter("all", result.data);
+        processMarkedDates(result.data);
+        processTodaySchedules(result.data);
         console.log(
-          "BookingHistoryScreen: Loaded",
+          "WorkScheduleScreen: Loaded",
           result.data.length,
           "work schedules"
         );
       } else {
         console.log(
-          "BookingHistoryScreen: Failed to load work schedules:",
+          "WorkScheduleScreen: Failed to load work schedules:",
           result.error
         );
-        Alert.alert("Lỗi", "Không thể tải lịch sử đặt lịch");
+        Alert.alert("Lỗi", "Không thể tải lịch làm việc");
         setWorkSchedules([]);
       }
     } catch (error) {
       console.error(
-        "BookingHistoryScreen: Error loading work schedules:",
+        "WorkScheduleScreen: Error loading work schedules:",
         error
       );
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải lịch sử đặt lịch");
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải lịch làm việc");
       setWorkSchedules([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const calculateStats = (schedules) => {
-    const stats = {
-      total: schedules.length,
-      completed: schedules.filter((s) => s.status === "completed")
-        .length,
-      waiting: schedules.filter((s) => s.status === "waiting").length,
-      cancelled: schedules.filter((s) => s.status === "cancelled")
-        .length,
-    };
-    setStats(stats);
+  const processMarkedDates = (schedules) => {
+    const marked = {};
+
+    schedules.forEach((schedule) => {
+      const dateKey = schedule.workDate.split("T")[0]; // Extract YYYY-MM-DD
+
+      if (!marked[dateKey]) {
+        marked[dateKey] = {
+          // Use colored background instead of dots
+          customStyles: {
+            container: {
+              backgroundColor: WorkScheduleService.getStatusColor(
+                schedule.status
+              ),
+              borderRadius: 8,
+            },
+            text: {
+              color: "white",
+              fontWeight: "bold",
+            },
+          },
+          schedules: [],
+        };
+      }
+
+      marked[dateKey].schedules.push(schedule);
+
+      // If multiple schedules on same day, use a mixed gradient color
+      if (marked[dateKey].schedules.length > 1) {
+        marked[dateKey].customStyles.container.backgroundColor =
+          "#4FC3F7"; // Blue for multiple
+      }
+    });
+
+    setMarkedDates(marked);
   };
 
-  const applyFilter = (filter, schedules = workSchedules) => {
-    setSelectedFilter(filter);
-    let filtered = [...schedules];
+  const processTodaySchedules = (schedules) => {
+    const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+    const todaySchedules = schedules.filter(
+      (schedule) => schedule.workDate.split("T")[0] === today
+    );
 
-    switch (filter) {
-      case "completed":
-        filtered = schedules.filter((s) => s.status === "completed");
-        break;
-      case "waiting":
-        filtered = schedules.filter((s) => s.status === "waiting");
-        break;
-      case "cancelled":
-        filtered = schedules.filter((s) => s.status === "cancelled");
-        break;
-      default:
-        // "all" - no filtering
-        break;
-    }
+    // Sort today's schedules by time
+    todaySchedules.sort(
+      (a, b) => new Date(a.workDate) - new Date(b.workDate)
+    );
 
-    // Sort logic based on filter type
-    if (filter === "all") {
-      // For "Tổng số lịch": Sort by status priority (waiting first), then by date (closest first)
-      filtered.sort((a, b) => {
-        // Priority order: waiting > cancelled > completed
-        const statusPriority = {
-          waiting: 3,
-          cancelled: 2,
-          completed: 1,
-        };
+    setTodaySchedules(todaySchedules);
+  };
 
-        const aPriority = statusPriority[a.status] || 0;
-        const bPriority = statusPriority[b.status] || 0;
+  const onDayPress = (day) => {
+    const dateKey = day.dateString;
+    setSelectedDate(dateKey);
 
-        // If same status priority, sort by date (closest first - gần nhất tới xa nhất)
-        if (aPriority === bPriority) {
-          return new Date(a.workDate) - new Date(b.workDate);
-        }
+    // Find schedules for selected date
+    const daySchedules = workSchedules.filter(
+      (schedule) => schedule.workDate.split("T")[0] === dateKey
+    );
 
-        // Otherwise sort by status priority
-        return bPriority - aPriority;
-      });
-    } else {
-      // For specific filters: Sort by date (closest first - gần nhất tới xa nhất)
-      filtered.sort(
-        (a, b) => new Date(a.workDate) - new Date(b.workDate)
-      );
-    }
-
-    setFilteredSchedules(filtered);
+    setSelectedSchedules(daySchedules);
   };
 
   // Format date to Vietnamese format (DD/MM/YYYY)
@@ -203,6 +244,12 @@ export default function BookingHistoryScreen() {
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
+  };
+
+  // Get today's date in Vietnamese format
+  const getTodayVietnameseDate = () => {
+    const today = new Date();
+    return formatVietnameseDate(today.toISOString());
   };
 
   // Format major/specialty for display
@@ -224,7 +271,7 @@ export default function BookingHistoryScreen() {
       setShowDetailModal(true);
 
       console.log(
-        "BookingHistoryScreen: Loading details for schedule:",
+        "WorkScheduleScreen: Loading details for schedule:",
         schedule
       );
 
@@ -238,7 +285,7 @@ export default function BookingHistoryScreen() {
 
       if (bookingResult.success) {
         booking = bookingResult.data;
-        console.log("BookingHistoryScreen: Booking loaded:", booking);
+        console.log("WorkScheduleScreen: Booking loaded:", booking);
 
         // Load care profile details
         if (booking.careProfileID) {
@@ -249,7 +296,7 @@ export default function BookingHistoryScreen() {
           if (careProfileResult.success) {
             careProfile = careProfileResult.data;
             console.log(
-              "BookingHistoryScreen: Care profile loaded:",
+              "WorkScheduleScreen: Care profile loaded:",
               careProfile
             );
 
@@ -261,7 +308,7 @@ export default function BookingHistoryScreen() {
             if (relativesResult.success) {
               relatives = relativesResult.data;
               console.log(
-                "BookingHistoryScreen: Relatives loaded:",
+                "WorkScheduleScreen: Relatives loaded:",
                 relatives
               );
             }
@@ -277,7 +324,7 @@ export default function BookingHistoryScreen() {
       let service = null;
       if (serviceResult.success) {
         service = serviceResult.data;
-        console.log("BookingHistoryScreen: Service loaded:", service);
+        console.log("WorkScheduleScreen: Service loaded:", service);
       }
 
       // Load customize task details to get more information
@@ -293,7 +340,7 @@ export default function BookingHistoryScreen() {
             task.nursingID === schedule.nursingID
         );
         console.log(
-          "BookingHistoryScreen: CustomizeTask loaded:",
+          "WorkScheduleScreen: CustomizeTask loaded:",
           customizeTask
         );
       }
@@ -307,10 +354,10 @@ export default function BookingHistoryScreen() {
       });
     } catch (error) {
       console.error(
-        "BookingHistoryScreen: Error loading schedule details:",
+        "WorkScheduleScreen: Error loading schedule details:",
         error
       );
-      Alert.alert("Lỗi", "Không thể tải chi tiết lịch sử đặt lịch");
+      Alert.alert("Lỗi", "Không thể tải chi tiết lịch làm việc");
     } finally {
       setIsLoadingDetails(false);
     }
@@ -328,33 +375,14 @@ export default function BookingHistoryScreen() {
     });
   };
 
-  const renderFilterButton = (filter, label, count) => {
-    const isSelected = selectedFilter === filter;
-    return (
-      <TouchableOpacity
-        key={filter}
-        style={[
-          styles.filterButton,
-          isSelected && styles.selectedFilterButton,
-        ]}
-        onPress={() => applyFilter(filter)}>
-        <Text style={styles.filterCount}>{count}</Text>
-        <Text
-          style={[
-            styles.filterLabel,
-            isSelected && styles.selectedFilterLabel,
-          ]}>
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderScheduleItem = (schedule) => {
+  const renderScheduleItem = (schedule, isToday = false) => {
     return (
       <TouchableOpacity
         key={schedule.workScheduleID}
-        style={styles.scheduleItem}
+        style={[
+          styles.scheduleItem,
+          isToday && styles.todayScheduleItem,
+        ]}
         onPress={() => openScheduleDetail(schedule)}>
         <LinearGradient
           colors={[
@@ -366,12 +394,12 @@ export default function BookingHistoryScreen() {
           style={styles.scheduleCard}>
           <View style={styles.scheduleHeader}>
             <View style={styles.scheduleInfo}>
-              <Text style={styles.scheduleDate}>
-                {formatVietnameseDate(schedule.workDate)}
-              </Text>
               <Text style={styles.scheduleTime}>
                 {WorkScheduleService.formatTime(schedule.workDate)} -{" "}
                 {WorkScheduleService.formatTime(schedule.endTime)}
+              </Text>
+              <Text style={styles.bookingId}>
+                Đặt lịch #{schedule.bookingID}
               </Text>
             </View>
             <View
@@ -389,24 +417,32 @@ export default function BookingHistoryScreen() {
             </View>
           </View>
 
-          <Text style={styles.serviceTitle}>
-            Dịch vụ ID: {schedule.serviceID}
-          </Text>
-
-          <View style={styles.scheduleFooter}>
-            <View style={styles.bookingInfo}>
-              <Ionicons
-                name="clipboard-outline"
-                size={16}
-                color="#666"
-              />
-              <Text style={styles.bookingId}>
-                Đặt lịch #{schedule.bookingID}
+          <View style={styles.scheduleDetails}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailText}>
+                Dịch vụ ID: {schedule.serviceID}
               </Text>
             </View>
-            <Text style={styles.attendanceStatus}>
-              {schedule.isAttended ? "Đã tham gia" : "Chưa tham gia"}
-            </Text>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailText}>
+                {schedule.isAttended
+                  ? "Đã tham gia"
+                  : "Chưa tham gia"}
+              </Text>
+            </View>
+
+            {isToday && (
+              <View style={styles.detailRow}>
+                <Text
+                  style={[
+                    styles.detailText,
+                    { color: "#4FC3F7", fontWeight: "600" },
+                  ]}>
+                  Nhấn để xem thông tin bệnh nhân
+                </Text>
+              </View>
+            )}
           </View>
         </LinearGradient>
       </TouchableOpacity>
@@ -426,7 +462,7 @@ export default function BookingHistoryScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                Chi tiết lịch sử đặt lịch
+                Chi tiết lịch làm việc
               </Text>
               <TouchableOpacity onPress={closeDetailModal}>
                 <Ionicons name="close" size={24} color="#333" />
@@ -576,6 +612,70 @@ export default function BookingHistoryScreen() {
                   </View>
                 </View>
 
+                {/* CustomizeTask Info */}
+                {scheduleDetails.customizeTask && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.sectionTitle}>
+                      Thông tin công việc
+                    </Text>
+                    <View style={styles.detailCard}>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Mã công việc:
+                        </Text>
+                        <Text style={styles.detailValue}>
+                          #
+                          {
+                            scheduleDetails.customizeTask
+                              .customizeTaskID
+                          }
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Thứ tự công việc:
+                        </Text>
+                        <Text style={styles.detailValue}>
+                          {scheduleDetails.customizeTask.taskOrder}
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Trạng thái công việc:
+                        </Text>
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            {
+                              backgroundColor:
+                                CustomizeTaskService.getStatusColor(
+                                  scheduleDetails.customizeTask.status
+                                ),
+                            },
+                          ]}>
+                          <Text style={styles.statusText}>
+                            {CustomizeTaskService.formatStatus(
+                              scheduleDetails.customizeTask.status
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Gói dịch vụ:
+                        </Text>
+                        <Text style={styles.detailValue}>
+                          #
+                          {
+                            scheduleDetails.customizeTask
+                              .customizePackageID
+                          }
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {/* Service Info */}
                 {scheduleDetails.service && (
                   <View style={styles.detailSection}>
@@ -671,7 +771,7 @@ export default function BookingHistoryScreen() {
                   scheduleDetails.relatives.length > 0 && (
                     <View style={styles.detailSection}>
                       <Text style={styles.sectionTitle}>
-                        Thông tin người thân (
+                        Thông tin con (
                         {scheduleDetails.relatives.length})
                       </Text>
                       {scheduleDetails.relatives.map(
@@ -687,7 +787,7 @@ export default function BookingHistoryScreen() {
                                 styles.sectionTitle,
                                 { fontSize: 14, marginBottom: 8 },
                               ]}>
-                              Người thân #{index + 1}
+                              Người con thứ #{index + 1}
                             </Text>
                             <View style={styles.detailRow}>
                               <Text style={styles.detailLabel}>
@@ -807,7 +907,7 @@ export default function BookingHistoryScreen() {
         style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>
-            Đang tải lịch sử đặt lịch...
+            Đang tải lịch làm việc...
           </Text>
         </View>
       </LinearGradient>
@@ -825,7 +925,7 @@ export default function BookingHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lịch Sử Đặt Lịch</Text>
+        <Text style={styles.headerTitle}>Lịch làm việc</Text>
         <TouchableOpacity
           onPress={() => {
             const nursingID =
@@ -839,37 +939,97 @@ export default function BookingHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        {renderFilterButton("all", "Tổng số lịch", stats.total)}
-        {renderFilterButton(
-          "completed",
-          "Đã hoàn thành",
-          stats.completed
-        )}
-        {renderFilterButton("waiting", "Chờ xác nhận", stats.waiting)}
-        {renderFilterButton("cancelled", "Đã hủy", stats.cancelled)}
-      </View>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}>
+        {/* Calendar */}
+        <View style={styles.calendarContainer}>
+          <Calendar
+            current={new Date().toISOString().split("T")[0]}
+            onDayPress={onDayPress}
+            markingType={"custom"}
+            markedDates={{
+              ...markedDates,
+              [selectedDate]: {
+                ...markedDates[selectedDate],
+                customStyles: {
+                  container: {
+                    backgroundColor: "#4FC3F7",
+                    borderRadius: 8,
+                    borderWidth: 2,
+                    borderColor: "#ffffff",
+                  },
+                  text: {
+                    color: "white",
+                    fontWeight: "bold",
+                  },
+                },
+              },
+            }}
+            theme={{
+              backgroundColor: "transparent",
+              calendarBackground: "rgba(255, 255, 255, 0.95)",
+              textSectionTitleColor: "#333",
+              selectedDayBackgroundColor: "#4FC3F7",
+              selectedDayTextColor: "#ffffff",
+              todayTextColor: "#4FC3F7",
+              dayTextColor: "#333",
+              textDisabledColor: "#d9e1e8",
+              arrowColor: "#4FC3F7",
+              monthTextColor: "#333",
+              indicatorColor: "#4FC3F7",
+              textDayFontFamily: "System",
+              textMonthFontFamily: "System",
+              textDayHeaderFontFamily: "System",
+              textDayFontWeight: "400",
+              textMonthFontWeight: "bold",
+              textDayHeaderFontWeight: "500",
+              textDayFontSize: 16,
+              textMonthFontSize: 18,
+              textDayHeaderFontSize: 13,
+            }}
+            style={styles.calendar}
+          />
+        </View>
 
-      {/* Schedule List */}
-      <View style={styles.content}>
-        <Text style={styles.sectionTitle}>Lịch sử gần đây</Text>
-        {filteredSchedules.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              Không có lịch sử đặt lịch nào
+        {/* Today's Schedule Section - Only show if there are schedules */}
+        {todaySchedules.length > 0 && (
+          <View style={styles.todaySection}>
+            <Text style={styles.todaySectionTitle}>
+              Lịch Hôm nay - {getTodayVietnameseDate()} (
+              {todaySchedules.length})
             </Text>
+            <View style={styles.todaySchedulesList}>
+              {todaySchedules.map((schedule) =>
+                renderScheduleItem(schedule, true)
+              )}
+            </View>
           </View>
-        ) : (
-          <ScrollView
-            style={styles.schedulesList}
-            showsVerticalScrollIndicator={false}>
-            {filteredSchedules.map((schedule) =>
-              renderScheduleItem(schedule)
-            )}
-          </ScrollView>
         )}
-      </View>
+
+        {/* Schedule List for Selected Date */}
+        {selectedDate && (
+          <View style={styles.selectedDateSection}>
+            <Text style={styles.selectedDateTitle}>
+              Lịch làm việc ngày {formatVietnameseDate(selectedDate)}{" "}
+              ({selectedSchedules.length})
+            </Text>
+            {selectedSchedules.length === 0 ? (
+              <View style={styles.emptySchedule}>
+                <Text style={styles.emptyScheduleText}>
+                  Không có lịch làm việc trong ngày này
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.schedulesList}>
+                {selectedSchedules.map((schedule) =>
+                  renderScheduleItem(schedule)
+                )}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
 
       {/* Detail Modal */}
       {renderDetailModal()}
@@ -893,55 +1053,59 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
-  filterContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 10,
-  },
-  filterButton: {
-    flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 12,
-    padding: 15,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  selectedFilterButton: {
-    borderColor: "#4FC3F7",
-    backgroundColor: "rgba(79, 195, 247, 0.1)",
-  },
-  filterCount: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 5,
-  },
-  filterLabel: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-  },
-  selectedFilterLabel: {
-    color: "#4FC3F7",
-    fontWeight: "600",
-  },
   content: {
     flex: 1,
     paddingHorizontal: 20,
   },
-  sectionTitle: {
+  calendarContainer: {
+    marginBottom: 20,
+    borderRadius: 15,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  calendar: {
+    borderRadius: 15,
+    paddingBottom: 10,
+  },
+  todaySection: {
+    marginBottom: 20,
+  },
+  todaySectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
     marginBottom: 15,
+    textAlign: "center",
+  },
+  todaySchedulesList: {
+    marginBottom: 10,
+  },
+  selectedDateSection: {
+    marginBottom: 20,
+  },
+  selectedDateTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 15,
+    textAlign: "center",
   },
   schedulesList: {
-    flex: 1,
+    marginBottom: 10,
   },
   scheduleItem: {
-    marginBottom: 15,
+    marginBottom: 12,
+  },
+  todayScheduleItem: {
+    shadowColor: "#4FC3F7",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
   },
   scheduleCard: {
     borderRadius: 15,
@@ -957,19 +1121,19 @@ const styles = StyleSheet.create({
   scheduleHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 10,
+    alignItems: "center",
+    marginBottom: 12,
   },
   scheduleInfo: {
     flex: 1,
   },
-  scheduleDate: {
+  scheduleTime: {
     fontSize: 16,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  scheduleTime: {
+  bookingId: {
     fontSize: 14,
     color: "#666",
   },
@@ -983,38 +1147,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
   },
-  serviceTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 10,
+  scheduleDetails: {
+    marginTop: 8,
   },
-  scheduleFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  bookingInfo: {
+  detailRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 6,
   },
-  bookingId: {
+  detailText: {
     fontSize: 13,
     color: "#666",
-    marginLeft: 5,
-  },
-  attendanceStatus: {
-    fontSize: 13,
-    color: "#4FC3F7",
-    fontWeight: "500",
-  },
-  emptyState: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
   },
-  emptyStateText: {
+  emptySchedule: {
+    alignItems: "center",
+    paddingVertical: 40,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  emptyScheduleText: {
     fontSize: 16,
     color: "#666",
     textAlign: "center",
@@ -1066,6 +1220,12 @@ const styles = StyleSheet.create({
   detailSection: {
     marginBottom: 20,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
   detailCard: {
     backgroundColor: "#f8f9fa",
     borderRadius: 12,
@@ -1075,11 +1235,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#e3f2fd",
     borderWidth: 2,
     borderColor: "#4FC3F7",
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
   },
   detailLabel: {
     fontSize: 14,

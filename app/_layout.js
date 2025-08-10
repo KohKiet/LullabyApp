@@ -31,6 +31,10 @@ export default function RootLayout() {
         name="booking/history"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="work-schedule"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

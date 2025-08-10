@@ -20,6 +20,7 @@ import BottomTab from "../components/BottomTab";
 import PackageListModal from "../components/PackageListModal";
 import ServiceListModal from "../components/ServiceListModal";
 import WalletCard from "../components/WalletCard";
+import AuthService from "../services/authService";
 import BookingService from "../services/bookingService";
 import CareProfileService from "../services/careProfileService";
 import RoleService from "../services/roleService";
@@ -58,9 +59,8 @@ export default function HomeScreen() {
 
   const loadUserData = async () => {
     try {
-      const userDataString = await AsyncStorage.getItem("user");
-      if (userDataString) {
-        const user = JSON.parse(userDataString);
+      const user = await AuthService.getUserData();
+      if (user) {
         setUserData(user);
         // Load care profiles sau khi có user data
         await loadCareProfiles(user);
@@ -79,28 +79,15 @@ export default function HomeScreen() {
 
     try {
       setIsLoadingCareProfiles(true);
-      console.log(
-        "HomeScreen: Loading care profiles for user:",
-        user.accountID || user.id
-      );
-
       const result =
         await CareProfileService.getCareProfilesByAccountId(
           user.accountID || user.id
         );
 
-      console.log("HomeScreen: Care profiles result:", result);
-
       if (result.success) {
         setCareProfiles(result.data);
-        console.log(
-          "HomeScreen: Care profiles loaded:",
-          result.data.length,
-          "items"
-        );
       } else {
         setCareProfiles([]);
-        console.log("HomeScreen: No care profiles found");
       }
     } catch (error) {
       console.error("Error loading care profiles:", error);
@@ -112,22 +99,21 @@ export default function HomeScreen() {
 
   const loadServices = async () => {
     try {
-      console.log("HomeScreen: Loading services...");
       setIsLoadingServices(true);
-      const result = await ServiceTypeService.getServices();
-      console.log("HomeScreen: Services result:", result);
+      const result = await ServiceTypeService.getAllServiceTypes();
+
       if (result.success) {
-        setServices(result.data);
-        console.log(
-          "HomeScreen: Services loaded:",
-          result.data.length,
-          "items"
+        // Filter only services (not packages)
+        const servicesOnly = result.data.filter(
+          (service) => !service.isPackage
         );
+        setServices(servicesOnly);
       } else {
-        console.error("Error loading services:", result.error);
+        setServices([]);
       }
     } catch (error) {
       console.error("Error loading services:", error);
+      setServices([]);
     } finally {
       setIsLoadingServices(false);
     }
@@ -135,22 +121,21 @@ export default function HomeScreen() {
 
   const loadPackages = async () => {
     try {
-      console.log("HomeScreen: Loading packages...");
       setIsLoadingPackages(true);
-      const result = await ServiceTypeService.getPackages();
-      console.log("HomeScreen: Packages result:", result);
+      const result = await ServiceTypeService.getAllServiceTypes();
+
       if (result.success) {
-        setPackages(result.data);
-        console.log(
-          "HomeScreen: Packages loaded:",
-          result.data.length,
-          "items"
+        // Filter only packages
+        const packagesOnly = result.data.filter(
+          (service) => service.isPackage
         );
+        setPackages(packagesOnly);
       } else {
-        console.error("Error loading packages:", result.error);
+        setPackages([]);
       }
     } catch (error) {
       console.error("Error loading packages:", error);
+      setPackages([]);
     } finally {
       setIsLoadingPackages(false);
     }
@@ -218,73 +203,68 @@ export default function HomeScreen() {
 
   const handleServiceBooking = async (bookingData) => {
     try {
-      console.log("HomeScreen: Service booking data:", bookingData);
-
-      // Sử dụng careProfileID đã chọn
-      const careProfileID = selectedCareProfile?.careProfileID || 1;
-
-      const bookingPayload = {
-        careProfileID: careProfileID,
+      // Format data for API
+      const apiData = {
+        careProfileID: bookingData.careProfileID,
         amount: bookingData.totalAmount,
         workdate: bookingData.workdate,
-        customizePackageCreateDtos: bookingData.services,
+        customizePackageCreateDtos: bookingData.services.map(
+          (service) => ({
+            serviceID: service.serviceID,
+            quantity: service.quantity,
+          })
+        ),
       };
 
-      console.log(
-        "HomeScreen: Service booking payload:",
-        bookingPayload
-      );
-
       const result = await BookingService.createServiceBooking(
-        bookingPayload
+        apiData
       );
 
       if (result.success) {
-        // Lưu thông tin service vào AsyncStorage để sử dụng ở trang payment
+        // Lưu thông tin booking vào AsyncStorage để sử dụng ở trang thanh toán
         const serviceInfo = {
-          type: "service",
-          services: bookingData.services.map((service) => ({
-            serviceID: service.serviceID,
-            quantity: service.quantity,
-            serviceName:
-              services.find((s) => s.serviceID === service.serviceID)
-                ?.serviceName || "Unknown Service",
-            price:
-              services.find((s) => s.serviceID === service.serviceID)
-                ?.price || 0,
-          })),
+          bookingID: result.data.bookingID,
+          serviceType: "service",
+          serviceData: services.find(
+            (service) =>
+              service.serviceID === bookingData.services[0].serviceID
+          ),
+          memberData: careProfiles.find(
+            (profile) =>
+              profile.careProfileID === bookingData.careProfileID
+          ),
+          // Thêm thông tin đầy đủ về services
+          services: bookingData.services,
+          totalAmount: bookingData.totalAmount,
         };
         await AsyncStorage.setItem(
           `booking_${result.data.bookingID}`,
           JSON.stringify(serviceInfo)
         );
 
-        // Chuyển thẳng sang trang thanh toán
+        // Đóng modal để reset selection state
         setShowServicesModal(false);
         setSelectedCareProfile(null);
-        router.push(`/payment?bookingId=${result.data.bookingID}`);
 
-        return result;
+        // Chuyển thẳng sang trang thanh toán
+        router.push({
+          pathname: "/payment",
+          params: { bookingId: result.data.bookingID },
+        });
       } else {
-        Alert.alert("Lỗi", `Không thể đặt lịch: ${result.error}`);
-        return result;
+        Alert.alert("Lỗi", result.error || "Không thể tạo lịch hẹn");
       }
     } catch (error) {
       console.error("Error creating service booking:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi đặt lịch");
-      return { success: false, error: error.message };
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo lịch hẹn");
     }
   };
 
   const handlePackageBooking = async (bookingData) => {
     try {
-      console.log("HomeScreen: Package booking data:", bookingData);
-
-      // Sử dụng careProfileID đã chọn
-      const careProfileID = selectedCareProfile?.careProfileID || 1;
-
-      const bookingPayload = {
-        careProfileID: careProfileID,
+      // Format data for API
+      const apiData = {
+        careProfileID: bookingData.careProfileID,
         amount: bookingData.totalAmount,
         workdate: bookingData.workdate,
         customizePackageCreateDto: {
@@ -293,41 +273,43 @@ export default function HomeScreen() {
         },
       };
 
-      console.log(
-        "HomeScreen: Package booking payload:",
-        bookingPayload
-      );
-
       const result = await BookingService.createPackageBooking(
-        bookingPayload
+        apiData
       );
 
       if (result.success) {
-        // Lưu thông tin package vào AsyncStorage để sử dụng ở trang payment
+        // Lưu thông tin booking vào AsyncStorage để sử dụng ở trang thanh toán
         const packageInfo = {
-          type: "package",
-          packageId: bookingData.packageId,
-          packageData: bookingData.packageData,
+          bookingID: result.data.bookingID,
+          serviceType: "package",
+          packageData: packages.find(
+            (pkg) => pkg.serviceID === bookingData.packageId
+          ),
+          memberData: careProfiles.find(
+            (profile) =>
+              profile.careProfileID === bookingData.careProfileID
+          ),
         };
         await AsyncStorage.setItem(
           `booking_${result.data.bookingID}`,
           JSON.stringify(packageInfo)
         );
 
-        // Chuyển thẳng sang trang thanh toán
+        // Đóng modal để reset selection state
         setShowPackagesModal(false);
         setSelectedCareProfile(null);
-        router.push(`/payment?bookingId=${result.data.bookingID}`);
 
-        return result;
+        // Chuyển thẳng sang trang thanh toán
+        router.push({
+          pathname: "/payment",
+          params: { bookingId: result.data.bookingID },
+        });
       } else {
-        Alert.alert("Lỗi", `Không thể đặt lịch: ${result.error}`);
-        return result;
+        Alert.alert("Lỗi", result.error || "Không thể tạo lịch hẹn");
       }
     } catch (error) {
       console.error("Error creating package booking:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi đặt lịch");
-      return { success: false, error: error.message };
+      Alert.alert("Có lỗi xảy ra khi tạo lịch hẹn");
     }
   };
 
@@ -448,11 +430,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.cardContent}
               onPress={() => {
-                if (userData?.accountID) {
-                  router.push(
-                    `/booking/history?accountID=${userData.accountID}`
-                  );
-                }
+                router.push("/booking/history");
               }}>
               <Ionicons
                 name="time-outline"
@@ -460,7 +438,7 @@ export default function HomeScreen() {
                 color="#FFFFFF"
               />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                Lịch sử lịch hẹn
+                Lịch sử đặt lịch
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -483,9 +461,7 @@ export default function HomeScreen() {
             style={[styles.card, styles.singleCard]}>
             <TouchableOpacity
               style={styles.cardContent}
-              onPress={() =>
-                router.push("/nurse_specialist/workschedule")
-              }>
+              onPress={() => router.push("/work-schedule")}>
               <Ionicons name="calendar" size={40} color="#FFFFFF" />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
                 Lịch làm việc
@@ -661,6 +637,7 @@ export default function HomeScreen() {
         title="Dịch vụ chăm sóc"
         isLoading={isLoadingServices}
         onBooking={handleServiceBooking}
+        selectedCareProfile={selectedCareProfile}
       />
 
       <PackageListModal
@@ -670,6 +647,7 @@ export default function HomeScreen() {
         title="Gói dịch vụ chăm sóc"
         isLoading={isLoadingPackages}
         onBooking={handlePackageBooking}
+        selectedCareProfile={selectedCareProfile}
       />
 
       {/* Modal chọn care profile */}

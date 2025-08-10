@@ -107,6 +107,40 @@ class InvoiceService {
     }
   }
 
+  // Lấy invoices theo danh sách booking IDs
+  async getInvoicesByBookingIds(bookingIDs) {
+    try {
+      console.log(
+        "InvoiceService: Getting invoices for booking IDs:",
+        bookingIDs
+      );
+
+      // Lấy tất cả invoices và lọc theo bookingIDs
+      const allInvoicesResult = await this.getAllInvoices();
+
+      if (allInvoicesResult.success) {
+        const invoices = allInvoicesResult.data.filter((inv) =>
+          bookingIDs.includes(inv.bookingID)
+        );
+
+        console.log(
+          "InvoiceService: Found",
+          invoices.length,
+          "invoices for",
+          bookingIDs.length,
+          "bookings"
+        );
+
+        return { success: true, data: invoices };
+      } else {
+        return allInvoicesResult;
+      }
+    } catch (error) {
+      console.error("Error getting invoices by booking IDs:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
   formatStatus(status) {
     switch (status) {
       case "pending":

@@ -21,6 +21,7 @@ export default function PackageListModal({
   title,
   isLoading,
   onBooking,
+  selectedCareProfile,
 }) {
   const [expandedPackages, setExpandedPackages] = useState(new Set());
   const [packageTasks, setPackageTasks] = useState({});
@@ -203,6 +204,7 @@ export default function PackageListModal({
         packageData: packageData,
         totalAmount: packageData.price,
         workdate: localISOString,
+        careProfileID: selectedCareProfile?.careProfileID,
       });
       if (result && result.success) {
         resetSelection();
@@ -500,6 +502,9 @@ export default function PackageListModal({
                   {ServiceTypeService.formatPrice(
                     selectedPackageData.price
                   )}
+                </Text>
+                <Text style={styles.extraFeeNote}>
+                  * Chưa bao gồm phí phát sinh (nếu có)
                 </Text>
               </View>
 
@@ -850,6 +855,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#FF6B6B",
+  },
+  extraFeeNote: {
+    fontSize: 12,
+    color: "red",
+    marginTop: 5,
+    fontStyle: "italic",
   },
   bookingButton: {
     backgroundColor: "#FF6B6B",

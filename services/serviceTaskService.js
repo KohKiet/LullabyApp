@@ -22,7 +22,7 @@ class ServiceTaskService {
 
   async getAllServiceTasks() {
     try {
-      const url = `${TEMPLATE_ENDPOINTS.SERVICE_TASKS}/GetAll`;
+      const url = `${TEMPLATE_ENDPOINTS.SERVICE_TASKS}/getall`;
       console.log("ServiceTaskService: Fetching from URL:", url);
 
       const response = await this.fetchWithTimeout(url, {

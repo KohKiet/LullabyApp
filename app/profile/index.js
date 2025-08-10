@@ -5,6 +5,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  FlatList,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +19,7 @@ import CareProfileService from "../../services/careProfileService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
 import RelativeService from "../../services/relativeService";
 import RoleService from "../../services/roleService";
+import ZoneDetailService from "../../services/zoneDetailService";
 // import AsyncStorageDebugger from "../../components/AsyncStorageDebugger";
 
 export default function ProfileScreen() {
@@ -35,6 +38,7 @@ export default function ProfileScreen() {
     phoneNumber: "",
     address: "",
     note: "",
+    zoneDetailID: null,
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -54,6 +58,11 @@ export default function ProfileScreen() {
   const [editingRelative, setEditingRelative] = useState(null);
   const [showEditRelativeForm, setShowEditRelativeForm] =
     useState(false);
+
+  // Zone selection states
+  const [zones, setZones] = useState([]);
+  const [showZoneModal, setShowZoneModal] = useState(false);
+  const [selectedZone, setSelectedZone] = useState(null);
 
   useEffect(() => {
     loadUserData();
@@ -122,6 +131,32 @@ export default function ProfileScreen() {
       setCareProfiles([]);
     } finally {
       setIsLoadingCareProfiles(false);
+    }
+  };
+
+  const loadZones = async () => {
+    try {
+      console.log("ProfileScreen: Loading zones...");
+      const result =
+        await ZoneDetailService.getZoneDetailsWithZoneInfo();
+
+      if (result.success) {
+        setZones(result.data);
+        console.log(
+          "ProfileScreen: Zones loaded:",
+          result.data.length,
+          "items"
+        );
+      } else {
+        console.log(
+          "ProfileScreen: Failed to load zones:",
+          result.error
+        );
+        Alert.alert("Lỗi", "Không thể tải danh sách khu vực");
+      }
+    } catch (error) {
+      console.error("ProfileScreen: Error loading zones:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải danh sách khu vực");
     }
   };
 
@@ -319,7 +354,9 @@ export default function ProfileScreen() {
         userData.phoneNumber || userData.phone_number || "",
       address: userData.address || "",
       note: "",
+      zoneDetailID: null,
     });
+    setSelectedZone(null);
     setShowCareProfileForm(true);
   };
 
@@ -331,7 +368,9 @@ export default function ProfileScreen() {
       phoneNumber: "",
       address: "",
       note: "",
+      zoneDetailID: null,
     });
+    setSelectedZone(null);
   };
 
   const handleCareProfileFormChange = (field, value) => {
@@ -362,6 +401,23 @@ export default function ProfileScreen() {
         handleRelativeFormChange("dateOfBirth", dateString);
       }
     }
+  };
+
+  const openZoneModal = () => {
+    if (zones.length === 0) {
+      loadZones();
+    }
+    setShowZoneModal(true);
+  };
+
+  const closeZoneModal = () => {
+    setShowZoneModal(false);
+  };
+
+  const selectZone = (zone) => {
+    setSelectedZone(zone);
+    handleCareProfileFormChange("zoneDetailID", zone.zoneDetailID);
+    closeZoneModal();
   };
 
   const formatDateForDisplay = (dateString) => {
@@ -710,10 +766,15 @@ export default function ProfileScreen() {
         return;
       }
 
+      if (!careProfileForm.zoneDetailID) {
+        Alert.alert("Lỗi", "Vui lòng chọn khu vực");
+        return;
+      }
+
       // Chuẩn bị data cho care profile
       const careProfileData = {
         accountID: userData.accountID || userData.id,
-        zoneDetailID: 1, // Default zone detail ID
+        zoneDetailID: careProfileForm.zoneDetailID,
         profileName: careProfileForm.profileName.trim(),
         dateOfBirth: new Date(
           careProfileForm.dateOfBirth
@@ -724,19 +785,22 @@ export default function ProfileScreen() {
         note: careProfileForm.note.trim(),
       };
 
+      console.log(
+        "ProfileScreen: Creating care profile with data:",
+        careProfileData
+      );
+
       const result = await CareProfileService.createCareProfile(
         careProfileData
       );
 
       if (result.success) {
-        Alert.alert(
-          "Thành công",
-          `Đã tạo hồ sơ chăm sóc: ${result.data.careProfile.profileName}`
-        );
+        // Không hiển thị alert thành công
         // Reload care profiles sau khi tạo thành công
         await loadCareProfiles();
-        // Đóng form
+        // Đóng form và reset
         closeCareProfileForm();
+        setSelectedZone(null);
       } else {
         Alert.alert(
           "Lỗi",
@@ -992,7 +1056,8 @@ export default function ProfileScreen() {
               Chưa có hồ sơ chăm sóc nào
             </Text>
             <Text style={styles.emptyStateSubtext}>
-              Nhấn nút "Thêm hồ sơ chăm sóc" để tạo hồ sơ đầu tiên
+              Nhấn nút &quot;Thêm hồ sơ chăm sóc&quot; để tạo hồ sơ
+              đầu tiên
             </Text>
           </View>
         ) : (
@@ -1275,6 +1340,24 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.formField}>
+              <Text style={styles.formLabel}>Khu vực *</Text>
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={openZoneModal}>
+                <Text
+                  style={[
+                    styles.datePickerText,
+                    !selectedZone && styles.placeholderText,
+                  ]}>
+                  {selectedZone
+                    ? selectedZone.displayName
+                    : "Chọn khu vực"}
+                </Text>
+                <Ionicons name="location" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formField}>
               <Text style={styles.formLabel}>Địa chỉ</Text>
               <TextInput
                 style={styles.formInput}
@@ -1378,6 +1461,24 @@ export default function ProfileScreen() {
                 placeholder="Nhập số điện thoại"
                 keyboardType="phone-pad"
               />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Khu vực *</Text>
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={openZoneModal}>
+                <Text
+                  style={[
+                    styles.datePickerText,
+                    !selectedZone && styles.placeholderText,
+                  ]}>
+                  {selectedZone
+                    ? selectedZone.displayName
+                    : "Chọn khu vực"}
+                </Text>
+                <Ionicons name="location" size={20} color="#666" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.formField}>
@@ -1798,6 +1899,66 @@ export default function ProfileScreen() {
         {renderRelativeForm()}
         {renderEditRelativeForm()}
         {renderDatePicker()}
+
+        {/* Zone Selection Modal */}
+        <Modal
+          visible={showZoneModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={closeZoneModal}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Chọn khu vực</Text>
+                <TouchableOpacity onPress={closeZoneModal}>
+                  <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                style={styles.zoneList}
+                data={zones}
+                keyExtractor={(item) => item.zoneDetailID.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.zoneItem,
+                      selectedZone?.zoneDetailID ===
+                        item.zoneDetailID && styles.selectedZoneItem,
+                    ]}
+                    onPress={() => selectZone(item)}>
+                    <View style={styles.zoneInfo}>
+                      <Text style={styles.zoneName}>
+                        {item.displayName}
+                      </Text>
+                      <Text style={styles.zoneCity}>{item.city}</Text>
+                    </View>
+                    {selectedZone?.zoneDetailID ===
+                      item.zoneDetailID && (
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color="#4FC3F7"
+                      />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ItemSeparatorComponent={() => (
+                  <View style={styles.separator} />
+                )}
+                showsVerticalScrollIndicator={false}
+              />
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={closeZoneModal}>
+                  <Text style={styles.cancelButtonText}>Hủy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Debug component - chỉ hiển thị trong development */}
         {/* {__DEV__ && <UserDataDebugger userData={userData} />} */}
@@ -2439,5 +2600,35 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#eee",
     paddingHorizontal: 0, // Đảm bảo không có padding thừa
+  },
+  zoneList: {
+    padding: 20,
+  },
+  zoneItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  selectedZoneItem: {
+    backgroundColor: "#e0f7fa",
+  },
+  zoneInfo: {
+    flex: 1,
+  },
+  zoneName: {
+    fontSize: 16,
+    color: "#333",
+  },
+  zoneCity: {
+    fontSize: 14,
+    color: "#666",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#eee",
   },
 });

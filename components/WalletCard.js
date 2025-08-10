@@ -25,16 +25,16 @@ export default function WalletCard({ userData }) {
   const isMember =
     userData && (userData.roleID === 4 || userData.role_id === 4);
 
+  useEffect(() => {
+    if (userData && isMember) {
+      loadWalletData();
+    }
+  }, [userData, isMember]);
+
   // Don't render wallet if user is not a Member
   if (!isMember) {
     return null;
   }
-
-  useEffect(() => {
-    if (userData) {
-      loadWalletData();
-    }
-  }, [userData]);
 
   const loadWalletData = async () => {
     try {
