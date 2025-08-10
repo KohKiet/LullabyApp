@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -41,6 +42,7 @@ export default function AppointmentScreen() {
   const [services, setServices] = useState([]);
   const [serviceTasks, setServiceTasks] = useState([]);
   const [nurses, setNurses] = useState([]);
+  const [careProfiles, setCareProfiles] = useState([]);
 
   // Reload user data khi screen được focus
   useFocusEffect(
@@ -59,11 +61,17 @@ export default function AppointmentScreen() {
       if (user) {
         setUserData(user);
         setIsLoggedIn(true);
+
+        // Load cached data from booking history first
+        await loadCachedData();
+
+        // Then load fresh data if needed
         await loadBookings(user);
         await loadHolidays();
         await loadServices();
         await loadServiceTasks();
         await loadNurses();
+        await loadCareProfiles(user);
       } else {
         setUserData(null);
         setIsLoggedIn(false);
@@ -77,8 +85,71 @@ export default function AppointmentScreen() {
     }
   };
 
+  const loadCachedData = async () => {
+    try {
+      // Load cached data from booking history
+      const cachedBookings = await AsyncStorage.getItem(
+        "cachedBookings"
+      );
+      const cachedServices = await AsyncStorage.getItem(
+        "cachedServices"
+      );
+      const cachedNurses = await AsyncStorage.getItem("cachedNurses");
+      const cachedCareProfiles = await AsyncStorage.getItem(
+        "cachedCareProfiles"
+      );
+
+      if (cachedBookings) {
+        setBookings(JSON.parse(cachedBookings));
+      }
+      if (cachedServices) {
+        setServices(JSON.parse(cachedServices));
+      }
+      if (cachedNurses) {
+        setNurses(JSON.parse(cachedNurses));
+      }
+      if (cachedCareProfiles) {
+        setCareProfiles(JSON.parse(cachedCareProfiles));
+      }
+
+      // Load customize packages và tasks từ cache
+      if (cachedBookings) {
+        const bookingsData = JSON.parse(cachedBookings);
+        for (const booking of bookingsData) {
+          const cachedPackages = await AsyncStorage.getItem(
+            `cachedCustomizePackages-${booking.bookingID}`
+          );
+          const cachedTasks = await AsyncStorage.getItem(
+            `cachedCustomizeTasks-${booking.bookingID}`
+          );
+
+          if (cachedPackages) {
+            setCustomizePackagesMap((prev) => ({
+              ...prev,
+              [booking.bookingID]: JSON.parse(cachedPackages),
+            }));
+          }
+          if (cachedTasks) {
+            setCustomizeTasksMap((prev) => ({
+              ...prev,
+              [booking.bookingID]: JSON.parse(cachedTasks),
+            }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading cached data:", error);
+    }
+  };
+
   const loadBookings = async (user) => {
     try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (bookings.length > 0) {
+        console.log("Using cached bookings data");
+        return;
+      }
+
       const accountID = user.accountID || user.id;
 
       // Lấy care profiles của account hiện tại
@@ -127,6 +198,10 @@ export default function AppointmentScreen() {
       }
 
       setBookings(userBookings);
+      await AsyncStorage.setItem(
+        "cachedBookings",
+        JSON.stringify(userBookings)
+      );
     } catch (error) {
       console.error("Error loading bookings:", error);
     }
@@ -156,6 +231,14 @@ export default function AppointmentScreen() {
 
   const loadCustomizePackages = async (bookingID) => {
     try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (customizePackagesMap[bookingID]) {
+        console.log(
+          `Using cached customize packages for booking ${bookingID}`
+        );
+        return;
+      }
+
       console.log(
         `Loading customize packages for booking ${bookingID}...`
       );
@@ -172,6 +255,10 @@ export default function AppointmentScreen() {
           ...prev,
           [bookingID]: result.data,
         }));
+        await AsyncStorage.setItem(
+          `cachedCustomizePackages-${bookingID}`,
+          JSON.stringify(result.data)
+        );
       } else {
         console.log(
           `Failed to load packages for booking ${bookingID}:`,
@@ -185,6 +272,14 @@ export default function AppointmentScreen() {
 
   const loadCustomizeTasks = async (bookingID) => {
     try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (customizeTasksMap[bookingID]) {
+        console.log(
+          `Using cached customize tasks for booking ${bookingID}`
+        );
+        return;
+      }
+
       console.log(
         `Loading customize tasks for booking ${bookingID}...`
       );
@@ -201,6 +296,10 @@ export default function AppointmentScreen() {
           ...prev,
           [bookingID]: result.data,
         }));
+        await AsyncStorage.setItem(
+          `cachedCustomizeTasks-${bookingID}`,
+          JSON.stringify(result.data)
+        );
       } else {
         console.log(
           `Failed to load tasks for booking ${bookingID}:`,
@@ -214,10 +313,20 @@ export default function AppointmentScreen() {
 
   const loadServices = async () => {
     try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (services.length > 0) {
+        console.log("Using cached services data");
+        return;
+      }
+
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
         console.log("Services loaded:", result.data);
         setServices(result.data);
+        await AsyncStorage.setItem(
+          "cachedServices",
+          JSON.stringify(result.data)
+        );
       }
     } catch (error) {
       console.error("Error loading services:", error);
@@ -246,13 +355,50 @@ export default function AppointmentScreen() {
 
   const loadNurses = async () => {
     try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (nurses.length > 0) {
+        console.log("Using cached nurses data");
+        return;
+      }
+
       const result =
         await NursingSpecialistService.getAllNursingSpecialists();
       if (result.success) {
         setNurses(result.data);
+        await AsyncStorage.setItem(
+          "cachedNurses",
+          JSON.stringify(result.data)
+        );
       }
     } catch (error) {
       console.error("Error loading nurses:", error);
+    }
+  };
+
+  const loadCareProfiles = async (user) => {
+    try {
+      // Kiểm tra xem đã có dữ liệu từ cache chưa
+      if (careProfiles.length > 0) {
+        console.log("Using cached care profiles data");
+        return;
+      }
+
+      console.log("Loading care profiles...");
+      const result =
+        await CareProfileService.getCareProfilesByAccountId(
+          user.accountID || user.id
+        );
+      if (result.success) {
+        setCareProfiles(result.data);
+        await AsyncStorage.setItem(
+          "cachedCareProfiles",
+          JSON.stringify(result.data)
+        );
+      } else {
+        console.log("Failed to load care profiles:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading care profiles:", error);
     }
   };
 
@@ -769,28 +915,45 @@ export default function AppointmentScreen() {
                 />
                 <Text style={styles.nursingText}>
                   {(() => {
-                    // Lấy tên điều dưỡng từ customize tasks
+                    // Lấy tất cả điều dưỡng đã được gán cho booking này
                     const tasks =
                       customizeTasksMap[booking.bookingID] || [];
+
+                    // Debug: Log tất cả tasks để kiểm tra
+                    console.log(
+                      `Tasks for booking ${booking.bookingID}:`,
+                      tasks
+                    );
+                    console.log(
+                      `Tasks with nursingID:`,
+                      tasks.filter((task) => task.nursingID)
+                    );
+
                     const assignedTasks = tasks.filter(
                       (task) => task.nursingID
                     );
+
                     if (assignedTasks.length > 0) {
-                      const nurse = nurses.find(
-                        (n) =>
-                          n.nursingID === assignedTasks[0].nursingID
+                      // Tạo danh sách điều dưỡng với tên dịch vụ
+                      const nurseServices = assignedTasks.map(
+                        (task) => {
+                          const nurse = nurses.find(
+                            (n) => n.nursingID === task.nursingID
+                          );
+                          const serviceInfo = services.find(
+                            (s) => s.serviceID === task.serviceID
+                          );
+                          const serviceName =
+                            serviceInfo?.serviceName ||
+                            `Dịch vụ ${task.serviceID}`;
+                          const nurseName =
+                            nurse?.fullName ||
+                            "Điều dưỡng đã được gán";
+                          return `${serviceName}: ${nurseName}`;
+                        }
                       );
-                      // Lấy tên service task của task đầu tiên
-                      const firstTask = assignedTasks[0];
-                      const serviceInfo = services.find(
-                        (s) => s.serviceID === firstTask.serviceID
-                      );
-                      const serviceTaskName =
-                        serviceInfo?.serviceName ||
-                        `Dịch vụ ${firstTask.serviceID}`;
-                      return `${serviceTaskName}: ${
-                        nurse?.fullName || "Điều dưỡng đã được gán"
-                      }`;
+
+                      return nurseServices.join(", ");
                     }
                     return "Chưa có điều dưỡng";
                   })()}
@@ -805,13 +968,15 @@ export default function AppointmentScreen() {
                 />
                 <Text style={styles.addressText}>
                   {(() => {
-                    // Thử lấy địa chỉ từ customize packages trước, nếu không có thì dùng từ booking
-                    const packages =
-                      customizePackagesMap[booking.bookingID] || [];
-                    if (packages.length > 0) {
-                      // Có thể thêm logic để lấy địa chỉ từ package nếu cần
-                      return "Địa chỉ sẽ được cập nhật";
+                    // Lấy địa chỉ từ care profile của booking này
+                    const careProfile = careProfiles.find(
+                      (cp) =>
+                        cp.careProfileID === booking.careProfileID
+                    );
+                    if (careProfile && careProfile.address) {
+                      return careProfile.address;
                     }
+                    // Fallback về địa chỉ từ booking nếu không có care profile
                     return (
                       booking.address || "Địa chỉ sẽ được cập nhật"
                     );
