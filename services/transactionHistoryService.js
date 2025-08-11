@@ -151,6 +151,35 @@ class TransactionHistoryService {
     }
   }
 
+  // NEW: Refund money back to wallet by invoiceID
+  async refundMoneyToWallet(invoiceID) {
+    try {
+      console.log(
+        "TransactionHistoryService: refundMoneyToWallet called with invoiceID:",
+        invoiceID
+      );
+      const url = `${API_CONFIG.BASE_URL}/api/TransactionHistory/RefundMoneyToWallet/${invoiceID}`;
+      const result = await this.fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          accept: "*/*",
+        },
+        body: "",
+      });
+      console.log(
+        "TransactionHistoryService: refundMoneyToWallet result:",
+        result
+      );
+      return result;
+    } catch (error) {
+      console.error(
+        "TransactionHistoryService: Error refunding money to wallet:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
   formatTransactionType(type) {
     switch (type) {
       case "Pay by wallet":

@@ -21,6 +21,7 @@ import InvoiceService from "../../services/invoiceService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
 import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
+import TransactionHistoryService from "../../services/transactionHistoryService";
 import ZoneDetailService from "../../services/zoneDetailService";
 
 export default function BookingHistoryScreen() {
@@ -31,7 +32,7 @@ export default function BookingHistoryScreen() {
   const [expandedBookings, setExpandedBookings] = useState({});
   const [invoiceMap, setInvoiceMap] = useState({});
   const [bookingDetailsMap, setBookingDetailsMap] = useState({});
-  const [showOnlyPaid, setShowOnlyPaid] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState("all"); // "all", "paid", "pending"
 
   // Thêm state cho customize packages và tasks
   const [customizePackagesMap, setCustomizePackagesMap] = useState(
@@ -132,11 +133,12 @@ export default function BookingHistoryScreen() {
           );
 
         if (invoicesResult.success) {
-          const invoiceMap = {};
+          const nextInvoiceMap = {};
           invoicesResult.data.forEach((invoice) => {
-            invoiceMap[invoice.bookingID] = invoice.status;
+            // store entire invoice so we have invoiceID and status
+            nextInvoiceMap[invoice.bookingID] = invoice;
           });
-          setInvoiceMap(invoiceMap);
+          setInvoiceMap(nextInvoiceMap);
         }
 
         setBookings(userBookings);
@@ -1090,11 +1092,9 @@ export default function BookingHistoryScreen() {
       case "cancelled":
         return "Đã hủy";
       case "isScheduled":
-        return "Đã phân công";
+        return "Đã thanh toán";
       case "completed":
         return "Hoàn thành";
-      case "overdue":
-        return "Quá hạn";
       default:
         return status;
     }
@@ -1106,32 +1106,86 @@ export default function BookingHistoryScreen() {
         return "#FFA500";
       case "paid":
         return "#4CAF50";
-      case "cancelled":
-        return "#FF6B6B";
       case "isScheduled":
         return "#4CAF50";
+      case "cancelled":
+        return "#FF6B6B";
       case "completed":
         return "#2196F3";
-      case "overdue":
-        return "#666";
       default:
         return "#666";
     }
   };
 
   const getFilteredBookings = () => {
-    if (!showOnlyPaid) {
-      return bookings; // Hiển thị tất cả
+    // Always hide cancelled bookings
+    let filteredBookings = bookings.filter(
+      (b) => b.status !== "cancelled"
+    );
+
+    // Áp dụng filter theo status
+    switch (selectedFilter) {
+      case "paid":
+        filteredBookings = filteredBookings.filter(
+          (booking) => booking.status === "paid"
+        );
+        break;
+      case "pending":
+        filteredBookings = filteredBookings.filter(
+          (booking) => booking.status === "pending"
+        );
+        break;
+      default:
+        // "all" - hiển thị tất cả
+        break;
     }
 
-    // Chỉ hiển thị booking đã thanh toán
-    return bookings.filter((booking) => {
-      return booking.status === "paid";
+    // Ẩn các booking pending nếu còn < 2 giờ đến thời gian làm việc
+    const now = new Date();
+    filteredBookings = filteredBookings.filter((booking) => {
+      if (booking.status !== "pending") return true;
+      const work = new Date(booking.workdate);
+      if (isNaN(work.getTime())) return true;
+      const diffMs = work.getTime() - now.getTime();
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      return diffMs > twoHoursMs;
     });
+
+    // Sắp xếp theo workdate: ngày sớm nhất ở trên, ngày đã qua ở dưới
+    filteredBookings.sort((a, b) => {
+      const dateA = new Date(a.workdate);
+      const dateB = new Date(b.workdate);
+      const now = new Date();
+
+      // Kiểm tra nếu workdate không hợp lệ
+      if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+        return 0;
+      }
+
+      // Nếu cả hai ngày đều đã qua hoặc chưa đến
+      if (
+        (dateA < now && dateB < now) ||
+        (dateA >= now && dateB >= now)
+      ) {
+        return dateA - dateB; // Sắp xếp theo thứ tự thời gian
+      }
+
+      // Nếu một ngày đã qua và một ngày chưa đến
+      if (dateA < now && dateB >= now) {
+        return 1; // Ngày đã qua xuống dưới
+      }
+      if (dateA >= now && dateB < now) {
+        return -1; // Ngày chưa đến lên trên
+      }
+
+      return 0;
+    });
+
+    return filteredBookings;
   };
 
-  const toggleFilter = () => {
-    setShowOnlyPaid(!showOnlyPaid);
+  const toggleFilter = (filter) => {
+    setSelectedFilter(filter);
   };
 
   const renderBookingCard = (booking, index) => {
@@ -1171,14 +1225,34 @@ export default function BookingHistoryScreen() {
               {formatDate(booking.workdate)}
             </Text>
           </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(bookingStatus) },
-            ]}>
-            <Text style={styles.statusText}>
-              {formatStatus(bookingStatus)}
-            </Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getStatusColor(bookingStatus) },
+              ]}>
+              <Text style={styles.statusText}>
+                {formatStatus(bookingStatus)}
+              </Text>
+            </View>
+            {typeof booking.isSchedule === "boolean" && (
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor: booking.isSchedule
+                      ? "#4CAF50"
+                      : "#FFA500",
+                    marginTop: 6,
+                  },
+                ]}>
+                <Text style={styles.statusText}>
+                  {booking.isSchedule
+                    ? "Đã phân công"
+                    : "Chưa phân công"}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -1363,6 +1437,9 @@ export default function BookingHistoryScreen() {
                                 pkg.price
                               )}
                             </Text>
+                            <Text style={styles.packageQuantity}>
+                              Số lượng: {pkg.quantity || 1}
+                            </Text>
                             {pkg.discount && pkg.discount > 0 && (
                               <Text style={styles.packageDiscount}>
                                 Giảm giá:{" "}
@@ -1383,7 +1460,7 @@ export default function BookingHistoryScreen() {
                           {customizeTasksMap[booking.bookingID] && (
                             <View style={styles.serviceTasksSection}>
                               <Text style={styles.serviceTasksTitle}>
-                                Chi tiết các dịch vụ con:
+                                Chi tiết
                               </Text>
                               {customizeTasksMap[booking.bookingID]
                                 .filter(
@@ -1432,16 +1509,8 @@ export default function BookingHistoryScreen() {
                                         </Text>
                                       </View>
 
-                                      <Text
-                                        style={
-                                          styles.serviceTaskStatus
-                                        }>
-                                        Trạng thái:{" "}
-                                        {formatStatus(task.status)}
-                                      </Text>
-
-                                      {/* Hiển thị điều dưỡng đã được gán */}
-                                      {assignedNurse ? (
+                                      {/* Hiển thị tên điều dưỡng đã được chọn (nếu có) */}
+                                      {assignedNurse && (
                                         <View
                                           style={
                                             styles.assignedNurseInfo
@@ -1459,32 +1528,6 @@ export default function BookingHistoryScreen() {
                                             {assignedNurse.fullName}
                                           </Text>
                                         </View>
-                                      ) : (
-                                        <View
-                                          style={
-                                            styles.noNurseAssigned
-                                          }>
-                                          <Text
-                                            style={
-                                              styles.noNurseText
-                                            }>
-                                            Chưa có điều dưỡng
-                                          </Text>
-                                          <TouchableOpacity
-                                            style={
-                                              styles.assignNurseButton
-                                            }
-                                            onPress={() =>
-                                              handleSelectNurse(task)
-                                            }>
-                                            <Text
-                                              style={
-                                                styles.assignNurseButtonText
-                                              }>
-                                              Chọn điều dưỡng
-                                            </Text>
-                                          </TouchableOpacity>
-                                        </View>
                                       )}
                                     </View>
                                   );
@@ -1496,150 +1539,128 @@ export default function BookingHistoryScreen() {
                     )}
                   </View>
                 )}
-
-                {/* Customize Tasks - chỉ hiển thị cho booking đã thanh toán */}
-                {bookingStatus === "paid" &&
-                  customizeTasksMap[booking.bookingID] && (
-                    <View style={styles.customizeTasksSection}>
-                      <Text style={styles.sectionTitle}>
-                        Chọn nhân viên:
-                      </Text>
-
-                      {/* Nhóm tasks theo customizePackageID */}
-                      {(() => {
-                        const tasks =
-                          customizeTasksMap[booking.bookingID] || [];
-                        const packages =
-                          customizePackagesMap[booking.bookingID] ||
-                          [];
-
-                        // Nhóm tasks theo customizePackageID
-                        const tasksByPackage = {};
-                        tasks.forEach((task) => {
-                          if (
-                            !tasksByPackage[task.customizePackageID]
-                          ) {
-                            tasksByPackage[task.customizePackageID] =
-                              [];
-                          }
-                          tasksByPackage[
-                            task.customizePackageID
-                          ].push(task);
-                        });
-
-                        return Object.keys(tasksByPackage).map(
-                          (packageId) => {
-                            const packageTasks =
-                              tasksByPackage[packageId];
-                            const packageInfo = packages.find(
-                              (pkg) =>
-                                pkg.customizePackageID ===
-                                parseInt(packageId)
-                            );
-
-                            if (!packageInfo) {
-                              return null;
-                            }
-
-                            // Lấy thông tin service từ package
-                            const serviceInfo = services.find(
-                              (s) =>
-                                s.serviceID === packageInfo.serviceID
-                            );
-                            const serviceName =
-                              serviceInfo?.serviceName ||
-                              `Dịch vụ ${packageInfo.serviceID}`;
-                            const major =
-                              serviceInfo?.major || "Nurse"; // Fallback về Nurse nếu không tìm thấy
-                            const quantity =
-                              packageInfo.quantity || 1;
-
-                            // Kiểm tra xem có task nào đã được gán nurse chưa
-                            const assignedTasks = packageTasks.filter(
-                              (task) => task.nursingID
-                            );
-                            const unassignedTasks =
-                              packageTasks.filter(
-                                (task) => !task.nursingID
-                              );
-
-                            return (
-                              <View
-                                key={packageId}
-                                style={styles.packageTasksContainer}>
-                                <Text
-                                  style={styles.packageServiceName}>
-                                  {serviceName}
-                                </Text>
-
-                                {/* Hiển thị các task đã được gán */}
-                                {assignedTasks.map((task, index) => {
-                                  const nurse = nurses.find(
-                                    (n) =>
-                                      n.nursingID === task.nursingID
-                                  );
-                                  return (
-                                    <View
-                                      key={task.customizeTaskID}
-                                      style={styles.assignedTaskItem}>
-                                      <Text
-                                        style={
-                                          styles.assignedTaskText
-                                        }>
-                                        {major === "Nurse"
-                                          ? "Điều dưỡng"
-                                          : "Tư vấn viên"}{" "}
-                                        {index + 1}:{" "}
-                                        {nurse?.fullName ||
-                                          "Không xác định"}
-                                      </Text>
-                                    </View>
-                                  );
-                                })}
-
-                                {/* Nếu tất cả task đã được gán, hiển thị thông báo */}
-                                {unassignedTasks.length === 0 &&
-                                  assignedTasks.length > 0 && (
-                                    <Text
-                                      style={styles.allAssignedText}>
-                                      Đã chọn đủ{" "}
-                                      {major === "Nurse"
-                                        ? "điều dưỡng viên"
-                                        : "tư vấn viên"}{" "}
-                                      cho dịch vụ này
-                                    </Text>
-                                  )}
-                              </View>
-                            );
-                          }
-                        );
-                      })()}
-                    </View>
-                  )}
               </View>
             )}
           </View>
         )}
 
-        {/* Payment Button - chỉ hiển thị cho booking pending */}
-        {bookingStatus === "pending" && (
-          <View style={styles.paymentSection}>
-            <TouchableOpacity
-              style={styles.paymentButton}
-              onPress={() => handlePayment(booking.bookingID)}>
-              <Ionicons
-                name="card-outline"
-                size={20}
-                color="#FFFFFF"
-              />
-              <Text style={styles.paymentButtonText}>
-                Thanh toán ngay
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Actions: pay and cancel */}
+        {(() => {
+          const inv = invoiceMap[booking.bookingID];
+          const invoiceStatus = inv?.status;
+          const canCancelByInvoice =
+            invoiceStatus === "pending" || invoiceStatus === "paid";
+          const canCancelByBooking =
+            bookingStatus === "pending" || bookingStatus === "paid";
+          const showActions =
+            canCancelByBooking || canCancelByInvoice;
+          if (!showActions) return null;
+          return (
+            <View style={styles.paymentSection}>
+              {bookingStatus === "pending" && (
+                <TouchableOpacity
+                  style={styles.paymentButton}
+                  onPress={() => handlePayment(booking.bookingID)}>
+                  <Ionicons
+                    name="card-outline"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.paymentButtonText}>
+                    Thanh toán ngay
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => handleCancelBooking(booking)}>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.cancelButtonText}>
+                  Hủy booking
+                </Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
       </View>
     );
+  };
+
+  const handleCancelBooking = async (booking) => {
+    try {
+      Alert.alert(
+        "Xác nhận hủy",
+        `Bạn có chắc muốn hủy lịch hẹn #${booking.bookingID}?` +
+          (booking.status === "paid"
+            ? "\n\nĐơn đã hoàn thành sẽ được hoàn tiền về ví."
+            : ""),
+        [
+          { text: "Không", style: "cancel" },
+          {
+            text: "Hủy đặt",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                // determine invoice for this booking, if any
+                const invoice = invoiceMap[booking.bookingID];
+                if (booking.status === "paid" && invoice?.invoiceID) {
+                  // call refund API
+                  const refundResult =
+                    await TransactionHistoryService.refundMoneyToWallet(
+                      invoice.invoiceID
+                    );
+                  if (!refundResult.success) {
+                    Alert.alert(
+                      "Lỗi",
+                      refundResult.error || "Hoàn tiền thất bại"
+                    );
+                    return;
+                  }
+                }
+
+                // Update local booking status to cancelled and block payment
+                setBookings((prev) =>
+                  prev.map((b) =>
+                    b.bookingID === booking.bookingID
+                      ? { ...b, status: "cancelled" }
+                      : b
+                  )
+                );
+
+                // Also reflect invoice status as cancelled if present
+                if (invoiceMap[booking.bookingID]) {
+                  setInvoiceMap((prev) => ({
+                    ...prev,
+                    [booking.bookingID]: {
+                      ...prev[booking.bookingID],
+                      status: "cancelled",
+                    },
+                  }));
+                }
+
+                Alert.alert(
+                  "Thành công",
+                  `Đã hủy lịch hẹn #${booking.bookingID}`
+                );
+              } catch (innerError) {
+                console.error(
+                  "Error cancelling booking (inner):",
+                  innerError
+                );
+                Alert.alert("Lỗi", "Không thể hủy lịch hẹn");
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      Alert.alert("Lỗi", "Không thể hủy lịch hẹn");
+    }
   };
 
   if (isLoading) {
@@ -1678,13 +1699,14 @@ export default function BookingHistoryScreen() {
         <TouchableOpacity
           style={[
             styles.filterButton,
-            !showOnlyPaid && styles.filterButtonActive,
+            selectedFilter === "all" && styles.filterButtonActive,
           ]}
-          onPress={() => setShowOnlyPaid(false)}>
+          onPress={() => toggleFilter("all")}>
           <Text
             style={[
               styles.filterButtonText,
-              !showOnlyPaid && styles.filterButtonTextActive,
+              selectedFilter === "all" &&
+                styles.filterButtonTextActive,
             ]}>
             Tất cả
           </Text>
@@ -1692,15 +1714,31 @@ export default function BookingHistoryScreen() {
         <TouchableOpacity
           style={[
             styles.filterButton,
-            showOnlyPaid && styles.filterButtonActive,
+            selectedFilter === "paid" && styles.filterButtonActive,
           ]}
-          onPress={() => setShowOnlyPaid(true)}>
+          onPress={() => toggleFilter("paid")}>
           <Text
             style={[
               styles.filterButtonText,
-              showOnlyPaid && styles.filterButtonTextActive,
+              selectedFilter === "paid" &&
+                styles.filterButtonTextActive,
             ]}>
             Đã thanh toán
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            selectedFilter === "pending" && styles.filterButtonActive,
+          ]}
+          onPress={() => toggleFilter("pending")}>
+          <Text
+            style={[
+              styles.filterButtonText,
+              selectedFilter === "pending" &&
+                styles.filterButtonTextActive,
+            ]}>
+            Chờ thanh toán
           </Text>
         </TouchableOpacity>
       </View>
@@ -1716,13 +1754,17 @@ export default function BookingHistoryScreen() {
               color="#999"
             />
             <Text style={styles.emptyTitle}>
-              {showOnlyPaid
-                ? "Chưa có lịch hẹn đã thanh toán"
+              {selectedFilter === "paid"
+                ? "Chưa có lịch hẹn đã hoàn thành"
+                : selectedFilter === "pending"
+                ? "Chưa có lịch hẹn chờ thanh toán"
                 : "Chưa có lịch hẹn nào"}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {showOnlyPaid
-                ? "Các lịch hẹn đã thanh toán sẽ hiển thị ở đây"
+              {selectedFilter === "paid"
+                ? "Các lịch hẹn đã hoàn thành sẽ hiển thị ở đây"
+                : selectedFilter === "pending"
+                ? "Các lịch hẹn chờ thanh toán sẽ hiển thị ở đây"
                 : "Lịch sử đặt lịch sẽ hiển thị ở đây"}
             </Text>
           </View>
@@ -2026,7 +2068,7 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     paddingVertical: 10,
     paddingHorizontal: 20,
     backgroundColor: "#F5F5F5",
@@ -2035,12 +2077,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   filterButton: {
+    flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#DDD",
     backgroundColor: "#FFF",
+    marginHorizontal: 4,
+    alignItems: "center",
   },
   filterButtonActive: {
     backgroundColor: "#4CAF50",
@@ -2480,5 +2525,23 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  cancelButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#9E9E9E",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#9E9E9E",
+    marginTop: 10,
+  },
+  cancelButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 10,
   },
 });

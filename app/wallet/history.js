@@ -39,7 +39,13 @@ export default function TransactionHistoryScreen() {
       console.log("Transaction history result:", result);
 
       if (result.success) {
-        setTransactions(result.data);
+        // Sắp xếp giao dịch theo thời gian tạo (mới nhất ở trên)
+        const sortedTransactions = result.data.sort((a, b) => {
+          const dateA = new Date(a.transactionDate);
+          const dateB = new Date(b.transactionDate);
+          return dateB - dateA; // Sắp xếp giảm dần (mới nhất trước)
+        });
+        setTransactions(sortedTransactions);
       } else {
         console.log("No transaction history found");
         setTransactions([]);
@@ -68,8 +74,42 @@ export default function TransactionHistoryScreen() {
     }
   };
 
-  const formatAmount = (amount) => {
-    return amount.toLocaleString("vi-VN") + " ₫";
+  const formatAmount = (amount, transaction) => {
+    // Xác định loại giao dịch dựa trên note và amount
+    let isCredit = false; // true = nạp tiền/hoàn tiền, false = thanh toán
+
+    if (transaction && transaction.note) {
+      const note = transaction.note.toLowerCase();
+      // Nếu note chứa từ khóa liên quan đến nạp tiền, hoàn tiền, refund
+      if (
+        note.includes("nạp") ||
+        note.includes("nap") ||
+        note.includes("hoàn") ||
+        note.includes("refund") ||
+        note.includes("top up") ||
+        note.includes("deposit")
+      ) {
+        isCredit = true;
+      }
+      // Nếu note chứa từ khóa liên quan đến thanh toán, chi tiêu
+      else if (
+        note.includes("thanh toán") ||
+        note.includes("payment") ||
+        note.includes("chi") ||
+        note.includes("spend") ||
+        note.includes("deduct")
+      ) {
+        isCredit = false;
+      }
+      // Nếu không xác định được, dựa vào logic: nếu amount > 0 và before < after thì là nạp tiền
+      else if (transaction.before && transaction.after) {
+        isCredit = transaction.after > transaction.before;
+      }
+    }
+
+    const sign = isCredit ? "+" : "-";
+    const absoluteAmount = Math.abs(amount);
+    return `${sign}${absoluteAmount.toLocaleString("vi-VN")} ₫`;
   };
 
   const formatStatus = (status) => {
@@ -175,8 +215,47 @@ export default function TransactionHistoryScreen() {
                 <View style={styles.transactionDetails}>
                   <View style={styles.amountRow}>
                     <Text style={styles.amountLabel}>Số tiền:</Text>
-                    <Text style={styles.amountValue}>
-                      {formatAmount(transaction.amount)}
+                    <Text
+                      style={[
+                        styles.amountValue,
+                        (() => {
+                          // Xác định loại giao dịch để áp dụng style phù hợp
+                          if (transaction && transaction.note) {
+                            const note =
+                              transaction.note.toLowerCase();
+                            if (
+                              note.includes("nạp") ||
+                              note.includes("nap") ||
+                              note.includes("hoàn") ||
+                              note.includes("refund") ||
+                              note.includes("top up") ||
+                              note.includes("deposit")
+                            ) {
+                              return styles.creditAmount;
+                            } else if (
+                              note.includes("thanh toán") ||
+                              note.includes("payment") ||
+                              note.includes("chi") ||
+                              note.includes("spend") ||
+                              note.includes("deduct")
+                            ) {
+                              return styles.debitAmount;
+                            }
+                          }
+                          // Fallback: dựa vào logic before/after
+                          if (
+                            transaction.before &&
+                            transaction.after
+                          ) {
+                            return transaction.after >
+                              transaction.before
+                              ? styles.creditAmount
+                              : styles.debitAmount;
+                          }
+                          return styles.amountValue; // Style mặc định
+                        })(),
+                      ]}>
+                      {formatAmount(transaction.amount, transaction)}
                     </Text>
                   </View>
 
@@ -185,7 +264,7 @@ export default function TransactionHistoryScreen() {
                       Số dư trước:
                     </Text>
                     <Text style={styles.balanceValue}>
-                      {formatAmount(transaction.before)}
+                      {formatAmount(transaction.before, transaction)}
                     </Text>
                   </View>
 
@@ -194,7 +273,7 @@ export default function TransactionHistoryScreen() {
                       Số dư sau:
                     </Text>
                     <Text style={styles.balanceValue}>
-                      {formatAmount(transaction.after)}
+                      {formatAmount(transaction.after, transaction)}
                     </Text>
                   </View>
 
@@ -327,6 +406,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#FF6B6B",
+  },
+  creditAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#4CAF50", // Màu xanh cho nạp tiền/hoàn tiền
+  },
+  debitAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FF6B6B", // Màu đỏ cho thanh toán
   },
   balanceRow: {
     flexDirection: "row",

@@ -14,7 +14,9 @@ import {
 import { API_CONFIG } from "../../services/apiConfig";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
+import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
+import NursingSpecialistService from "../../services/nursingSpecialistService";
 import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import TransactionHistoryService from "../../services/transactionHistoryService";
@@ -34,6 +36,38 @@ export default function PaymentScreen() {
     useState(false);
   const [services, setServices] = useState([]); // Thêm state cho services
 
+  // Staff selection states
+  const [selectionMode, setSelectionMode] = useState(null); // 'user' | 'system'
+  const [nurses, setNurses] = useState([]);
+  const [nurseServiceLinks, setNurseServiceLinks] = useState([]); // { nursingID, serviceID }
+  const [showNursePicker, setShowNursePicker] = useState(false);
+  const [pickerSlotIndex, setPickerSlotIndex] = useState(null);
+  const [selectedNurseIds, setSelectedNurseIds] = useState([]);
+
+  const requiredNurseCount = (() => {
+    if (extraData?.serviceType === "service") {
+      const total = (extraData.services || []).reduce(
+        (sum, s) => sum + (s.quantity || 1),
+        0
+      );
+      return Math.max(1, total);
+    }
+    // For package or unknown types, require at least 1
+    return 1;
+  })();
+
+  // Map each slot to a specific serviceID (for service bookings)
+  const slotServiceIds = React.useMemo(() => {
+    if (extraData?.serviceType !== "service")
+      return Array(requiredNurseCount).fill(null);
+    const ids = [];
+    (extraData.services || []).forEach((s) => {
+      const q = s.quantity || 1;
+      for (let i = 0; i < q; i++) ids.push(s.serviceID);
+    });
+    return ids;
+  }, [extraData, requiredNurseCount]);
+
   useEffect(() => {
     console.log(
       "PaymentScreen: useEffect triggered with bookingId:",
@@ -42,6 +76,9 @@ export default function PaymentScreen() {
     if (bookingId) {
       console.log("PaymentScreen: Starting loadBookingData...");
       loadBookingData();
+      // Preload nurses for selection
+      loadNurses();
+      loadNurseServiceLinks();
 
       // Add timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
@@ -60,6 +97,40 @@ export default function PaymentScreen() {
     }
   }, [bookingId]);
 
+  const loadNurses = async () => {
+    try {
+      const result =
+        await NursingSpecialistService.getAllNursingSpecialists();
+      if (result.success) {
+        setNurses(result.data || []);
+      } else {
+        setNurses([]);
+      }
+    } catch (error) {
+      console.error("PaymentScreen: Error loading nurses:", error);
+      setNurses([]);
+    }
+  };
+
+  const loadNurseServiceLinks = async () => {
+    try {
+      const url = `${API_CONFIG.BASE_URL}/api/nursingspecialist-servicetype/getall`;
+      const res = await fetch(url, { headers: { accept: "*/*" } });
+      if (res.ok) {
+        const data = await res.json();
+        setNurseServiceLinks(Array.isArray(data) ? data : []);
+      } else {
+        setNurseServiceLinks([]);
+      }
+    } catch (error) {
+      console.error(
+        "PaymentScreen: Error loading nurse-service links:",
+        error
+      );
+      setNurseServiceLinks([]);
+    }
+  };
+
   // Debug state changes
   useEffect(() => {
     console.log(
@@ -71,6 +142,31 @@ export default function PaymentScreen() {
       !!extraData
     );
   }, [isLoading, bookingData, extraData]);
+
+  const isPayActionEnabled = () => {
+    if (isProcessingPayment) return false;
+    if (selectionMode === "system") return true;
+    if (selectionMode === "user") {
+      return selectedNurseIds.length >= requiredNurseCount;
+    }
+    return false; // must choose a mode first
+  };
+
+  const openNursePicker = (slotIndex) => {
+    setPickerSlotIndex(slotIndex);
+    setShowNursePicker(true);
+  };
+
+  const chooseNurseForSlot = (nurseId) => {
+    setSelectedNurseIds((prev) => {
+      const next = [...prev];
+      next[pickerSlotIndex] = nurseId;
+      // Ensure length trimmed to required count
+      return next.slice(0, requiredNurseCount);
+    });
+    setShowNursePicker(false);
+    setPickerSlotIndex(null);
+  };
 
   const loadBookingData = async () => {
     try {
@@ -372,9 +468,143 @@ export default function PaymentScreen() {
   };
 
   const handlePayment = async () => {
+    // Enforce selection requirement
+    if (!selectionMode) {
+      Alert.alert(
+        "Chưa chọn phương thức",
+        "Vui lòng chọn 'Khách hàng chọn' hoặc 'Hệ thống chọn' trước."
+      );
+      return;
+    }
+    if (
+      selectionMode === "user" &&
+      selectedNurseIds.length < requiredNurseCount
+    ) {
+      Alert.alert(
+        "Chưa đủ điều dưỡng",
+        `Bạn phải chọn đủ ${requiredNurseCount} ${
+          requiredNurseCount > 1 ? "điều dưỡng" : "điều dưỡng"
+        } trước khi thanh toán.`
+      );
+      return;
+    }
     console.log("PaymentScreen: handlePayment called");
     console.log("PaymentScreen: bookingData:", bookingData);
     console.log("PaymentScreen: bookingId:", bookingId);
+
+    try {
+      // If user selected nurses manually, assign them to customize tasks before payment
+      if (selectionMode === "user") {
+        console.log(
+          "PaymentScreen: Assigning selected nurses before payment",
+          selectedNurseIds
+        );
+        const tasksResult =
+          await CustomizeTaskService.getCustomizeTasksByBookingId(
+            bookingId
+          );
+        if (tasksResult.success) {
+          const tasks = tasksResult.data || [];
+          if (tasks.length === 0) {
+            console.log(
+              "PaymentScreen: No customize tasks found to assign"
+            );
+          }
+          // Group tasks by serviceID and prefer unassigned first
+          const tasksByService = tasks.reduce((acc, t) => {
+            const key = t.serviceID || "unknown";
+            acc[key] = acc[key] || [];
+            acc[key].push(t);
+            return acc;
+          }, {});
+          Object.keys(tasksByService).forEach((k) =>
+            tasksByService[k].sort(
+              (a, b) =>
+                (a.nursingID ? 1 : 0) - (b.nursingID ? 1 : 0) ||
+                (a.taskOrder || 0) - (b.taskOrder || 0)
+            )
+          );
+
+          // Build list of unassigned tasks per service
+          const unassignedByService = Object.fromEntries(
+            Object.entries(tasksByService).map(([k, list]) => [
+              k,
+              list.filter((t) => !t.nursingID),
+            ])
+          );
+          const totalUnassigned = Object.values(
+            unassignedByService
+          ).reduce((sum, arr) => sum + arr.length, 0);
+          if (totalUnassigned === 0) {
+            console.log(
+              "PaymentScreen: All tasks already have nursing assigned. Skipping UpdateNursing calls."
+            );
+          } else {
+            const assignments = selectedNurseIds.slice(
+              0,
+              requiredNurseCount
+            );
+            const updatePromises = assignments.map((nurseId, idx) => {
+              const targetServiceId = slotServiceIds[idx] || null;
+              let task = null;
+              if (
+                targetServiceId &&
+                unassignedByService[targetServiceId] &&
+                unassignedByService[targetServiceId].length > 0
+              ) {
+                task = unassignedByService[targetServiceId].shift();
+              } else {
+                // Fallback: any unassigned task
+                const anyServiceKey = Object.keys(
+                  unassignedByService
+                ).find((k) => unassignedByService[k].length > 0);
+                task = anyServiceKey
+                  ? unassignedByService[anyServiceKey].shift()
+                  : null;
+              }
+              if (!task) return Promise.resolve({ success: true });
+              console.log(
+                "Assigning nurse",
+                nurseId,
+                "to task",
+                task.customizeTaskID,
+                "(serviceID:",
+                task.serviceID,
+                ")"
+              );
+              return CustomizeTaskService.updateNursing(
+                task.customizeTaskID,
+                parseInt(nurseId)
+              );
+            });
+            const results = await Promise.all(updatePromises);
+            const failed = results.find((r) => !r.success);
+            if (failed) {
+              Alert.alert(
+                "Lỗi",
+                `Không thể lưu lựa chọn điều dưỡng. ${
+                  failed.error || "Vui lòng thử lại."
+                }`
+              );
+              return;
+            }
+          }
+        } else {
+          Alert.alert(
+            "Lỗi",
+            "Không thể tải danh sách công việc để gán điều dưỡng."
+          );
+          return;
+        }
+      }
+    } catch (assignError) {
+      console.error(
+        "PaymentScreen: Error when assigning nurses:",
+        assignError
+      );
+      Alert.alert("Lỗi", "Không thể lưu lựa chọn điều dưỡng.");
+      return;
+    }
 
     // 1. Lấy số dư ví - sử dụng careProfileID để lấy accountID
     try {
@@ -822,6 +1052,79 @@ export default function PaymentScreen() {
         {renderPackageDetails()}
         {renderServiceDetails()}
 
+        {/* Staff Selection Box */}
+        <View style={styles.staffCard}>
+          <Text style={styles.staffTitle}>
+            Chọn điều dưỡng/ tư vấn viên
+          </Text>
+          <View style={styles.staffModeRow}>
+            <TouchableOpacity
+              style={[
+                styles.modeButton,
+                selectionMode === "user" && styles.modeButtonActive,
+              ]}
+              onPress={() => setSelectionMode("user")}>
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  selectionMode === "user" &&
+                    styles.modeButtonTextActive,
+                ]}>
+                Khách hàng chọn
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.modeButton,
+                selectionMode === "system" && styles.modeButtonActive,
+              ]}
+              onPress={() => setSelectionMode("system")}>
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  selectionMode === "system" &&
+                    styles.modeButtonTextActive,
+                ]}>
+                Hệ thống chọn
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {selectionMode === "user" && (
+            <View style={styles.manualSelection}>
+              <Text style={styles.manualHint}>
+                {`Cần chọn: ${requiredNurseCount} ${
+                  requiredNurseCount > 1 ? "người" : "người"
+                }.`}
+              </Text>
+              {Array.from({ length: requiredNurseCount }).map(
+                (_, idx) => {
+                  const chosenId = selectedNurseIds[idx];
+                  const chosen = nurses.find(
+                    (n) => n.nursingID === chosenId
+                  );
+                  return (
+                    <View key={idx} style={styles.slotRow}>
+                      <Text style={styles.slotLabel}>
+                        Vị trí {idx + 1}:
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.selectSlotButton}
+                        onPress={() => openNursePicker(idx)}>
+                        <Text style={styles.selectSlotButtonText}>
+                          {chosen
+                            ? chosen.fullName
+                            : "Chọn điều dưỡng"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }
+              )}
+            </View>
+          )}
+        </View>
+
         {/* Payment Summary */}
         <View style={styles.paymentCard}>
           <Text style={styles.paymentTitle}>Tổng thanh toán</Text>
@@ -921,13 +1224,14 @@ export default function PaymentScreen() {
           <TouchableOpacity
             style={[
               styles.payButton,
-              isProcessingPayment && styles.disabledButton,
+              (!isPayActionEnabled() || isProcessingPayment) &&
+                styles.disabledButton,
             ]}
             onPress={() => {
               console.log("PaymentScreen: Pay button pressed!");
               handlePayment();
             }}
-            disabled={isProcessingPayment}>
+            disabled={!isPayActionEnabled()}>
             <Text style={styles.payButtonText}>
               {isProcessingPayment
                 ? "Đang xử lý..."
@@ -942,6 +1246,76 @@ export default function PaymentScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Nurse Picker Modal */}
+      {showNursePicker && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {(() => {
+              const requiredServiceId =
+                slotServiceIds[pickerSlotIndex] || null;
+              const requiredServiceName = services.find(
+                (s) => s.serviceID === requiredServiceId
+              )?.serviceName;
+              const allowedNurseIds = new Set(
+                nurseServiceLinks
+                  .filter((link) =>
+                    requiredServiceId
+                      ? link.serviceID === requiredServiceId
+                      : true
+                  )
+                  .map((l) => l.nursingID)
+              );
+              const list = (nurses || []).filter((n) =>
+                requiredServiceId
+                  ? allowedNurseIds.has(n.nursingID)
+                  : true
+              );
+              return (
+                <>
+                  <Text style={styles.modalTitle}>
+                    {requiredServiceName
+                      ? `Chọn điều dưỡng cho: ${requiredServiceName}`
+                      : "Chọn điều dưỡng"}
+                  </Text>
+                  <ScrollView style={{ width: "100%" }}>
+                    {list.length === 0 ? (
+                      <Text
+                        style={{
+                          paddingVertical: 12,
+                          color: "#666",
+                        }}>
+                        Không có điều dưỡng phù hợp
+                      </Text>
+                    ) : (
+                      list.map((nurse) => (
+                        <TouchableOpacity
+                          key={nurse.nursingID}
+                          style={styles.nurseRow}
+                          onPress={() =>
+                            chooseNurseForSlot(nurse.nursingID)
+                          }>
+                          <Text style={styles.nurseNameText}>
+                            {nurse.fullName}
+                          </Text>
+                          <Text style={styles.nurseMetaText}>
+                            {nurse.major || "Nurse"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </ScrollView>
+                </>
+              );
+            })()}
+            <TouchableOpacity
+              style={[styles.cancelButton, { marginTop: 10 }]}
+              onPress={() => setShowNursePicker(false)}>
+              <Text style={styles.cancelButtonText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -1297,5 +1671,117 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginLeft: 5,
+  },
+  // Staff selection styles
+  staffCard: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  staffTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 12,
+  },
+  staffModeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    marginHorizontal: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#DDD",
+    backgroundColor: "#FFF",
+    alignItems: "center",
+  },
+  modeButtonActive: {
+    backgroundColor: "#4CAF50",
+    borderColor: "#4CAF50",
+  },
+  modeButtonText: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "bold",
+  },
+  modeButtonTextActive: {
+    color: "white",
+  },
+  manualSelection: {
+    marginTop: 10,
+  },
+  manualHint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+  },
+  slotRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  slotLabel: {
+    fontSize: 14,
+    color: "#333",
+  },
+  selectSlotButton: {
+    backgroundColor: "#4FC3F7",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  selectSlotButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  // Modal styles for nurse picker
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    width: "90%",
+    maxHeight: "70%",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  nurseRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEE",
+  },
+  nurseNameText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "bold",
+  },
+  nurseMetaText: {
+    fontSize: 12,
+    color: "#666",
   },
 });

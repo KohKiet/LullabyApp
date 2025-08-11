@@ -192,6 +192,51 @@ class CustomizeTaskService {
     }
   }
 
+  // Update nursing assignment for a customize task
+  async updateNursing(customizeTaskID, nursingID) {
+    try {
+      const url = `${API_CONFIG.BASE_URL}/api/CustomizeTask/UpdateNursing/${customizeTaskID}/${nursingID}`;
+      console.log("CustomizeTaskService.updateNursing URL:", url);
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: { accept: "*/*" },
+      });
+      console.log(
+        "CustomizeTaskService.updateNursing status:",
+        response.status
+      );
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          "CustomizeTaskService.updateNursing success:",
+          data
+        );
+        return { success: true, data };
+      }
+      let errorPayload = null;
+      try {
+        errorPayload = await response.json();
+      } catch (_) {
+        errorPayload = await response.text();
+      }
+      const message =
+        (errorPayload &&
+          (errorPayload.message || JSON.stringify(errorPayload))) ||
+        `HTTP ${response.status}`;
+      console.warn(
+        "CustomizeTaskService.updateNursing failed:",
+        message
+      );
+      return { success: false, error: message };
+    } catch (error) {
+      console.error(
+        "CustomizeTaskService.updateNursing exception:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
   // Format status for display
   formatStatus(status) {
     switch (status) {

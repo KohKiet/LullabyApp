@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 import AuthService from "../services/authService";
-import BookingService from "../services/bookingService";
 import CareProfileService from "../services/careProfileService";
 import CustomizePackageService from "../services/customizePackageService";
 import CustomizeTaskService from "../services/customizeTaskService";
@@ -146,7 +145,6 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (bookings.length > 0) {
-        console.log("Using cached bookings data");
         return;
       }
 
@@ -174,12 +172,27 @@ export default function AppointmentScreen() {
       const userBookings = [];
       for (const careProfileID of userCareProfileIDs) {
         try {
-          const result =
-            await BookingService.getBookingsByCareProfileId(
-              careProfileID
+          // Sử dụng API Booking/GetAllByCareProfile thay vì BookingService
+          const response = await fetch(
+            `https://cool-dhawan.103-28-36-58.plesk.page/api/Booking/GetAllByCareProfile/${careProfileID}`,
+            {
+              method: "GET",
+              headers: {
+                accept: "*/*",
+              },
+            }
+          );
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result && Array.isArray(result)) {
+              userBookings.push(...result);
+            }
+          } else {
+            console.error(
+              `Failed to load bookings for care profile ${careProfileID}:`,
+              response.status
             );
-          if (result.success && result.data) {
-            userBookings.push(...result.data);
           }
         } catch (error) {
           console.error(
@@ -222,7 +235,11 @@ export default function AppointmentScreen() {
       if (response.ok) {
         const holidaysData = await response.json();
         setHolidays(holidaysData);
-        console.log("Holidays loaded:", holidaysData.length);
+      } else {
+        console.error(
+          "Failed to load holidays, status:",
+          response.status
+        );
       }
     } catch (error) {
       console.error("Error loading holidays:", error);
@@ -233,24 +250,14 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (customizePackagesMap[bookingID]) {
-        console.log(
-          `Using cached customize packages for booking ${bookingID}`
-        );
         return;
       }
 
-      console.log(
-        `Loading customize packages for booking ${bookingID}...`
-      );
       const result =
         await CustomizePackageService.getCustomizePackagesByBookingId(
           bookingID
         );
       if (result.success) {
-        console.log(
-          `Customize packages for booking ${bookingID}:`,
-          result.data
-        );
         setCustomizePackagesMap((prev) => ({
           ...prev,
           [bookingID]: result.data,
@@ -274,24 +281,14 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (customizeTasksMap[bookingID]) {
-        console.log(
-          `Using cached customize tasks for booking ${bookingID}`
-        );
         return;
       }
 
-      console.log(
-        `Loading customize tasks for booking ${bookingID}...`
-      );
       const result =
         await CustomizeTaskService.getCustomizeTasksByBookingId(
           bookingID
         );
       if (result.success) {
-        console.log(
-          `Customize tasks for booking ${bookingID}:`,
-          result.data
-        );
         setCustomizeTasksMap((prev) => ({
           ...prev,
           [bookingID]: result.data,
@@ -315,13 +312,11 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (services.length > 0) {
-        console.log("Using cached services data");
         return;
       }
 
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        console.log("Services loaded:", result.data);
         setServices(result.data);
         await AsyncStorage.setItem(
           "cachedServices",
@@ -335,15 +330,8 @@ export default function AppointmentScreen() {
 
   const loadServiceTasks = async () => {
     try {
-      console.log("Loading service tasks...");
       const result = await ServiceTaskService.getAllServiceTasks();
       if (result.success) {
-        console.log(
-          "Service tasks loaded:",
-          result.data.length,
-          "items"
-        );
-        console.log("Sample service task:", result.data[0]);
         setServiceTasks(result.data);
       } else {
         console.log("Failed to load service tasks:", result.error);
@@ -357,7 +345,6 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (nurses.length > 0) {
-        console.log("Using cached nurses data");
         return;
       }
 
@@ -379,11 +366,9 @@ export default function AppointmentScreen() {
     try {
       // Kiểm tra xem đã có dữ liệu từ cache chưa
       if (careProfiles.length > 0) {
-        console.log("Using cached care profiles data");
         return;
       }
 
-      console.log("Loading care profiles...");
       const result =
         await CareProfileService.getCareProfilesByAccountId(
           user.accountID || user.id
@@ -412,11 +397,14 @@ export default function AppointmentScreen() {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "pending":
-      case "cancelled":
         return "#FFD700"; // Vàng
+      case "cancelled":
+        return "#FF6B6B"; // Đỏ nhạt (khác với holiday đỏ đậm)
       case "confirmed":
-      case "paid":
       case "isscheduled":
+      case "isScheduled":
+        return "#4FC3F7"; // Xanh biển
+      case "paid":
         return "#4FC3F7"; // Xanh biển
       case "completed":
         return "#4CAF50"; // Xanh lá
@@ -430,9 +418,11 @@ export default function AppointmentScreen() {
       case "pending":
         return "Chờ xác nhận";
       case "confirmed":
-      case "paid":
       case "isscheduled":
+      case "isScheduled":
         return "Đã xác nhận";
+      case "paid":
+        return "Đã thanh toán";
       case "completed":
         return "Đã hoàn thành";
       case "cancelled":
@@ -457,44 +447,24 @@ export default function AppointmentScreen() {
     }
   };
 
-  // Tạo marked dates cho calendar
+  // Tạo markedDates cho calendar
   const getMarkedDates = () => {
     const markedDates = {};
 
-    // Thêm bookings
-    if (bookings && bookings.length > 0) {
-      bookings.forEach((booking) => {
-        const dateKey = booking.workdate?.split("T")[0];
-        if (dateKey) {
-          markedDates[dateKey] = {
-            selected: true,
-            selectedColor: getStatusColor(booking.status),
-            selectedTextColor: "white",
-            dots: [
-              {
-                key: `booking-${booking.bookingID}`,
-                color: getStatusColor(booking.status),
-                selectedDotColor: "white",
-              },
-            ],
-          };
-        }
-      });
-    }
-
-    // Thêm holidays
+    // Thêm holidays trước
     if (holidays && holidays.length > 0) {
       holidays.forEach((holiday) => {
         const startDate = new Date(holiday.startDate);
         const endDate = new Date(holiday.endDate);
 
-        // Tạo range từ startDate đến endDate
+        // Tạo range từ startDate đến endDate (inclusive)
         for (
           let d = new Date(startDate);
           d <= endDate;
           d.setDate(d.getDate() + 1)
         ) {
           const dateKey = d.toISOString().split("T")[0];
+
           if (markedDates[dateKey]) {
             // Nếu đã có booking, thêm holiday dot
             if (!markedDates[dateKey].dots) {
@@ -502,7 +472,7 @@ export default function AppointmentScreen() {
             }
             markedDates[dateKey].dots.push({
               key: `holiday-${holiday.holidayID}`,
-              color: "#FF0000", // Đỏ cho holiday
+              color: "#FF0000", // Đỏ đậm cho holiday
               selectedDotColor: "white",
             });
           } else {
@@ -511,7 +481,42 @@ export default function AppointmentScreen() {
               dots: [
                 {
                   key: `holiday-${holiday.holidayID}`,
-                  color: "#FF0000", // Đỏ cho holiday
+                  color: "#FF0000", // Đỏ đậm cho holiday
+                  selectedDotColor: "white",
+                },
+              ],
+            };
+          }
+        }
+      });
+    }
+
+    // Thêm bookings
+    if (bookings && bookings.length > 0) {
+      const nonPendingBookings = bookings.filter(
+        (b) => b.status?.toLowerCase() !== "pending"
+      );
+
+      nonPendingBookings.forEach((booking) => {
+        const dateKey = booking.workdate?.split("T")[0];
+        if (dateKey) {
+          if (markedDates[dateKey]) {
+            // Nếu đã có holiday, thêm booking dot
+            if (!markedDates[dateKey].dots) {
+              markedDates[dateKey].dots = [];
+            }
+            markedDates[dateKey].dots.push({
+              key: `booking-${booking.bookingID}`,
+              color: getStatusColor(booking.status),
+              selectedDotColor: "white",
+            });
+          } else {
+            // Nếu chưa có gì, tạo mới với booking (chỉ có dots, không có background)
+            markedDates[dateKey] = {
+              dots: [
+                {
+                  key: `booking-${booking.bookingID}`,
+                  color: getStatusColor(booking.status),
                   selectedDotColor: "white",
                 },
               ],
@@ -531,7 +536,10 @@ export default function AppointmentScreen() {
     const today = new Date().toISOString().split("T")[0];
     const todayBookings = bookings.filter((booking) => {
       const bookingDate = booking.workdate?.split("T")[0];
-      return bookingDate === today;
+      return (
+        bookingDate === today &&
+        booking.status?.toLowerCase() !== "pending"
+      );
     });
 
     // Sắp xếp theo thứ tự mới nhất (từ trên xuống)
@@ -549,7 +557,10 @@ export default function AppointmentScreen() {
 
     const filteredBookings = bookings.filter((booking) => {
       const bookingDate = booking.workdate?.split("T")[0];
-      return bookingDate === dateString;
+      return (
+        bookingDate === dateString &&
+        booking.status?.toLowerCase() !== "pending"
+      );
     });
 
     // Sắp xếp theo thứ tự mới nhất (từ trên xuống)
@@ -563,7 +574,6 @@ export default function AppointmentScreen() {
 
   // Xử lý khi user chọn ngày
   const handleDateSelect = (dateString) => {
-    console.log("Date selected:", dateString);
     setSelectedDate(dateString);
   };
 
@@ -636,7 +646,136 @@ export default function AppointmentScreen() {
 
   // Nếu đã đăng nhập, hiển thị lịch hẹn
   const markedDates = getMarkedDates();
+
+  // Tạo markedDates với multiDot để hiển thị nhiều dots
+  const multiDotMarkedDates = {};
+
+  // Thêm holidays
+  if (holidays && holidays.length > 0) {
+    holidays.forEach((holiday) => {
+      const startDate = new Date(holiday.startDate);
+      const endDate = new Date(holiday.endDate);
+
+      for (
+        let d = new Date(startDate);
+        d <= endDate;
+        d.setDate(d.getDate() + 1)
+      ) {
+        const dateKey = d.toISOString().split("T")[0];
+        multiDotMarkedDates[dateKey] = {
+          multiDot: true,
+          dots: [
+            {
+              key: `holiday-${holiday.holidayID}`,
+              color: "#FF0000", // Đỏ cho holiday
+              selectedDotColor: "white",
+            },
+          ],
+        };
+      }
+    });
+  }
+
+  // Thêm bookings
+  if (bookings && bookings.length > 0) {
+    const nonPendingBookings = bookings.filter(
+      (b) => b.status?.toLowerCase() !== "pending"
+    );
+
+    nonPendingBookings.forEach((booking) => {
+      const dateKey = booking.workdate?.split("T")[0];
+      if (dateKey) {
+        if (multiDotMarkedDates[dateKey]) {
+          // Nếu đã có holiday, thêm booking dot
+          if (!multiDotMarkedDates[dateKey].dots) {
+            multiDotMarkedDates[dateKey].dots = [];
+          }
+          multiDotMarkedDates[dateKey].dots.push({
+            key: `booking-${booking.bookingID}`,
+            color: getStatusColor(booking.status),
+            selectedDotColor: "white",
+          });
+        } else {
+          // Tạo mới với booking
+          multiDotMarkedDates[dateKey] = {
+            multiDot: true,
+            dots: [
+              {
+                key: `booking-${booking.bookingID}`,
+                color: getStatusColor(booking.status),
+                selectedDotColor: "white",
+              },
+            ],
+          };
+        }
+      }
+    });
+  }
+
+  // Thêm test dot để kiểm tra
+  multiDotMarkedDates["2025-08-15"] = {
+    marked: true,
+    dotColor: "#FF0000", // Đỏ test
+  };
+
   const todayAppointments = getTodayAppointments();
+
+  // Tạo markedDates đơn giản: hình tròn cho booking, dot cho holiday
+  const workingMarkedDates = {};
+
+  // Thêm holidays (chỉ có dots, không có background)
+  if (holidays && holidays.length > 0) {
+    holidays.forEach((holiday) => {
+      const startDate = new Date(holiday.startDate);
+      const endDate = new Date(holiday.endDate);
+
+      for (
+        let d = new Date(startDate);
+        d <= endDate;
+        d.setDate(d.getDate() + 1)
+      ) {
+        const dateKey = d.toISOString().split("T")[0];
+        workingMarkedDates[dateKey] = {
+          marked: true,
+          dotColor: "#FF0000", // Đỏ cho holiday
+        };
+      }
+    });
+  }
+
+  // Thêm bookings (có background hình tròn)
+  if (bookings && bookings.length > 0) {
+    // Filter out pending and cancelled bookings
+    const nonPendingAndCancelledBookings = bookings.filter(
+      (b) =>
+        b.status?.toLowerCase() !== "pending" &&
+        b.status?.toLowerCase() !== "cancelled"
+    );
+
+    nonPendingAndCancelledBookings.forEach((booking) => {
+      const dateKey = new Date(booking.workdate)
+        .toISOString()
+        .split("T")[0];
+      const statusColor = getStatusColor(booking.status);
+
+      if (workingMarkedDates[dateKey]) {
+        // If it's a holiday, keep the dot, but add booking background
+        workingMarkedDates[dateKey] = {
+          ...workingMarkedDates[dateKey],
+          selected: true,
+          selectedColor: statusColor,
+          selectedTextColor: "white",
+        };
+      } else {
+        // If no holiday, just add booking background
+        workingMarkedDates[dateKey] = {
+          selected: true,
+          selectedColor: statusColor,
+          selectedTextColor: "white",
+        };
+      }
+    });
+  }
 
   return (
     <LinearGradient
@@ -663,59 +802,11 @@ export default function AppointmentScreen() {
         <View style={styles.calendarContainer}>
           <Calendar
             current={new Date().toISOString().split("T")[0]}
-            markedDates={markedDates}
+            markedDates={workingMarkedDates}
             hideExtraDays={false}
             disableMonthChange={false}
             enableSwipeMonths={true}
             onDayPress={(day) => handleDateSelect(day.dateString)}
-            renderDay={(day, item) => {
-              const isMarked = markedDates[day.dateString];
-              const isToday =
-                day.dateString ===
-                new Date().toISOString().split("T")[0];
-              const isSelected = day.dateString === selectedDate;
-
-              return (
-                <View style={styles.dayContainer}>
-                  <View
-                    style={[
-                      styles.dayCircle,
-                      isMarked && {
-                        backgroundColor: isMarked.selectedColor,
-                      },
-                      isToday && !isMarked && styles.todayCircle,
-                      isSelected && styles.selectedDateCircle,
-                    ]}>
-                    <Text
-                      style={[
-                        styles.dayText,
-                        isMarked && styles.selectedDayText,
-                        isToday && !isMarked && styles.todayText,
-                        isSelected &&
-                          !isMarked &&
-                          styles.selectedDateText,
-                      ]}>
-                      {day.day}
-                    </Text>
-                  </View>
-                  {/* Hiển thị dots cho holiday và booking */}
-                  {isMarked && isMarked.dots && (
-                    <View style={styles.dotsContainer}>
-                      {isMarked.dots.map((dot, index) => (
-                        <View
-                          key={dot.key}
-                          style={[
-                            styles.dot,
-                            { backgroundColor: dot.color },
-                            index > 0 && styles.dotMargin,
-                          ]}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              );
-            }}
             theme={{
               calendarBackground: "#fff",
               textSectionTitleColor: "#333",
@@ -785,19 +876,10 @@ export default function AppointmentScreen() {
             <View
               style={[
                 styles.legendCircle,
-                { backgroundColor: "#FFD700" },
-              ]}
-            />
-            <Text style={styles.legendText}>Chờ xác nhận</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View
-              style={[
-                styles.legendCircle,
                 { backgroundColor: "#4FC3F7" },
               ]}
             />
-            <Text style={styles.legendText}>Đã xác nhận</Text>
+            <Text style={styles.legendText}>Đã thanh toán</Text>
           </View>
           <View style={styles.legendRow}>
             <View
@@ -919,16 +1001,6 @@ export default function AppointmentScreen() {
                     const tasks =
                       customizeTasksMap[booking.bookingID] || [];
 
-                    // Debug: Log tất cả tasks để kiểm tra
-                    console.log(
-                      `Tasks for booking ${booking.bookingID}:`,
-                      tasks
-                    );
-                    console.log(
-                      `Tasks with nursingID:`,
-                      tasks.filter((task) => task.nursingID)
-                    );
-
                     const assignedTasks = tasks.filter(
                       (task) => task.nursingID
                     );
@@ -1029,12 +1101,6 @@ export default function AppointmentScreen() {
                             const serviceInfo = services.find(
                               (s) => s.serviceID === pkg.serviceID
                             );
-                            console.log(
-                              "Package:",
-                              pkg,
-                              "Service info:",
-                              serviceInfo
-                            );
                             return (
                               serviceInfo?.serviceName ||
                               `Dịch vụ ${pkg.serviceID}`
@@ -1078,12 +1144,6 @@ export default function AppointmentScreen() {
                                 const serviceInfo = services.find(
                                   (s) =>
                                     s.serviceID === task.serviceID
-                                );
-                                console.log(
-                                  "Task:",
-                                  task,
-                                  "Service info:",
-                                  serviceInfo
                                 );
                                 const assignedNurse = task.nursingID
                                   ? nurses.find(
@@ -1538,13 +1598,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 3,
+    alignItems: "center",
   },
   dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   dotMargin: {
-    marginLeft: 2,
+    marginLeft: 3,
   },
 });
