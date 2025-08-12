@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,6 +18,7 @@ import AuthService from "../services/authService";
 import CareProfileService from "../services/careProfileService";
 import CustomizePackageService from "../services/customizePackageService";
 import CustomizeTaskService from "../services/customizeTaskService";
+import FeedbackService from "../services/feedbackService";
 import NursingSpecialistService from "../services/nursingSpecialistService";
 import ServiceTaskService from "../services/serviceTaskService";
 import ServiceTypeService from "../services/serviceTypeService";
@@ -42,6 +44,33 @@ export default function AppointmentScreen() {
   const [serviceTasks, setServiceTasks] = useState([]);
   const [nurses, setNurses] = useState([]);
   const [careProfiles, setCareProfiles] = useState([]);
+
+  // Feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackRate, setFeedbackRate] = useState(0);
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackContext, setFeedbackContext] = useState({
+    nursingID: null,
+    serviceID: null,
+    customizeTaskID: null,
+  });
+  const [feedbackMap, setFeedbackMap] = useState({});
+
+  useEffect(() => {
+    const loadAllFeedbacks = async () => {
+      const res = await FeedbackService.getAllFeedbacks();
+      if (res.success && Array.isArray(res.data)) {
+        const map = {};
+        res.data.forEach((fb) => {
+          if (fb.customizeTaskID != null) {
+            map[fb.customizeTaskID] = fb;
+          }
+        });
+        setFeedbackMap(map);
+      }
+    };
+    loadAllFeedbacks();
+  }, []);
 
   // Reload user data khi screen được focus
   useFocusEffect(
@@ -577,6 +606,145 @@ export default function AppointmentScreen() {
     setSelectedDate(dateString);
   };
 
+  const openFeedbackModal = (task) => {
+    if (!task?.nursingID) {
+      return;
+    }
+    setFeedbackContext({
+      nursingID: task.nursingID,
+      serviceID: task.serviceID,
+      customizeTaskID: task.customizeTaskID,
+    });
+    setFeedbackRate(0);
+    setFeedbackContent("");
+    setShowFeedbackModal(true);
+  };
+
+  const renderStars = (rate, onSelect) => {
+    const stars = [1, 2, 3, 4, 5];
+    return (
+      <View style={{ flexDirection: "row" }}>
+        {stars.map((value) => (
+          <TouchableOpacity
+            key={value}
+            onPress={() => onSelect(value)}
+            style={{ marginRight: 6 }}>
+            <Ionicons
+              name={value <= rate ? "star" : "star-outline"}
+              size={22}
+              color={value <= rate ? "#FFB300" : "#CCC"}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const submitFeedback = async () => {
+    if (!feedbackContext.nursingID || !feedbackContext.serviceID) {
+      return;
+    }
+    if (feedbackRate <= 0) {
+      alert("Vui lòng chọn số sao (1-5)");
+      return;
+    }
+
+    const result = await FeedbackService.submitFeedback({
+      nursingID: feedbackContext.nursingID,
+      customizeTaskID: feedbackContext.customizeTaskID || 0,
+      serviceID: feedbackContext.serviceID,
+      rate: feedbackRate,
+      content: feedbackContent || "",
+    });
+
+    if (result.success) {
+      alert("Cảm ơn bạn đã đánh giá!");
+      setShowFeedbackModal(false);
+      setFeedbackRate(0);
+      setFeedbackContent("");
+      setFeedbackContext({
+        nursingID: null,
+        serviceID: null,
+        customizeTaskID: null,
+      });
+    } else {
+      alert(result.error || "Không thể gửi đánh giá");
+    }
+  };
+
+  // Small helper component to render feedback per task
+  const FeedbackRenderer = ({
+    task,
+    booking,
+    onOpenModal,
+    feedbackMap,
+  }) => {
+    const feedback = task?.customizeTaskID
+      ? feedbackMap[task.customizeTaskID]
+      : null;
+
+    const canFeedback = (() => {
+      const isCompleted =
+        (booking.status || "").toLowerCase() === "completed";
+      const now = new Date();
+      const apptTime = new Date(booking.workdate);
+      return isCompleted || now >= apptTime;
+    })();
+
+    if (feedback) {
+      return (
+        <View style={{ marginTop: 4 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 2,
+            }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Ionicons
+                key={i}
+                name={
+                  i <= (feedback.rate || 0) ? "star" : "star-outline"
+                }
+                size={14}
+                color="#FFB300"
+              />
+            ))}
+          </View>
+          {feedback.content ? (
+            <Text style={{ fontSize: 12, color: "#555" }}>
+              {feedback.content}
+            </Text>
+          ) : null}
+        </View>
+      );
+    }
+
+    if (!canFeedback) return null;
+
+    return (
+      <TouchableOpacity
+        style={styles.feedbackButton}
+        onPress={() =>
+          onOpenModal({
+            nursingID: task.nursingID,
+            serviceID: task.serviceID,
+            customizeTaskID: task.customizeTaskID,
+          })
+        }
+        activeOpacity={0.8}>
+        <LinearGradient
+          colors={["#FFCC66", "#FFFFCC"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.feedbackButtonGradient}>
+          <Ionicons name="star" size={14} color="#FFFFFF" />
+          <Text style={styles.feedbackButtonText}>Đánh giá</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
   // Nếu chưa đăng nhập, hiển thị màn hình đăng nhập
   if (!isLoggedIn) {
     return (
@@ -1021,11 +1189,30 @@ export default function AppointmentScreen() {
                           const nurseName =
                             nurse?.fullName ||
                             "Điều dưỡng đã được gán";
-                          return `${serviceName}: ${nurseName}`;
+                          return {
+                            label: `${serviceName}: ${nurseName}`,
+                            task,
+                          };
                         }
                       );
 
-                      return nurseServices.join(", ");
+                      return (
+                        <View>
+                          {nurseServices.map((ns, idx) => (
+                            <View
+                              key={idx}
+                              style={{ marginBottom: 6 }}>
+                              <Text>{ns.label}</Text>
+                              <FeedbackRenderer
+                                task={ns.task}
+                                booking={booking}
+                                onOpenModal={openFeedbackModal}
+                                feedbackMap={feedbackMap}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      );
                     }
                     return "Chưa có điều dưỡng";
                   })()}
@@ -1196,6 +1383,64 @@ export default function AppointmentScreen() {
                                           Điều dưỡng:{" "}
                                           {assignedNurse.fullName}
                                         </Text>
+                                        {(() => {
+                                          // Chỉ cho phép feedback khi đã hoàn thành hoặc qua giờ hẹn
+                                          const canFeedback = (() => {
+                                            const isCompleted =
+                                              (
+                                                booking.status || ""
+                                              ).toLowerCase() ===
+                                              "completed";
+                                            const now = new Date();
+                                            const apptTime = new Date(
+                                              booking.workdate
+                                            );
+                                            return (
+                                              isCompleted ||
+                                              now >= apptTime
+                                            );
+                                          })();
+                                          return canFeedback ? (
+                                            <TouchableOpacity
+                                              style={
+                                                styles.feedbackButton
+                                              }
+                                              activeOpacity={0.8}
+                                              onPress={() =>
+                                                openFeedbackModal({
+                                                  nursingID:
+                                                    assignedNurse.nursingID,
+                                                  serviceID:
+                                                    task.serviceID,
+                                                  customizeTaskID:
+                                                    task.customizeTaskID,
+                                                })
+                                              }>
+                                              <LinearGradient
+                                                colors={[
+                                                  "#FFCC66",
+                                                  "#FFFFCC",
+                                                ]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 1 }}
+                                                style={
+                                                  styles.feedbackButtonGradient
+                                                }>
+                                                <Ionicons
+                                                  name="star"
+                                                  size={14}
+                                                  color="#FFFFFF"
+                                                />
+                                                <Text
+                                                  style={
+                                                    styles.feedbackButtonText
+                                                  }>
+                                                  Đánh giá
+                                                </Text>
+                                              </LinearGradient>
+                                            </TouchableOpacity>
+                                          ) : null;
+                                        })()}
                                       </View>
                                     ) : (
                                       <Text
@@ -1217,6 +1462,60 @@ export default function AppointmentScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <View style={styles.feedbackModalOverlay}>
+          <View style={styles.feedbackModalContent}>
+            <Text style={styles.feedbackTitle}>
+              Đánh giá điều dưỡng
+            </Text>
+
+            <View style={styles.feedbackStarsRow}>
+              <Text style={styles.feedbackLabel}>Đánh giá:</Text>
+              {renderStars(feedbackRate, setFeedbackRate)}
+            </View>
+
+            <Text style={styles.feedbackLabel}>
+              Nội dung (tùy chọn):
+            </Text>
+            <TextInput
+              style={styles.feedbackTextarea}
+              value={feedbackContent}
+              onChangeText={setFeedbackContent}
+              placeholder="Nhập nội dung đánh giá..."
+              multiline
+              numberOfLines={4}
+              placeholderTextColor="#999"
+            />
+
+            <View style={styles.feedbackActions}>
+              <TouchableOpacity
+                style={[
+                  styles.feedbackActionButton,
+                  { backgroundColor: "#CCC" },
+                ]}
+                onPress={() => setShowFeedbackModal(false)}>
+                <Text style={styles.feedbackActionText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.feedbackActionButton,
+                  { backgroundColor: "#4CAF50" },
+                ]}
+                onPress={submitFeedback}>
+                <Text
+                  style={[
+                    styles.feedbackActionText,
+                    { color: "#FFF" },
+                  ]}>
+                  Gửi
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -1607,5 +1906,97 @@ const styles = StyleSheet.create({
   },
   dotMargin: {
     marginLeft: 3,
+  },
+  feedbackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+  },
+  feedbackButtonText: {
+    marginLeft: 5,
+    fontSize: 13,
+    color: "#000000",
+    fontWeight: "bold",
+  },
+  feedbackButtonGradient: {
+    flexDirection: "row",
+    // alignItems: "center",
+    // justifyContent: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    width: "100%",
+  },
+  feedbackModalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  feedbackModalContent: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 25,
+    width: "80%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  feedbackTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 20,
+  },
+  feedbackStarsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  feedbackLabel: {
+    fontSize: 16,
+    color: "#666",
+    marginRight: 10,
+  },
+  feedbackTextarea: {
+    width: "100%",
+    height: 100,
+    borderColor: "#E0E0E0",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 20,
+  },
+  feedbackActions: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+  },
+  feedbackActionButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  feedbackActionText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "white",
   },
 });

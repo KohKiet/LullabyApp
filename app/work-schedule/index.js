@@ -84,6 +84,80 @@ export default function WorkScheduleScreen() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [markedDates, setMarkedDates] = useState({});
 
+  // Kiểm tra xem có thể điểm danh hay không
+  const canMarkAttendance = (schedule) => {
+    if (!schedule || !schedule.workDate) return false;
+
+    const now = new Date();
+    const workDate = new Date(schedule.workDate);
+
+    // Chỉ cho phép điểm danh sau thời gian bắt đầu làm việc
+    return now >= workDate;
+  };
+
+  // Xử lý điểm danh
+  const handleMarkAttendance = async (schedule) => {
+    if (!canMarkAttendance(schedule)) {
+      Alert.alert(
+        "Không thể điểm danh",
+        "Chỉ có thể điểm danh sau giờ bắt đầu làm việc."
+      );
+      return;
+    }
+
+    try {
+      Alert.alert(
+        "Xác nhận điểm danh",
+        `Bạn có chắc chắn muốn điểm danh cho lịch làm việc #${schedule.workScheduleID}?`,
+        [
+          {
+            text: "Hủy",
+            style: "cancel",
+          },
+          {
+            text: "Điểm danh",
+            onPress: async () => {
+              const result =
+                await WorkScheduleService.updateIsAttended(
+                  schedule.workScheduleID
+                );
+
+              if (result.success) {
+                Alert.alert("Thành công", "Đã điểm danh thành công!");
+
+                // Cập nhật local state
+                setWorkSchedules((prevSchedules) =>
+                  prevSchedules.map((s) =>
+                    s.workScheduleID === schedule.workScheduleID
+                      ? { ...s, isAttended: true }
+                      : s
+                  )
+                );
+
+                // Cập nhật today schedules nếu cần
+                setTodaySchedules((prevTodaySchedules) =>
+                  prevTodaySchedules.map((s) =>
+                    s.workScheduleID === schedule.workScheduleID
+                      ? { ...s, isAttended: true }
+                      : s
+                  )
+                );
+              } else {
+                Alert.alert(
+                  "Lỗi",
+                  result.error || "Không thể điểm danh"
+                );
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error marking attendance:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi điểm danh");
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadUserData();
@@ -431,6 +505,40 @@ export default function WorkScheduleScreen() {
                   : "Chưa tham gia"}
               </Text>
             </View>
+
+            {/* Nút điểm danh - chỉ hiện khi chưa điểm danh và đã đến giờ làm việc */}
+            {!schedule.isAttended && isToday && (
+              <View style={styles.attendanceRow}>
+                <TouchableOpacity
+                  style={styles.attendanceButton}
+                  onPress={() => handleMarkAttendance(schedule)}
+                  disabled={!canMarkAttendance(schedule)}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={
+                      canMarkAttendance(schedule) ? "#4CAF50" : "#999"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.attendanceButtonText,
+                      {
+                        color: canMarkAttendance(schedule)
+                          ? "#4CAF50"
+                          : "#999",
+                      },
+                    ]}>
+                    Điểm danh
+                  </Text>
+                </TouchableOpacity>
+                {!canMarkAttendance(schedule) && (
+                  <Text style={styles.attendanceNote}>
+                    Chỉ điểm danh sau giờ làm việc
+                  </Text>
+                )}
+              </View>
+            )}
 
             {isToday && (
               <View style={styles.detailRow}>
@@ -882,6 +990,44 @@ export default function WorkScheduleScreen() {
                       )}
                     </View>
                   )}
+
+                {/* Feedback Section */}
+                {canGiveFeedback(selectedSchedule) && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.sectionTitle}>
+                      Đánh giá làm việc
+                    </Text>
+                    <View style={styles.detailCard}>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Đánh giá:
+                        </Text>
+                        {renderStars(feedbackRate, setFeedbackRate)}
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>
+                          Nội dung:
+                        </Text>
+                        <TextInput
+                          style={styles.feedbackInput}
+                          multiline
+                          numberOfLines={4}
+                          value={feedbackContent}
+                          onChangeText={setFeedbackContent}
+                          placeholder="Nhập nội dung đánh giá (tùy chọn)"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={styles.submitFeedbackButton}
+                        onPress={handleSubmitFeedback}>
+                        <Text style={styles.submitFeedbackButtonText}>
+                          Gửi đánh giá
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </ScrollView>
             )}
 
@@ -1270,6 +1416,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closeButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  attendanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  attendanceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e8f5e8",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  attendanceButtonText: {
+    marginLeft: 5,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  attendanceNote: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: "#333",
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  submitFeedbackButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 15,
+  },
+  submitFeedbackButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",

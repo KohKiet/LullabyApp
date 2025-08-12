@@ -303,6 +303,94 @@ class AuthService {
     }
   }
 
+  // Đăng nhập với Google (sử dụng OAuth code)
+  async exchangeGoogleCodeForToken(code) {
+    try {
+      console.log("🔄 Exchanging Google OAuth code for token...");
+
+      const url = `${AUTH_ENDPOINTS.LOGIN_GOOGLE}`;
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers: {
+            accept: "*/*",
+            "Content-Type": "application/json-patch+json",
+          },
+          body: JSON.stringify({
+            code: code,
+            redirectUri:
+              "https://auth.expo.io/@migitbarbarian/LullabyApp",
+          }),
+        },
+        15000
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          "✅ Google OAuth token exchange successful:",
+          data
+        );
+
+        return {
+          success: true,
+          user: data.user || data,
+          tokens: {
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken,
+            tokenType: data.tokenType || "Bearer",
+          },
+        };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(
+          "❌ Google OAuth token exchange failed:",
+          response.status,
+          errorData
+        );
+
+        return {
+          success: false,
+          error:
+            errorData.message ||
+            `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+    } catch (error) {
+      console.error("💥 Google OAuth token exchange error:", error);
+      return {
+        success: false,
+        error: error.message || "Network error during Google OAuth",
+      };
+    }
+  }
+
+  // Lưu auth tokens
+  async saveAuthTokens(tokens) {
+    try {
+      if (tokens.accessToken) {
+        await AsyncStorage.setItem(
+          TOKEN_STORAGE_KEY,
+          tokens.accessToken
+        );
+      }
+
+      // Có thể lưu thêm refresh token nếu cần
+      if (tokens.refreshToken) {
+        await AsyncStorage.setItem(
+          "refresh_token",
+          tokens.refreshToken
+        );
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error saving auth tokens:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Cập nhật thông tin user
   async updateUser(userId, userData) {
     try {

@@ -46,10 +46,14 @@ export default function PaymentScreen() {
 
   // Map each slot to a specific serviceID (for service bookings)
   const slotServiceIds = React.useMemo(() => {
+    if (!extraData) {
+      return Array(requiredNurseCount).fill(null);
+    }
+
     if (extraData?.serviceType !== "package") {
       // For service bookings, use the original logic
       const ids = [];
-      (extraData.services || []).forEach((s) => {
+      (extraData?.services || []).forEach((s) => {
         const q = s.quantity || 1;
         for (let i = 0; i < q; i++) ids.push(s.serviceID);
       });
@@ -75,12 +79,7 @@ export default function PaymentScreen() {
   ]);
 
   useEffect(() => {
-    console.log(
-      "PaymentScreen: useEffect triggered with bookingId:",
-      bookingId
-    );
     if (bookingId) {
-      console.log("PaymentScreen: Starting loadBookingData...");
       loadBookingData();
       // Preload nurses for selection
       loadNurses();
@@ -88,9 +87,6 @@ export default function PaymentScreen() {
 
       // Add timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
-        console.log(
-          "PaymentScreen: Loading timeout reached, forcing fallback"
-        );
         if (isLoading) {
           setIsLoading(false);
           loadFromAsyncStorage();
@@ -105,8 +101,8 @@ export default function PaymentScreen() {
 
   // Update requiredNurseCount when extraData changes
   useEffect(() => {
-    if (extraData?.serviceType === "service") {
-      const total = (extraData.services || []).reduce(
+    if (extraData?.serviceType === "service" && extraData?.services) {
+      const total = extraData.services.reduce(
         (sum, s) => sum + (s.quantity || 1),
         0
       );
@@ -194,14 +190,7 @@ export default function PaymentScreen() {
 
   // Debug state changes
   useEffect(() => {
-    console.log(
-      "PaymentScreen: State changed - isLoading:",
-      isLoading,
-      "bookingData:",
-      !!bookingData,
-      "extraData:",
-      !!extraData
-    );
+    // Removed debug logging for production
   }, [isLoading, bookingData, extraData]);
 
   const isPayActionEnabled = () => {
@@ -232,50 +221,22 @@ export default function PaymentScreen() {
   const loadBookingData = async () => {
     try {
       setIsLoading(true);
-      console.log(
-        "PaymentScreen: Loading booking data for ID:",
-        bookingId
-      );
 
       // 1. Gọi API để lấy booking data
-      console.log("PaymentScreen: Calling getBookingById...");
       const result = await BookingService.getBookingById(bookingId);
-      console.log("PaymentScreen: Booking data result:", result);
 
       if (result.success) {
-        console.log(
-          "PaymentScreen: API call successful, setting booking data"
-        );
-        console.log("PaymentScreen: Full API response:", result);
-        console.log("PaymentScreen: API response data:", result.data);
-        console.log(
-          "PaymentScreen: API response data.amount:",
-          result.data.amount
-        );
-        console.log(
-          "PaymentScreen: API response data.bookingID:",
-          result.data.bookingID
-        );
         setBookingData(result.data);
-        console.log(
-          "PaymentScreen: Set booking data from API:",
-          result.data
-        );
 
         // 2. Load care profile data từ API
         if (result.data.careProfileID) {
-          console.log("PaymentScreen: Loading care profile data...");
           await loadCareProfileData(result.data.careProfileID);
         }
 
         // 3. Load invoice data
-        console.log("PaymentScreen: Loading invoice data...");
         await loadInvoiceData(bookingId);
 
         // 4. Load extra data từ AsyncStorage để bổ sung thông tin
-        console.log(
-          "PaymentScreen: Loading extra data from AsyncStorage..."
-        );
         try {
           const storedData = await AsyncStorage.getItem(
             `booking_${bookingId}`
@@ -283,17 +244,12 @@ export default function PaymentScreen() {
           if (storedData) {
             const parsedData = JSON.parse(storedData);
             setExtraData(parsedData);
-            console.log(
-              "PaymentScreen: Loaded extra data from storage:",
-              parsedData
-            );
 
             // Nếu là package, load package tasks
             if (
               parsedData.serviceType === "package" &&
               parsedData.packageData?.serviceID
             ) {
-              console.log("PaymentScreen: Loading package tasks...");
               await loadPackageTasks(
                 parsedData.packageData.serviceID
               );
@@ -303,15 +259,8 @@ export default function PaymentScreen() {
 
             // Load services để hiển thị thông tin
             if (parsedData.serviceType === "service") {
-              console.log(
-                "PaymentScreen: Loading services for display..."
-              );
               await loadServices();
             }
-          } else {
-            console.log(
-              "PaymentScreen: No extra data found in AsyncStorage"
-            );
           }
         } catch (error) {
           console.error(
@@ -321,20 +270,13 @@ export default function PaymentScreen() {
         }
       } else {
         // Nếu API fail, thử dùng AsyncStorage
-        console.log(
-          "PaymentScreen: API failed, trying AsyncStorage fallback"
-        );
         await loadFromAsyncStorage();
       }
     } catch (error) {
       console.error("Error loading booking data:", error);
       // Nếu có lỗi, thử dùng AsyncStorage
-      console.log(
-        "PaymentScreen: Error occurred, trying AsyncStorage fallback"
-      );
       await loadFromAsyncStorage();
     } finally {
-      console.log("PaymentScreen: Setting isLoading to false");
       setIsLoading(false);
     }
   };
@@ -347,16 +289,9 @@ export default function PaymentScreen() {
       if (storedData) {
         const parsedData = JSON.parse(storedData);
         setExtraData(parsedData);
-        console.log(
-          "PaymentScreen: Loaded data from AsyncStorage fallback:",
-          parsedData
-        );
 
         // Load services nếu là service booking
         if (parsedData.serviceType === "service") {
-          console.log(
-            "PaymentScreen: Loading services in fallback..."
-          );
           await loadServices();
         }
 
@@ -370,18 +305,10 @@ export default function PaymentScreen() {
           workdate: parsedData.workdate || new Date().toISOString(),
         };
         setBookingData(mockBookingData);
-        console.log(
-          "PaymentScreen: Set mock booking data:",
-          mockBookingData
-        );
 
         // Load care profile data từ stored data
         if (parsedData.memberData) {
           setCareProfileData(parsedData.memberData);
-          console.log(
-            "PaymentScreen: Set care profile data:",
-            parsedData.memberData
-          );
         }
 
         // Nếu là package, load package tasks
@@ -392,7 +319,6 @@ export default function PaymentScreen() {
           await loadPackageTasks(parsedData.packageData.serviceID);
         }
       } else {
-        console.log("PaymentScreen: No stored data found");
         Alert.alert("Lỗi", "Không tìm thấy thông tin booking");
         router.back();
       }
@@ -407,24 +333,13 @@ export default function PaymentScreen() {
 
   const loadCareProfileData = async (careProfileID) => {
     try {
-      console.log(
-        "PaymentScreen: Loading care profile data for ID:",
-        careProfileID
-      );
-
       const result = await CareProfileService.getCareProfileById(
         careProfileID
       );
-      console.log("PaymentScreen: Care profile result:", result);
 
       if (result.success) {
         setCareProfileData(result.data);
-        console.log(
-          "PaymentScreen: Care profile loaded:",
-          result.data
-        );
       } else {
-        console.log("PaymentScreen: Care profile not found");
         setCareProfileData(null);
       }
     } catch (error) {
@@ -435,25 +350,13 @@ export default function PaymentScreen() {
 
   const loadInvoiceData = async (bookingID) => {
     try {
-      console.log(
-        "PaymentScreen: Loading invoice data for booking ID:",
-        bookingID
-      );
-
       const result = await InvoiceService.getInvoiceByBookingId(
         bookingID
       );
-      console.log("PaymentScreen: Invoice data result:", result);
 
       if (result.success) {
         setInvoiceData(result.data);
-        console.log("PaymentScreen: Invoice loaded:", result.data);
-        console.log(
-          "PaymentScreen: Invoice status:",
-          result.data.status
-        );
       } else {
-        console.log("PaymentScreen: No invoice found for booking");
         setInvoiceData(null);
       }
     } catch (error) {
@@ -464,11 +367,6 @@ export default function PaymentScreen() {
 
   const loadPackageTasks = async (packageId) => {
     try {
-      console.log(
-        "PaymentScreen: Loading package tasks for package ID:",
-        packageId
-      );
-
       // Load customize tasks trực tiếp từ booking
       try {
         const customizeTasksUrl = `${API_CONFIG.BASE_URL}/api/CustomizeTask/GetAllByBooking/${bookingId}`;
@@ -478,10 +376,6 @@ export default function PaymentScreen() {
 
         if (customizeResponse.ok) {
           const customizeTasks = await customizeResponse.json();
-          console.log(
-            "PaymentScreen: Customize tasks loaded:",
-            customizeTasks
-          );
 
           if (customizeTasks && customizeTasks.length > 0) {
             // Load service details cho từng customize task
@@ -495,12 +389,6 @@ export default function PaymentScreen() {
 
                   if (serviceResponse.ok) {
                     const serviceData = await serviceResponse.json();
-                    console.log(
-                      "PaymentScreen: Service data for serviceID",
-                      task.serviceID,
-                      ":",
-                      serviceData
-                    );
                     return {
                       serviceTaskID: task.serviceTaskID,
                       child_ServiceID: task.serviceID,
@@ -511,10 +399,6 @@ export default function PaymentScreen() {
                       status: task.status,
                     };
                   } else {
-                    console.log(
-                      "PaymentScreen: Failed to load service details for serviceID:",
-                      task.serviceID
-                    );
                     // Fallback nếu không load được service details
                     return {
                       serviceTaskID: task.serviceTaskID,
@@ -548,19 +432,11 @@ export default function PaymentScreen() {
             const serviceDetails = await Promise.all(
               serviceDetailsPromises
             );
-            console.log(
-              "PaymentScreen: Final service details:",
-              serviceDetails
-            );
             setPackageTasks(serviceDetails);
           } else {
-            console.log("PaymentScreen: No customize tasks found");
             setPackageTasks([]);
           }
         } else {
-          console.log(
-            "PaymentScreen: Failed to load customize tasks"
-          );
           setPackageTasks([]);
         }
       } catch (customizeError) {
@@ -581,54 +457,13 @@ export default function PaymentScreen() {
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
         // Load all service types (including packages) for proper display
-        setServices(result.data);
-        console.log(
-          "PaymentScreen: All services loaded:",
-          result.data.length,
-          "items"
-        );
+        setServices(result.data || []);
+      } else {
+        setServices([]);
       }
     } catch (error) {
       console.error("Error loading services:", error);
-    }
-  };
-
-  const testButtonPress = () => {
-    console.log("PaymentScreen: Test button pressed!");
-    Alert.alert("Test", "Button is working!");
-  };
-
-  const testAPICall = async () => {
-    try {
-      console.log("PaymentScreen: Testing API call...");
-      const url = `${API_CONFIG.BASE_URL}/api/Invoice`;
-      console.log("PaymentScreen: Test URL:", url);
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json-patch+json",
-        },
-        body: JSON.stringify({
-          bookingID: parseInt(bookingId),
-          content: "Test payment",
-        }),
-      });
-
-      console.log(
-        "PaymentScreen: Test response status:",
-        response.status
-      );
-      const data = await response.json();
-      console.log("PaymentScreen: Test response data:", data);
-
-      Alert.alert(
-        "API Test",
-        `Status: ${response.status}\nData: ${JSON.stringify(data)}`
-      );
-    } catch (error) {
-      console.error("PaymentScreen: Test API error:", error);
-      Alert.alert("API Test Error", error.message);
+      setServices([]); // Ensure services is always an array
     }
   };
 
@@ -653,17 +488,10 @@ export default function PaymentScreen() {
       );
       return;
     }
-    console.log("PaymentScreen: handlePayment called");
-    console.log("PaymentScreen: bookingData:", bookingData);
-    console.log("PaymentScreen: bookingId:", bookingId);
 
     try {
       // If user selected nurses manually, assign them to customize tasks before payment
       if (selectionMode === "user") {
-        console.log(
-          "PaymentScreen: Assigning selected nurses before payment",
-          selectedNurseIds
-        );
         const tasksResult =
           await CustomizeTaskService.getCustomizeTasksByBookingId(
             bookingId
@@ -671,9 +499,7 @@ export default function PaymentScreen() {
         if (tasksResult.success) {
           const tasks = tasksResult.data || [];
           if (tasks.length === 0) {
-            console.log(
-              "PaymentScreen: No customize tasks found to assign"
-            );
+            // No tasks to assign
           }
           // Group tasks by serviceID and prefer unassigned first
           const tasksByService = tasks.reduce((acc, t) => {
@@ -701,9 +527,7 @@ export default function PaymentScreen() {
             unassignedByService
           ).reduce((sum, arr) => sum + arr.length, 0);
           if (totalUnassigned === 0) {
-            console.log(
-              "PaymentScreen: All tasks already have nursing assigned. Skipping UpdateNursing calls."
-            );
+            // All tasks already have nursing assigned. Skipping UpdateNursing calls.
           } else {
             const assignments = selectedNurseIds.slice(
               0,
@@ -728,15 +552,6 @@ export default function PaymentScreen() {
                   : null;
               }
               if (!task) return Promise.resolve({ success: true });
-              console.log(
-                "Assigning nurse",
-                nurseId,
-                "to task",
-                task.customizeTaskID,
-                "(serviceID:",
-                task.serviceID,
-                ")"
-              );
               return CustomizeTaskService.updateNursing(
                 task.customizeTaskID,
                 parseInt(nurseId)
@@ -777,7 +592,6 @@ export default function PaymentScreen() {
 
       // Lấy accountID từ careProfileData
       const accountID = careProfileData?.accountID;
-      console.log("PaymentScreen: Account ID for wallet:", accountID);
 
       if (!accountID) {
         Alert.alert("Lỗi", "Không tìm thấy thông tin tài khoản");
@@ -788,18 +602,11 @@ export default function PaymentScreen() {
       const walletResult = await WalletService.getWalletByAccountId(
         accountID
       );
-      console.log("PaymentScreen: Wallet result:", walletResult);
 
       const walletAmount = walletResult.success
         ? walletResult.data.amount
         : 0;
       const totalAmount = bookingData.amount;
-      console.log(
-        "PaymentScreen: Wallet amount:",
-        walletAmount,
-        "Total:",
-        totalAmount
-      );
 
       // 2. Nếu không đủ tiền, về home
       if (walletAmount < totalAmount) {
@@ -827,7 +634,6 @@ export default function PaymentScreen() {
         }
       );
       const data = await response.json();
-      console.log("PaymentScreen: Invoice payment response:", data);
 
       if (
         response.ok &&
@@ -862,34 +668,23 @@ export default function PaymentScreen() {
 
   const processPayment = async () => {
     try {
-      console.log("PaymentScreen: processPayment started");
-      console.log("PaymentScreen: Booking ID to pay:", bookingId);
-      console.log(
-        "PaymentScreen: About to call TransactionHistoryService.payInvoice"
-      );
       setIsProcessingPayment(true);
 
       const result = await TransactionHistoryService.payInvoice(
         null,
         bookingId
       );
-      console.log("PaymentScreen: Payment API result:", result);
 
       if (result.success) {
-        console.log("PaymentScreen: Payment successful");
         // Reload invoice data để cập nhật status
         loadInvoiceData(bookingId);
       } else {
-        console.log("PaymentScreen: Payment failed:", result.error);
         Alert.alert("Lỗi", `Thanh toán thất bại: ${result.error}`);
       }
     } catch (error) {
       console.error("PaymentScreen: Error in processPayment:", error);
       Alert.alert("Lỗi", "Có lỗi xảy ra khi thanh toán");
     } finally {
-      console.log(
-        "PaymentScreen: Setting isProcessingPayment to false"
-      );
       setIsProcessingPayment(false);
     }
   };
@@ -953,10 +748,6 @@ export default function PaymentScreen() {
   };
 
   const renderPackageDetails = () => {
-    console.log(
-      "PaymentScreen: renderPackageDetails called - extraData:",
-      extraData
-    );
     if (!extraData || extraData.serviceType !== "package")
       return null;
 
@@ -968,30 +759,16 @@ export default function PaymentScreen() {
 
         <View style={styles.packageInfo}>
           <Text style={styles.packageName}>
-            {(() => {
-              console.log(
-                "PaymentScreen: Package name - extraData.packageData:",
-                extraData.packageData
-              );
-              return (
-                extraData.packageData?.serviceName || "Gói dịch vụ"
-              );
-            })()}
+            {extraData.packageData?.serviceName || "Gói dịch vụ"}
           </Text>
           <Text style={styles.packageDescription}>
             {extraData.packageData?.description || ""}
           </Text>
           <View style={styles.packageMeta}>
             <Text style={styles.packagePrice}>
-              {(() => {
-                console.log(
-                  "PaymentScreen: Package price - extraData.packageData.price:",
-                  extraData.packageData?.price
-                );
-                return ServiceTypeService.formatPrice(
-                  extraData.packageData?.price || 0
-                );
-              })()}
+              {ServiceTypeService.formatPrice(
+                extraData.packageData?.price || 0
+              )}
             </Text>
             <Text style={styles.packageDuration}>
               {ServiceTypeService.formatDuration(
@@ -1032,7 +809,7 @@ export default function PaymentScreen() {
               if (packageTasks.length > 0) {
                 return packageTasks.map((task, index) => {
                   // Tìm thông tin service từ child_ServiceID (service thực) thay vì serviceTaskID
-                  const serviceInfo = services.find(
+                  const serviceInfo = services?.find(
                     (s) => s.serviceID === task.child_ServiceID
                   );
 
@@ -1066,7 +843,7 @@ export default function PaymentScreen() {
                 return nurseServiceLinks
                   .filter((link) => link.serviceID)
                   .map((taskLink, index) => {
-                    const serviceInfo = services.find(
+                    const serviceInfo = services?.find(
                       (s) => s.serviceID === taskLink.serviceID
                     );
 
@@ -1120,7 +897,7 @@ export default function PaymentScreen() {
         <Text style={styles.sectionTitle}>Dịch vụ đã chọn</Text>
         {extraData.services &&
           extraData.services.map((service, index) => {
-            const serviceData = services.find(
+            const serviceData = services?.find(
               (s) => s.serviceID === service.serviceID
             );
 
@@ -1332,7 +1109,7 @@ export default function PaymentScreen() {
 
                   // Get service info for this slot
                   const serviceId = slotServiceIds[idx];
-                  const serviceInfo = services.find(
+                  const serviceInfo = services?.find(
                     (s) => s.serviceID === serviceId
                   );
 
@@ -1395,10 +1172,6 @@ export default function PaymentScreen() {
                   finalAmount = packageTasks.reduce((sum, task) => {
                     return sum + task.price * (task.quantity || 1);
                   }, 0);
-                  console.log(
-                    "PaymentScreen: Calculated amount from packageTasks:",
-                    finalAmount
-                  );
                 }
 
                 // Nếu vẫn là 0, sử dụng package price từ extraData
@@ -1407,10 +1180,6 @@ export default function PaymentScreen() {
                   extraData?.packageData?.price
                 ) {
                   finalAmount = extraData.packageData.price;
-                  console.log(
-                    "PaymentScreen: Using package price from extraData:",
-                    finalAmount
-                  );
                 }
 
                 return ServiceTypeService.formatPrice(finalAmount);
@@ -1523,7 +1292,6 @@ export default function PaymentScreen() {
                 styles.disabledButton,
             ]}
             onPress={() => {
-              console.log("PaymentScreen: Pay button pressed!");
               handlePayment();
             }}
             disabled={!isPayActionEnabled()}>
@@ -1549,7 +1317,7 @@ export default function PaymentScreen() {
             {(() => {
               const requiredServiceId =
                 slotServiceIds[pickerSlotIndex] || null;
-              const requiredServiceName = services.find(
+              const requiredServiceName = services?.find(
                 (s) => s.serviceID === requiredServiceId
               )?.serviceName;
 

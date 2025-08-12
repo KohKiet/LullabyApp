@@ -1,12 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as AuthSession from "expo-auth-session";
-import * as Google from "expo-auth-session/providers/google";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,11 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import ApiStatusIndicator from "../../components/ApiStatusIndicator";
-import ApiTester from "../../components/ApiTester";
+import { WebView } from "react-native-webview";
 import AuthService from "../../services/authService";
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -26,102 +21,46 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showApiTester, setShowApiTester] = useState(false);
+  const [showGoogleLoginModal, setShowGoogleLoginModal] =
+    useState(false);
+  const [googleLoginUrl, setGoogleLoginUrl] = useState("");
 
-  // Cấu hình Google OAuth với expo-auth-session
+  // Cấu hình Google OAuth với WebView
   React.useEffect(() => {
-    console.log("🔧 Using expo-auth-session for Google OAuth");
+    console.log("🔧 Using WebView for Google OAuth");
   }, []);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    // Sử dụng iOS Client ID cho tất cả platforms để đồng nhất
-    expoClientId:
-      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
-    iosClientId:
-      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
-    androidClientId:
-      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
-    webClientId:
-      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
-    scopes: ["openid", "profile", "email"],
-    // Sử dụng Expo proxy URI
-    redirectUri: AuthSession.makeRedirectUri({
-      useProxy: true,
-      scheme: "lullabyapp",
-    }),
-  });
-
-  // Xử lý response từ Google OAuth
-  React.useEffect(() => {
-    if (response?.type === "success") {
-      console.log(
-        "✅ Google OAuth success, authentication:",
-        response.authentication
-      );
-      const { authentication } = response;
-      fetchUserInfo(authentication.accessToken);
-    } else if (response?.type === "error") {
-      console.log("❌ Google OAuth error:", response.error);
-      Alert.alert(
-        "Lỗi đăng nhập Google",
-        response.error?.message || "Có lỗi xảy ra"
-      );
-    } else if (response?.type === "cancel") {
-      console.log("🚫 Google OAuth cancelled by user");
-    }
-  }, [response]);
-
-  const fetchUserInfo = async (accessToken) => {
-    try {
-      const response = await fetch(
-        "https://www.googleapis.com/userinfo/v2/me",
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      const user = await response.json();
-      const fullName = user.name || user.given_name || "Google User";
-      const email = user.email;
-
-      if (!email) {
-        Alert.alert("Lỗi", "Không lấy được email từ Google");
-        return;
-      }
-
-      // Đăng nhập với backend
-      const result = await AuthService.loginWithGoogle(
-        fullName,
-        email
-      );
-
-      if (result.success) {
-        console.log("✅ Backend login success, redirecting to home");
-        router.replace("/");
-      } else {
-        Alert.alert(
-          "Đăng nhập thất bại",
-          result.error || "Không thể đăng nhập bằng Google"
-        );
-      }
-    } catch (e) {
-      Alert.alert("Lỗi", "Không thể lấy thông tin Google user");
-    }
-  };
 
   const handleGoogleLogin = async () => {
     try {
-      console.log("🚀 Starting Google OAuth...");
-      console.log(
-        "🔑 Using Client ID:",
-        "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com"
-      );
-      console.log("🌐 Using proxy:", true);
+      setIsLoading(true);
 
-      // Sử dụng Expo proxy để tránh cấu hình redirect URI
-      await promptAsync({ useProxy: true });
+      // Tạo Google OAuth URL
+      const clientId =
+        "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com";
+      const redirectUri = encodeURIComponent(
+        "https://auth.expo.io/@migitbarbarian/LullabyApp"
+      );
+      const scope = encodeURIComponent("openid profile email");
+
+      const googleAuthUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}&` +
+        `redirect_uri=${redirectUri}&` +
+        `response_type=code&` +
+        `scope=${scope}&` +
+        `access_type=offline&` +
+        `prompt=consent`;
+
+      console.log("🔗 Google OAuth URL:", googleAuthUrl);
+
+      // Mở WebView với Google login
+      setGoogleLoginUrl(googleAuthUrl);
+      setShowGoogleLoginModal(true);
     } catch (error) {
-      console.log("💥 Google OAuth error:", error);
-      Alert.alert("Lỗi", "Không thể khởi tạo đăng nhập Google");
+      console.error("❌ Google login error:", error);
+      Alert.alert("Lỗi", "Không thể mở Google đăng nhập");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -182,6 +121,43 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleOAuthSuccess = async (url) => {
+    try {
+      const code = url.match(/code=([^&]*)/)[1];
+      const tokenResponse =
+        await AuthService.exchangeGoogleCodeForToken(code);
+
+      if (tokenResponse.success) {
+        const user = tokenResponse.user;
+        console.log("Google OAuth successful, user:", user);
+
+        // Lưu thông tin đăng nhập vào AsyncStorage
+        await AuthService.saveAuthTokens(tokenResponse.tokens);
+
+        // Chuyển hướng dựa trên role
+        let targetRoute = "/";
+        if (user.role_id === 2 || user.roleID === 2) {
+          targetRoute = "/";
+        } else if (user.role_id === 1 || user.roleID === 1) {
+          targetRoute = "/admin";
+        } else if (user.role_id === 3 || user.roleID === 3) {
+          targetRoute = "/manager";
+        } else {
+          targetRoute = "/";
+        }
+        console.log(`Redirecting to: ${targetRoute}`);
+        router.replace(targetRoute);
+      } else {
+        Alert.alert(
+          "Lỗi",
+          "Đăng nhập Google thất bại: " + tokenResponse.error
+        );
+      }
+    } catch (error) {
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi xử lý đăng nhập Google!");
+    }
+  };
+
   return (
     <LinearGradient
       colors={["#C2F5E9", "#B3E5FC", "#FFD9E6"]}
@@ -196,32 +172,11 @@ export default function LoginScreen() {
           </Text>
         </View>
 
-        {/* API Status Indicator - chỉ hiển thị trong development */}
-        {__DEV__ && (
-          <>
-            <ApiStatusIndicator />
-
-            {/* Toggle API Tester */}
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => setShowApiTester(!showApiTester)}>
-              <Text style={styles.toggleButtonText}>
-                {showApiTester
-                  ? "Hide API Tester"
-                  : "Show API Tester"}
-              </Text>
-            </TouchableOpacity>
-
-            {/* API Tester */}
-            {showApiTester && <ApiTester />}
-          </>
-        )}
-
         <View style={styles.loginCard}>
           {/* Google Login */}
           <TouchableOpacity
             style={styles.googleButton}
-            disabled={!request || isLoading}
+            disabled={isLoading}
             onPress={handleGoogleLogin}>
             <Ionicons name="logo-google" size={20} color="#DB4437" />
             <Text style={styles.googleButtonText}>
@@ -313,6 +268,80 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Google Login WebView Modal */}
+      <Modal
+        visible={showGoogleLoginModal}
+        animationType="slide"
+        presentationStyle="pageSheet">
+        <View style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              style={styles.webViewBackButton}
+              onPress={() => setShowGoogleLoginModal(false)}>
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>Đăng nhập Google</Text>
+            <TouchableOpacity
+              style={styles.webViewCloseButton}
+              onPress={() => setShowGoogleLoginModal(false)}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <WebView
+            source={{ uri: googleLoginUrl }}
+            style={styles.webView}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.webViewLoading}>
+                <Text style={styles.webViewLoadingText}>
+                  Đang tải Google đăng nhập...
+                </Text>
+              </View>
+            )}
+            onNavigationStateChange={(navState) => {
+              console.log("Google login navigation:", navState.url);
+
+              // Kiểm tra nếu user đã đăng nhập thành công và được redirect
+              if (
+                navState.url.includes("auth.expo.io") &&
+                navState.url.includes("code=")
+              ) {
+                console.log("✅ Google OAuth success, code received");
+
+                // Đóng WebView
+                setShowGoogleLoginModal(false);
+
+                // Xử lý OAuth code
+                handleGoogleOAuthSuccess(navState.url);
+              }
+            }}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error("WebView error:", nativeEvent);
+              Alert.alert(
+                "Lỗi tải Google đăng nhập",
+                "Không thể tải trang đăng nhập. Vui lòng thử lại.",
+                [
+                  {
+                    text: "Thử lại",
+                    onPress: () => {
+                      // Reload WebView
+                      setGoogleLoginUrl(googleLoginUrl);
+                    },
+                  },
+                  {
+                    text: "Đóng",
+                    style: "cancel",
+                    onPress: () => setShowGoogleLoginModal(false),
+                  },
+                ]
+              );
+            }}
+          />
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -339,19 +368,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: "#666",
-  },
-  toggleButton: {
-    backgroundColor: "#FF9800",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: "center",
-    marginBottom: 10,
-  },
-  toggleButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
   },
   loginCard: {
     backgroundColor: "white",
@@ -444,5 +460,43 @@ const styles = StyleSheet.create({
     color: "#4FC3F7",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  webViewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  webViewBackButton: {
+    padding: 5,
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    flex: 1,
+    textAlign: "center",
+  },
+  webViewCloseButton: {
+    padding: 5,
+  },
+  webView: {
+    flex: 1,
+  },
+  webViewLoading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+  },
+  webViewLoadingText: {
+    fontSize: 16,
+    color: "#666",
   },
 });

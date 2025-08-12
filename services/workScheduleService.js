@@ -156,6 +156,60 @@ class WorkScheduleService {
     }
   }
 
+  // Cập nhật trạng thái điểm danh
+  async updateIsAttended(workScheduleID) {
+    try {
+      console.log(
+        `WorkScheduleService: Updating attendance for work schedule ID: ${workScheduleID}`
+      );
+
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/api/WorkSchedule/UpdateIsAttended/${workScheduleID}`,
+        {
+          method: "PUT",
+          headers: {
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          "WorkScheduleService: Attendance updated successfully:",
+          data
+        );
+        return { success: true, data: data };
+      } else {
+        let errorMessage = "Không thể cập nhật điểm danh";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+          console.log(
+            "WorkScheduleService: Error response:",
+            errorData
+          );
+        } catch (parseError) {
+          console.log(
+            "WorkScheduleService: Could not parse error response"
+          );
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+
+        return { success: false, error: errorMessage };
+      }
+    } catch (error) {
+      console.error(
+        "WorkScheduleService: Network error updating attendance:",
+        error
+      );
+      return {
+        success: false,
+        error: error.message || "Lỗi kết nối mạng",
+      };
+    }
+  }
+
   // Format date for display
   formatDate(dateString) {
     if (!dateString) return "";

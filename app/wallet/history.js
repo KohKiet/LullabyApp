@@ -264,7 +264,7 @@ export default function TransactionHistoryScreen() {
                       Số dư trước:
                     </Text>
                     <Text style={styles.balanceValue}>
-                      {formatAmount(transaction.before, transaction)}
+                      {transaction.before?.toLocaleString("vi-VN")} ₫
                     </Text>
                   </View>
 
@@ -273,7 +273,7 @@ export default function TransactionHistoryScreen() {
                       Số dư sau:
                     </Text>
                     <Text style={styles.balanceValue}>
-                      {formatAmount(transaction.after, transaction)}
+                      {transaction.after?.toLocaleString("vi-VN")} ₫
                     </Text>
                   </View>
 

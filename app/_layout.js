@@ -29,12 +29,18 @@ export default function RootLayout() {
       />
       <Stack.Screen
         name="booking/history"
-        options={{ headerShown: false }}
+        options={{
+          headerShown: false,
+          header: () => null,
+          headerStyle: { height: 0 },
+        }}
       />
       <Stack.Screen
         name="work-schedule"
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="booking" options={{ headerShown: false }} />
+      <Stack.Screen name="wallet" options={{ headerShown: false }} />
     </Stack>
   );
 }
