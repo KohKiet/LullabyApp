@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -27,91 +28,99 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showApiTester, setShowApiTester] = useState(false);
 
+  // Cấu hình Google OAuth với expo-auth-session
+  React.useEffect(() => {
+    console.log("🔧 Using expo-auth-session for Google OAuth");
+  }, []);
+
   const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    iosClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    androidClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    webClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    scopes: ["profile", "email"],
+    // Sử dụng iOS Client ID cho tất cả platforms để đồng nhất
+    expoClientId:
+      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
+    iosClientId:
+      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
+    androidClientId:
+      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
+    webClientId:
+      "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com",
+    scopes: ["openid", "profile", "email"],
+    // Sử dụng Expo proxy URI
+    redirectUri: AuthSession.makeRedirectUri({
+      useProxy: true,
+      scheme: "lullabyapp",
+    }),
   });
 
+  // Xử lý response từ Google OAuth
   React.useEffect(() => {
     if (response?.type === "success") {
+      console.log(
+        "✅ Google OAuth success, authentication:",
+        response.authentication
+      );
       const { authentication } = response;
       fetchUserInfo(authentication.accessToken);
     } else if (response?.type === "error") {
+      console.log("❌ Google OAuth error:", response.error);
       Alert.alert(
         "Lỗi đăng nhập Google",
         response.error?.message || "Có lỗi xảy ra"
       );
+    } else if (response?.type === "cancel") {
+      console.log("🚫 Google OAuth cancelled by user");
     }
   }, [response]);
 
   const fetchUserInfo = async (accessToken) => {
     try {
-      const res = await fetch(
+      const response = await fetch(
         "https://www.googleapis.com/userinfo/v2/me",
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
+      const user = await response.json();
+      const fullName = user.name || user.given_name || "Google User";
+      const email = user.email;
 
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+      if (!email) {
+        Alert.alert("Lỗi", "Không lấy được email từ Google");
+        return;
       }
 
-      const user = await res.json();
-      const userData = {
-        id: Date.now(),
-        email: user.email,
-        full_name: user.name,
-        name: user.name,
-        picture: user.picture,
-        avatar_url: user.picture,
-        role_id: 1, // Google login mặc định là admin
-        phone_number: "",
-        create_at: new Date().toISOString(),
-        status: "active",
-      };
-
-      // Sử dụng AuthService để lưu user
-      await AuthService.saveUser(userData);
-      await AuthService.saveToken(accessToken);
-
-      // Chuyển hướng dựa trên role
-      let targetRoute = "/";
-      let welcomeMessage = "Đăng nhập thành công!";
-
-      if (userData.role_id === 2 || userData.roleID === 2) {
-        targetRoute = "/";
-        welcomeMessage = "Chào mừng Điều dưỡng viên!";
-      } else if (userData.role_id === 1 || userData.roleID === 1) {
-        targetRoute = "/admin";
-        welcomeMessage = "Chào mừng Quản trị viên!";
-      } else if (userData.role_id === 3 || userData.roleID === 3) {
-        targetRoute = "/manager";
-        welcomeMessage = "Chào mừng Quản lý!";
-      } else {
-        targetRoute = "/";
-        welcomeMessage = "Đăng nhập thành công!";
-      }
-
-      console.log(`Google login - Redirecting to: ${targetRoute}`);
-
-      // Chuyển thẳng đến trang đích, không hiển thị alert
-      router.replace(targetRoute);
-    } catch (e) {
-      Alert.alert(
-        "Lỗi",
-        "Không thể lấy thông tin từ Google: " + e.message
+      // Đăng nhập với backend
+      const result = await AuthService.loginWithGoogle(
+        fullName,
+        email
       );
+
+      if (result.success) {
+        console.log("✅ Backend login success, redirecting to home");
+        router.replace("/");
+      } else {
+        Alert.alert(
+          "Đăng nhập thất bại",
+          result.error || "Không thể đăng nhập bằng Google"
+        );
+      }
+    } catch (e) {
+      Alert.alert("Lỗi", "Không thể lấy thông tin Google user");
     }
   };
 
   const handleGoogleLogin = async () => {
     try {
-      await promptAsync();
+      console.log("🚀 Starting Google OAuth...");
+      console.log(
+        "🔑 Using Client ID:",
+        "914225695260-t75aaj3aulcfaa5fgvddflvrr9uk5elk.apps.googleusercontent.com"
+      );
+      console.log("🌐 Using proxy:", true);
+
+      // Sử dụng Expo proxy để tránh cấu hình redirect URI
+      await promptAsync({ useProxy: true });
     } catch (error) {
+      console.log("💥 Google OAuth error:", error);
       Alert.alert("Lỗi", "Không thể khởi tạo đăng nhập Google");
     }
   };

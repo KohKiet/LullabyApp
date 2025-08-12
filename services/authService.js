@@ -261,6 +261,48 @@ class AuthService {
     }
   }
 
+  // Đăng nhập bằng Google (fullName, email)
+  async loginWithGoogle(fullName, email) {
+    try {
+      const url = `${API_CONFIG.BASE_URL}/api/accounts/login/google`;
+      const response = await this.fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json-patch+json",
+          accept: "*/*",
+        },
+        body: JSON.stringify({ fullName, email }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Expecting { message, account: {..., token} }
+        const account = data.account || {};
+        const token = account.token || data.token;
+        if (account && token) {
+          const userData = { ...account, token };
+          await this.saveUser(userData);
+          await this.saveToken(token);
+          return { success: true, user: userData };
+        }
+        return {
+          success: false,
+          error: "Invalid response from Google login",
+        };
+      }
+
+      let errorMessage = "Google login failed";
+      try {
+        const errorData = await response.json();
+        errorMessage =
+          errorData.message || errorData.error || errorMessage;
+      } catch (_) {}
+      return { success: false, error: errorMessage };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Cập nhật thông tin user
   async updateUser(userId, userData) {
     try {

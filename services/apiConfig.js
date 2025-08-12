@@ -123,6 +123,7 @@ export const TEMPLATE_ENDPOINTS = {
 
 // Wallet Endpoints
 export const WALLET_ENDPOINTS = {
+  BASE_URL: BASE_URL,
   GET_ALL_WALLETS: `${BASE_URL}/api/Wallet/GetAll`,
   GET_WALLET_BY_ID: (id) => `${BASE_URL}/api/Wallet/${id}`,
   CREATE_WALLET: `${BASE_URL}/api/Wallet/create`,

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Linking,
   Modal,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { WebView } from "react-native-webview";
 import WalletService from "../services/walletService";
 
 export default function WalletCard({ userData }) {
@@ -19,6 +21,8 @@ export default function WalletCard({ userData }) {
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [showBalance, setShowBalance] = useState(true);
+  const [showWebViewModal, setShowWebViewModal] = useState(false);
+  const [payosUrl, setPayosUrl] = useState("");
   const router = useRouter();
 
   // Check if user is a Member (roleID=4)
@@ -91,29 +95,67 @@ export default function WalletCard({ userData }) {
     }
 
     try {
-      const result = await WalletService.topUpWallet(
-        userData.accountID || userData.id,
+      // Kiểm tra wallet có tồn tại không
+      if (!walletData?.walletID) {
+        Alert.alert(
+          "Lỗi",
+          "Ví chưa được tạo. Vui lòng liên hệ admin."
+        );
+        return;
+      }
+
+      // Gọi API PayOS để nạp tiền
+      const result = await WalletService.topUpWalletMobile(
+        walletData.walletID,
         amount
       );
 
       if (result.success) {
-        // Cập nhật số dư hiện tại
-        setWalletData((prevData) => ({
-          ...prevData,
-          amount: result.data.amount,
-        }));
+        // Nếu thành công, mở PayOS URL
+        if (
+          result.data &&
+          typeof result.data === "string" &&
+          result.data.includes("pay.payos.vn")
+        ) {
+          // Mở PayOS URL trong WebView
+          setPayosUrl(result.data);
+          setShowWebViewModal(true);
+        } else {
+          // Cập nhật số dư hiện tại nếu API trả về số dư mới
+          if (result.data && result.data.amount) {
+            setWalletData((prevData) => ({
+              ...prevData,
+              amount: result.data.amount,
+            }));
+          }
+
+          Alert.alert("Thành công", "Nạp tiền thành công!");
+        }
 
         // Reset input
         setTopUpAmount("");
         setShowTopUpModal(false);
-
-        // Không hiển thị thông báo thành công
       } else {
         Alert.alert("Lỗi", `Không thể nạp tiền: ${result.error}`);
       }
     } catch (error) {
       console.log("Error topping up wallet:", error);
-      Alert.alert("Lỗi", "Đã xảy ra lỗi khi nạp tiền.");
+
+      // Hiển thị lỗi cụ thể hơn
+      let errorMessage = "Đã xảy ra lỗi khi nạp tiền.";
+
+      if (error.message) {
+        if (error.message.includes("Network request failed")) {
+          errorMessage =
+            "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "Yêu cầu bị timeout. Vui lòng thử lại sau.";
+        } else {
+          errorMessage = `Lỗi: ${error.message}`;
+        }
+      }
+
+      Alert.alert("Lỗi", errorMessage);
     }
   };
 
@@ -290,6 +332,7 @@ export default function WalletCard({ userData }) {
                 onPress={() => setShowTopUpModal(false)}>
                 <Text style={styles.cancelButtonText}>Hủy</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.confirmButton}
                 onPress={handleTopUp}>
@@ -297,6 +340,66 @@ export default function WalletCard({ userData }) {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* WebView Modal for PayOS */}
+      <Modal
+        visible={showWebViewModal}
+        animationType="slide"
+        presentationStyle="pageSheet">
+        <View style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              style={styles.webViewBackButton}
+              onPress={() => setShowWebViewModal(false)}>
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>Thanh toán PayOS</Text>
+            <TouchableOpacity
+              style={styles.webViewCloseButton}
+              onPress={() => setShowWebViewModal(false)}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <WebView
+            source={{ uri: payosUrl }}
+            style={styles.webView}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.webViewLoading}>
+                <Text style={styles.webViewLoadingText}>
+                  Đang tải PayOS...
+                </Text>
+              </View>
+            )}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error("WebView error:", nativeEvent);
+              Alert.alert(
+                "Lỗi tải PayOS",
+                "Không thể tải trang thanh toán. Vui lòng thử lại hoặc mở trong browser.",
+                [
+                  {
+                    text: "Mở Browser",
+                    onPress: () => {
+                      setShowWebViewModal(false);
+                      Linking.openURL(payosUrl);
+                    },
+                  },
+                  {
+                    text: "Đóng",
+                    style: "cancel",
+                  },
+                ]
+              );
+            }}
+            onNavigationStateChange={(navState) => {
+              // Có thể thêm logic xử lý khi user navigate trong PayOS
+              console.log("PayOS navigation:", navState.url);
+            }}
+          />
         </View>
       </Modal>
     </>
@@ -510,5 +613,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 15,
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  webViewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  webViewBackButton: {
+    padding: 5,
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    flex: 1,
+    textAlign: "center",
+  },
+  webViewCloseButton: {
+    padding: 5,
+  },
+  webView: {
+    flex: 1,
+  },
+  webViewLoading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  webViewLoadingText: {
+    color: "#333",
+    fontSize: 16,
+    fontWeight: "500",
   },
 });

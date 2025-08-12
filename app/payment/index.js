@@ -17,7 +17,6 @@ import CareProfileService from "../../services/careProfileService";
 import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
-import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import TransactionHistoryService from "../../services/transactionHistoryService";
 import WalletService from "../../services/walletService";
@@ -43,30 +42,37 @@ export default function PaymentScreen() {
   const [showNursePicker, setShowNursePicker] = useState(false);
   const [pickerSlotIndex, setPickerSlotIndex] = useState(null);
   const [selectedNurseIds, setSelectedNurseIds] = useState([]);
-
-  const requiredNurseCount = (() => {
-    if (extraData?.serviceType === "service") {
-      const total = (extraData.services || []).reduce(
-        (sum, s) => sum + (s.quantity || 1),
-        0
-      );
-      return Math.max(1, total);
-    }
-    // For package or unknown types, require at least 1
-    return 1;
-  })();
+  const [requiredNurseCount, setRequiredNurseCount] = useState(1);
 
   // Map each slot to a specific serviceID (for service bookings)
   const slotServiceIds = React.useMemo(() => {
-    if (extraData?.serviceType !== "service")
-      return Array(requiredNurseCount).fill(null);
-    const ids = [];
-    (extraData.services || []).forEach((s) => {
-      const q = s.quantity || 1;
-      for (let i = 0; i < q; i++) ids.push(s.serviceID);
-    });
-    return ids;
-  }, [extraData, requiredNurseCount]);
+    if (extraData?.serviceType !== "package") {
+      // For service bookings, use the original logic
+      const ids = [];
+      (extraData.services || []).forEach((s) => {
+        const q = s.quantity || 1;
+        for (let i = 0; i < q; i++) ids.push(s.serviceID);
+      });
+      return ids;
+    }
+
+    // For package bookings, get service IDs from packageTasks
+    if (packageTasks.length > 0) {
+      return packageTasks.map((task) => task.child_ServiceID);
+    }
+
+    // Fallback to nurseServiceLinks if available
+    if (nurseServiceLinks.length > 0) {
+      return nurseServiceLinks.map((link) => link.serviceID);
+    }
+
+    return Array(requiredNurseCount).fill(null);
+  }, [
+    extraData,
+    requiredNurseCount,
+    nurseServiceLinks,
+    packageTasks,
+  ]);
 
   useEffect(() => {
     console.log(
@@ -97,6 +103,20 @@ export default function PaymentScreen() {
     }
   }, [bookingId]);
 
+  // Update requiredNurseCount when extraData changes
+  useEffect(() => {
+    if (extraData?.serviceType === "service") {
+      const total = (extraData.services || []).reduce(
+        (sum, s) => sum + (s.quantity || 1),
+        0
+      );
+      setRequiredNurseCount(Math.max(1, total));
+    } else {
+      // For package or unknown types, keep default value
+      // This will be updated by loadNurseServiceLinks
+    }
+  }, [extraData]);
+
   const loadNurses = async () => {
     try {
       const result =
@@ -114,19 +134,60 @@ export default function PaymentScreen() {
 
   const loadNurseServiceLinks = async () => {
     try {
-      const url = `${API_CONFIG.BASE_URL}/api/nursingspecialist-servicetype/getall`;
-      const res = await fetch(url, { headers: { accept: "*/*" } });
-      if (res.ok) {
-        const data = await res.json();
-        setNurseServiceLinks(Array.isArray(data) ? data : []);
+      // Load customize tasks for this booking to determine required nurse count
+      const customizeTasksUrl = `${API_CONFIG.BASE_URL}/api/CustomizeTask/GetAllByBooking/${bookingId}`;
+      const customizeTasksResponse = await fetch(customizeTasksUrl, {
+        headers: { accept: "*/*" },
+      });
+
+      if (customizeTasksResponse.ok) {
+        const customizeTasks = await customizeTasksResponse.json();
+        console.log("Customize tasks loaded:", customizeTasks);
+
+        // Update required nurse count based on actual tasks
+        const actualRequiredCount = customizeTasks.length;
+        setRequiredNurseCount(actualRequiredCount);
+
+        // Load nurse-service compatibility for each service
+        const nurseServicePromises = customizeTasks.map(
+          async (task) => {
+            const serviceId = task.serviceID;
+            const nurseServiceUrl = `${API_CONFIG.BASE_URL}/api/nursingspecialist-servicetype/getbyservice/${serviceId}`;
+            const response = await fetch(nurseServiceUrl, {
+              headers: { accept: "text/plain" },
+            });
+
+            if (response.ok) {
+              const nurseServiceData = await response.json();
+              return {
+                serviceID: serviceId,
+                taskOrder: task.taskOrder,
+                nurses: nurseServiceData,
+              };
+            }
+            return {
+              serviceID: serviceId,
+              taskOrder: task.taskOrder,
+              nurses: [],
+            };
+          }
+        );
+
+        const nurseServiceResults = await Promise.all(
+          nurseServicePromises
+        );
+        setNurseServiceLinks(nurseServiceResults);
+
+        console.log(
+          "Nurse service links loaded:",
+          nurseServiceResults
+        );
       } else {
+        console.log("Failed to load customize tasks");
         setNurseServiceLinks([]);
       }
     } catch (error) {
-      console.error(
-        "PaymentScreen: Error loading nurse-service links:",
-        error
-      );
+      console.error("Error loading nurse service links:", error);
       setNurseServiceLinks([]);
     }
   };
@@ -236,6 +297,8 @@ export default function PaymentScreen() {
               await loadPackageTasks(
                 parsedData.packageData.serviceID
               );
+              // Load services để có tên service chính xác
+              await loadServices();
             }
 
             // Load services để hiển thị thông tin
@@ -401,15 +464,115 @@ export default function PaymentScreen() {
 
   const loadPackageTasks = async (packageId) => {
     try {
-      const result =
-        await ServiceTaskService.getServiceTasksByServiceId(
-          packageId
+      console.log(
+        "PaymentScreen: Loading package tasks for package ID:",
+        packageId
+      );
+
+      // Load customize tasks trực tiếp từ booking
+      try {
+        const customizeTasksUrl = `${API_CONFIG.BASE_URL}/api/CustomizeTask/GetAllByBooking/${bookingId}`;
+        const customizeResponse = await fetch(customizeTasksUrl, {
+          headers: { accept: "*/*" },
+        });
+
+        if (customizeResponse.ok) {
+          const customizeTasks = await customizeResponse.json();
+          console.log(
+            "PaymentScreen: Customize tasks loaded:",
+            customizeTasks
+          );
+
+          if (customizeTasks && customizeTasks.length > 0) {
+            // Load service details cho từng customize task
+            const serviceDetailsPromises = customizeTasks.map(
+              async (task) => {
+                try {
+                  const serviceUrl = `${API_CONFIG.BASE_URL}/api/servicetypes/get/${task.serviceID}`;
+                  const serviceResponse = await fetch(serviceUrl, {
+                    headers: { accept: "*/*" },
+                  });
+
+                  if (serviceResponse.ok) {
+                    const serviceData = await serviceResponse.json();
+                    console.log(
+                      "PaymentScreen: Service data for serviceID",
+                      task.serviceID,
+                      ":",
+                      serviceData
+                    );
+                    return {
+                      serviceTaskID: task.serviceTaskID,
+                      child_ServiceID: task.serviceID,
+                      description: serviceData.serviceName,
+                      price: serviceData.price,
+                      quantity: 1,
+                      taskOrder: task.taskOrder,
+                      status: task.status,
+                    };
+                  } else {
+                    console.log(
+                      "PaymentScreen: Failed to load service details for serviceID:",
+                      task.serviceID
+                    );
+                    // Fallback nếu không load được service details
+                    return {
+                      serviceTaskID: task.serviceTaskID,
+                      child_ServiceID: task.serviceID,
+                      description: `Dịch vụ ${task.serviceID}`,
+                      price: 0,
+                      quantity: 1,
+                      taskOrder: task.taskOrder,
+                      status: task.status,
+                    };
+                  }
+                } catch (error) {
+                  console.error(
+                    "PaymentScreen: Error loading service details for serviceID:",
+                    task.serviceID,
+                    error
+                  );
+                  return {
+                    serviceTaskID: task.serviceTaskID,
+                    child_ServiceID: task.serviceID,
+                    description: `Dịch vụ ${task.serviceID}`,
+                    price: 0,
+                    quantity: 1,
+                    taskOrder: task.taskOrder,
+                    status: task.status,
+                  };
+                }
+              }
+            );
+
+            const serviceDetails = await Promise.all(
+              serviceDetailsPromises
+            );
+            console.log(
+              "PaymentScreen: Final service details:",
+              serviceDetails
+            );
+            setPackageTasks(serviceDetails);
+          } else {
+            console.log("PaymentScreen: No customize tasks found");
+            setPackageTasks([]);
+          }
+        } else {
+          console.log(
+            "PaymentScreen: Failed to load customize tasks"
+          );
+          setPackageTasks([]);
+        }
+      } catch (customizeError) {
+        console.error(
+          "PaymentScreen: Error loading customize tasks:",
+          customizeError
         );
-      if (result.success) {
-        setPackageTasks(result.data);
+        setPackageTasks([]);
       }
     } catch (error) {
       console.error("Error loading package tasks:", error);
+      setPackageTasks([]);
     }
   };
 
@@ -417,11 +580,13 @@ export default function PaymentScreen() {
     try {
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        // Filter only services (not packages)
-        const servicesOnly = result.data.filter(
-          (service) => !service.isPackage
+        // Load all service types (including packages) for proper display
+        setServices(result.data);
+        console.log(
+          "PaymentScreen: All services loaded:",
+          result.data.length,
+          "items"
         );
-        setServices(servicesOnly);
       }
     } catch (error) {
       console.error("Error loading services:", error);
@@ -838,7 +1003,18 @@ export default function PaymentScreen() {
 
         <TouchableOpacity
           style={styles.expandButton}
-          onPress={() => setExpandedPackage(!expandedPackage)}>
+          onPress={async () => {
+            const newExpandedState = !expandedPackage;
+            setExpandedPackage(newExpandedState);
+
+            // Nếu đang expand, load package tasks
+            if (
+              newExpandedState &&
+              extraData?.packageData?.serviceID
+            ) {
+              await loadPackageTasks(extraData.packageData.serviceID);
+            }
+          }}>
           <Text style={styles.expandButtonText}>
             {expandedPackage ? "Ẩn chi tiết" : "Xem chi tiết"}
           </Text>
@@ -851,34 +1027,84 @@ export default function PaymentScreen() {
 
         {expandedPackage && (
           <View style={styles.packageTasks}>
-            {packageTasks.length > 0 ? (
-              packageTasks.map((task, index) => (
-                <View
-                  key={task.serviceTaskID}
-                  style={styles.taskItem}>
-                  <View style={styles.taskHeader}>
-                    <Text style={styles.taskOrder}>
-                      {task.taskOrder}.
-                    </Text>
-                    <Text style={styles.taskDescription}>
-                      {task.description}
-                    </Text>
-                  </View>
-                  <View style={styles.taskFooter}>
-                    <Text style={styles.taskPrice}>
-                      {ServiceTaskService.formatPrice(task.price)}
-                    </Text>
-                    <Text style={styles.taskQuantity}>
-                      Số lượng: {task.quantity}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.noTasksText}>
-                Đang tải chi tiết...
-              </Text>
-            )}
+            {(() => {
+              // Sử dụng packageTasks trực tiếp vì nurseServiceLinks có thể trống
+              if (packageTasks.length > 0) {
+                return packageTasks.map((task, index) => {
+                  // Tìm thông tin service từ child_ServiceID (service thực) thay vì serviceTaskID
+                  const serviceInfo = services.find(
+                    (s) => s.serviceID === task.child_ServiceID
+                  );
+
+                  return (
+                    <View
+                      key={task.serviceTaskID}
+                      style={styles.taskItem}>
+                      <View style={styles.taskHeader}>
+                        <Text style={styles.taskOrder}>
+                          {task.taskOrder}.
+                        </Text>
+                        <Text style={styles.taskDescription}>
+                          {serviceInfo?.serviceName ||
+                            task.description ||
+                            `Dịch vụ ${task.child_ServiceID}`}
+                        </Text>
+                      </View>
+                      <View style={styles.taskFooter}>
+                        <Text style={styles.taskPrice}>
+                          {ServiceTypeService.formatPrice(task.price)}
+                        </Text>
+                        <Text style={styles.taskQuantity}>
+                          Số lượng: {task.quantity}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                });
+              } else if (nurseServiceLinks.length > 0) {
+                // Fallback to nurseServiceLinks if available
+                return nurseServiceLinks
+                  .filter((link) => link.serviceID)
+                  .map((taskLink, index) => {
+                    const serviceInfo = services.find(
+                      (s) => s.serviceID === taskLink.serviceID
+                    );
+
+                    return (
+                      <View
+                        key={`customize-task-${index}`}
+                        style={styles.taskItem}>
+                        <View style={styles.taskHeader}>
+                          <Text style={styles.taskOrder}>
+                            {taskLink.taskOrder || index + 1}.
+                          </Text>
+                          <Text style={styles.taskDescription}>
+                            {serviceInfo?.serviceName ||
+                              `Dịch vụ ${taskLink.serviceID}`}
+                          </Text>
+                        </View>
+
+                        <View style={styles.taskFooter}>
+                          <Text style={styles.taskPrice}>
+                            {ServiceTypeService.formatPrice(
+                              serviceInfo?.price || 0
+                            )}
+                          </Text>
+                          <Text style={styles.taskQuantity}>
+                            Số lượng: 1
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  });
+              } else {
+                return (
+                  <Text style={styles.noTasksText}>
+                    Không có chi tiết dịch vụ
+                  </Text>
+                );
+              }
+            })()}
           </View>
         )}
       </View>
@@ -1103,17 +1329,29 @@ export default function PaymentScreen() {
                   const chosen = nurses.find(
                     (n) => n.nursingID === chosenId
                   );
+
+                  // Get service info for this slot
+                  const serviceId = slotServiceIds[idx];
+                  const serviceInfo = services.find(
+                    (s) => s.serviceID === serviceId
+                  );
+
                   return (
                     <View key={idx} style={styles.slotRow}>
                       <Text style={styles.slotLabel}>
-                        Vị trí {idx + 1}:
+                        Vị trí {idx + 1}{" "}
+                        {serviceInfo
+                          ? `(${serviceInfo.serviceName})`
+                          : ""}
+                        :
                       </Text>
                       <TouchableOpacity
                         style={styles.selectSlotButton}
                         onPress={() => openNursePicker(idx)}>
                         <Text style={styles.selectSlotButtonText}>
                           {chosen
-                            ? chosen.fullName
+                            ? chosen.fullName ||
+                              chosen.nursingFullName
                             : "Chọn điều dưỡng"}
                         </Text>
                       </TouchableOpacity>
@@ -1152,6 +1390,29 @@ export default function PaymentScreen() {
                     0;
                 }
 
+                // Nếu amount vẫn là 0, tính từ packageTasks
+                if (finalAmount === 0 && packageTasks.length > 0) {
+                  finalAmount = packageTasks.reduce((sum, task) => {
+                    return sum + task.price * (task.quantity || 1);
+                  }, 0);
+                  console.log(
+                    "PaymentScreen: Calculated amount from packageTasks:",
+                    finalAmount
+                  );
+                }
+
+                // Nếu vẫn là 0, sử dụng package price từ extraData
+                if (
+                  finalAmount === 0 &&
+                  extraData?.packageData?.price
+                ) {
+                  finalAmount = extraData.packageData.price;
+                  console.log(
+                    "PaymentScreen: Using package price from extraData:",
+                    finalAmount
+                  );
+                }
+
                 return ServiceTypeService.formatPrice(finalAmount);
               })()}
             </Text>
@@ -1164,7 +1425,41 @@ export default function PaymentScreen() {
                 <Text style={styles.extraLabel}>Phí phát sinh:</Text>
                 <Text style={styles.extraValue}>
                   {(() => {
-                    const baseAmount = bookingData.amount || 0;
+                    // Sử dụng finalAmount đã tính ở trên thay vì bookingData.amount
+                    let baseAmount = 0;
+
+                    if (
+                      bookingData?.extra !== null &&
+                      bookingData?.extra !== undefined
+                    ) {
+                      baseAmount = bookingData.amount || 0;
+                    } else {
+                      baseAmount =
+                        bookingData?.amount ||
+                        extraData?.totalAmount ||
+                        0;
+                    }
+
+                    // Nếu baseAmount vẫn là 0, tính từ packageTasks
+                    if (baseAmount === 0 && packageTasks.length > 0) {
+                      baseAmount = packageTasks.reduce(
+                        (sum, task) => {
+                          return (
+                            sum + task.price * (task.quantity || 1)
+                          );
+                        },
+                        0
+                      );
+                    }
+
+                    // Nếu vẫn là 0, sử dụng package price từ extraData
+                    if (
+                      baseAmount === 0 &&
+                      extraData?.packageData?.price
+                    ) {
+                      baseAmount = extraData.packageData.price;
+                    }
+
                     const extraPercent = bookingData.extra || 0;
                     const extraAmount =
                       (baseAmount * extraPercent) / 100;
@@ -1257,20 +1552,14 @@ export default function PaymentScreen() {
               const requiredServiceName = services.find(
                 (s) => s.serviceID === requiredServiceId
               )?.serviceName;
-              const allowedNurseIds = new Set(
-                nurseServiceLinks
-                  .filter((link) =>
-                    requiredServiceId
-                      ? link.serviceID === requiredServiceId
-                      : true
-                  )
-                  .map((l) => l.nursingID)
+
+              // Find nurse service data for this service
+              const nurseServiceData = nurseServiceLinks.find(
+                (link) => link.serviceID === requiredServiceId
               );
-              const list = (nurses || []).filter((n) =>
-                requiredServiceId
-                  ? allowedNurseIds.has(n.nursingID)
-                  : true
-              );
+
+              const availableNurses = nurseServiceData?.nurses || [];
+
               return (
                 <>
                   <Text style={styles.modalTitle}>
@@ -1279,16 +1568,16 @@ export default function PaymentScreen() {
                       : "Chọn điều dưỡng"}
                   </Text>
                   <ScrollView style={{ width: "100%" }}>
-                    {list.length === 0 ? (
+                    {availableNurses.length === 0 ? (
                       <Text
                         style={{
                           paddingVertical: 12,
                           color: "#666",
                         }}>
-                        Không có điều dưỡng phù hợp
+                        Không có điều dưỡng phù hợp cho dịch vụ này
                       </Text>
                     ) : (
-                      list.map((nurse) => (
+                      availableNurses.map((nurse) => (
                         <TouchableOpacity
                           key={nurse.nursingID}
                           style={styles.nurseRow}
@@ -1296,10 +1585,10 @@ export default function PaymentScreen() {
                             chooseNurseForSlot(nurse.nursingID)
                           }>
                           <Text style={styles.nurseNameText}>
-                            {nurse.fullName}
+                            {nurse.nursingFullName}
                           </Text>
                           <Text style={styles.nurseMetaText}>
-                            {nurse.major || "Nurse"}
+                            Dịch vụ: {nurse.serviceName}
                           </Text>
                         </TouchableOpacity>
                       ))

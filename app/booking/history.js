@@ -1061,11 +1061,50 @@ export default function BookingHistoryScreen() {
     }
   };
 
-  const toggleExpanded = (bookingID) => {
+  const toggleExpanded = async (bookingID) => {
     setExpandedBookings((prev) => ({
       ...prev,
       [bookingID]: !prev[bookingID],
     }));
+
+    // Nếu đang expand, load package tasks để hiển thị service types
+    if (!expandedBookings[bookingID]) {
+      try {
+        const customizePackages =
+          customizePackagesMap[bookingID] || [];
+        for (const pkg of customizePackages) {
+          if (pkg.serviceID) {
+            await loadPackageTasks(pkg.serviceID);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading package tasks:", error);
+      }
+    }
+  };
+
+  const loadPackageTasks = async (serviceID) => {
+    try {
+      const result =
+        await ServiceTaskService.getServiceTasksByServiceId(
+          serviceID
+        );
+      if (result.success) {
+        // Cập nhật serviceTasks state với tasks mới
+        setServiceTasks((prev) => {
+          const existing = prev.filter(
+            (task) => task.serviceID !== serviceID
+          );
+          const newTasks = result.data.map((task) => ({
+            ...task,
+            serviceID,
+          }));
+          return [...existing, ...newTasks];
+        });
+      }
+    } catch (error) {
+      console.error("Error loading package tasks:", error);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -1125,6 +1164,11 @@ export default function BookingHistoryScreen() {
 
     // Áp dụng filter theo status
     switch (selectedFilter) {
+      case "completed":
+        filteredBookings = filteredBookings.filter(
+          (booking) => booking.status === "completed"
+        );
+        break;
       case "paid":
         filteredBookings = filteredBookings.filter(
           (booking) => booking.status === "paid"
@@ -1235,24 +1279,26 @@ export default function BookingHistoryScreen() {
                 {formatStatus(bookingStatus)}
               </Text>
             </View>
-            {typeof booking.isSchedule === "boolean" && (
-              <View
-                style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor: booking.isSchedule
-                      ? "#4CAF50"
-                      : "#FFA500",
-                    marginTop: 6,
-                  },
-                ]}>
-                <Text style={styles.statusText}>
-                  {booking.isSchedule
-                    ? "Đã phân công"
-                    : "Chưa phân công"}
-                </Text>
-              </View>
-            )}
+            {/* Chỉ hiện status "Đã phân công" khi không phải completed */}
+            {typeof booking.isSchedule === "boolean" &&
+              bookingStatus !== "completed" && (
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: booking.isSchedule
+                        ? "#4CAF50"
+                        : "#FFA500",
+                      marginTop: 6,
+                    },
+                  ]}>
+                  <Text style={styles.statusText}>
+                    {booking.isSchedule
+                      ? "Đã phân công"
+                      : "Chưa phân công"}
+                  </Text>
+                </View>
+              )}
           </View>
         </View>
 
@@ -1696,51 +1742,73 @@ export default function BookingHistoryScreen() {
 
       {/* Filter Toggle */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            selectedFilter === "all" && styles.filterButtonActive,
-          ]}
-          onPress={() => toggleFilter("all")}>
-          <Text
+        <View style={styles.filterRow}>
+          <TouchableOpacity
             style={[
-              styles.filterButtonText,
-              selectedFilter === "all" &&
-                styles.filterButtonTextActive,
-            ]}>
-            Tất cả
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            selectedFilter === "paid" && styles.filterButtonActive,
-          ]}
-          onPress={() => toggleFilter("paid")}>
-          <Text
+              styles.filterButton,
+              selectedFilter === "all" && styles.filterButtonActive,
+            ]}
+            onPress={() => toggleFilter("all")}>
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedFilter === "all" &&
+                  styles.filterButtonTextActive,
+              ]}>
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.filterButtonText,
-              selectedFilter === "paid" &&
-                styles.filterButtonTextActive,
-            ]}>
-            Đã thanh toán
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            selectedFilter === "pending" && styles.filterButtonActive,
-          ]}
-          onPress={() => toggleFilter("pending")}>
-          <Text
+              styles.filterButton,
+              selectedFilter === "completed" &&
+                styles.filterButtonActive,
+            ]}
+            onPress={() => toggleFilter("completed")}>
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedFilter === "completed" &&
+                  styles.filterButtonTextActive,
+              ]}>
+              Hoàn thành
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.filterRow}>
+          <TouchableOpacity
             style={[
-              styles.filterButtonText,
+              styles.filterButton,
+              selectedFilter === "paid" && styles.filterButtonActive,
+            ]}
+            onPress={() => toggleFilter("paid")}>
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedFilter === "paid" &&
+                  styles.filterButtonTextActive,
+              ]}>
+              Đã thanh toán
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
               selectedFilter === "pending" &&
-                styles.filterButtonTextActive,
-            ]}>
-            Chờ thanh toán
-          </Text>
-        </TouchableOpacity>
+                styles.filterButtonActive,
+            ]}
+            onPress={() => toggleFilter("pending")}>
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedFilter === "pending" &&
+                  styles.filterButtonTextActive,
+              ]}>
+              Chờ thanh toán
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -1754,15 +1822,19 @@ export default function BookingHistoryScreen() {
               color="#999"
             />
             <Text style={styles.emptyTitle}>
-              {selectedFilter === "paid"
-                ? "Chưa có lịch hẹn đã hoàn thành"
+              {selectedFilter === "completed"
+                ? "Chưa có lịch hẹn hoàn thành"
+                : selectedFilter === "paid"
+                ? "Chưa có lịch hẹn đã thanh toán"
                 : selectedFilter === "pending"
                 ? "Chưa có lịch hẹn chờ thanh toán"
                 : "Chưa có lịch hẹn nào"}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {selectedFilter === "paid"
+              {selectedFilter === "completed"
                 ? "Các lịch hẹn đã hoàn thành sẽ hiển thị ở đây"
+                : selectedFilter === "paid"
+                ? "Các lịch hẹn đã thanh toán sẽ hiển thị ở đây"
                 : selectedFilter === "pending"
                 ? "Các lịch hẹn chờ thanh toán sẽ hiển thị ở đây"
                 : "Lịch sử đặt lịch sẽ hiển thị ở đây"}
@@ -2067,14 +2139,17 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   filterContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     paddingVertical: 10,
     paddingHorizontal: 20,
     backgroundColor: "#F5F5F5",
     borderRadius: 10,
     marginHorizontal: 20,
     marginBottom: 10,
+  },
+  filterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   filterButton: {
     flex: 1,
