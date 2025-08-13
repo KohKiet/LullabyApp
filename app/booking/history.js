@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -18,7 +17,6 @@ import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizePackageService from "../../services/customizePackageService";
 import CustomizeTaskService from "../../services/customizeTaskService";
-import FeedbackService from "../../services/feedbackService";
 import InvoiceService from "../../services/invoiceService";
 import MedicalNoteService from "../../services/medicalNoteService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
@@ -50,17 +48,6 @@ export default function BookingHistoryScreen() {
   // State cho medical notes
   const [medicalNotesMap, setMedicalNotesMap] = useState({});
 
-  // State cho feedback
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [feedbackRate, setFeedbackRate] = useState(0);
-  const [feedbackContent, setFeedbackContent] = useState("");
-  const [feedbackContext, setFeedbackContext] = useState({
-    nursingID: null,
-    customizeTaskID: null,
-    serviceID: null,
-  });
-  const [feedbackMap, setFeedbackMap] = useState({});
-
   // State cho modal chọn nurse
   const [showNurseModal, setShowNurseModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -81,7 +68,7 @@ export default function BookingHistoryScreen() {
         await loadZoneDetails();
         await loadServices();
         await loadServiceTasks();
-        await loadAllFeedbacks();
+        // await loadAllFeedbacks(); // ĐÃ XÓA - không còn chức năng feedback
       } else {
         Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
         router.replace("/auth/login");
@@ -289,206 +276,20 @@ export default function BookingHistoryScreen() {
     }
   };
 
-  // Load tất cả feedback
-  const loadAllFeedbacks = async () => {
-    try {
-      const res = await FeedbackService.getAllFeedbacks();
-      if (res.success) {
-        const map = {};
-        res.data.forEach((feedback) => {
-          if (feedback.customizeTaskID) {
-            map[feedback.customizeTaskID] = feedback;
-          }
-        });
-        setFeedbackMap(map);
-      }
-    } catch (error) {
-      console.error("Error loading feedbacks:", error);
-    }
-  };
+  // Load tất cả feedback - ĐÃ XÓA
+  // const loadAllFeedbacks = async () => { ... };
 
-  // Mở modal đánh giá
-  const openFeedbackModal = (task) => {
-    setFeedbackContext({
-      nursingID: task.nursingID,
-      customizeTaskID: task.customizeTaskID,
-      serviceID: task.serviceID,
-    });
-    setFeedbackRate(0);
-    setFeedbackContent("");
-    setShowFeedbackModal(true);
-  };
+  // Mở modal đánh giá - ĐÃ XÓA
+  // const openFeedbackModal = (task) => { ... };
 
-  // Render stars cho đánh giá
-  const renderStars = (rate, onSelect) => {
-    const stars = [1, 2, 3, 4, 5];
-    return (
-      <View style={styles.starsContainer}>
-        {stars.map((value) => (
-          <TouchableOpacity
-            key={value}
-            onPress={() => onSelect(value)}
-            style={styles.starButton}>
-            <Ionicons
-              name={value <= rate ? "star" : "star-outline"}
-              size={24}
-              color={value <= rate ? "#FFD700" : "#CCC"}
-            />
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
+  // Render stars cho đánh giá - ĐÃ XÓA
+  // const renderStars = (rate, onSelect) => { ... };
 
-  // Gửi đánh giá
-  const submitFeedback = async () => {
-    if (!feedbackContext.nursingID || !feedbackContext.serviceID) {
-      Alert.alert("Lỗi", "Thiếu thông tin để gửi đánh giá");
-      return;
-    }
-    if (feedbackRate <= 0) {
-      Alert.alert("Lỗi", "Vui lòng chọn số sao đánh giá");
-      return;
-    }
+  // Gửi đánh giá - ĐÃ XÓA
+  // const submitFeedback = async () => { ... };
 
-    try {
-      const result = await FeedbackService.submitFeedback({
-        nursingID: feedbackContext.nursingID,
-        customizeTaskID: feedbackContext.customizeTaskID || 0,
-        serviceID: feedbackContext.serviceID,
-        rate: feedbackRate,
-        content: feedbackContent || "",
-      });
-
-      if (result.success) {
-        Alert.alert("Thành công", "Cảm ơn bạn đã đánh giá!", [
-          {
-            text: "OK",
-            onPress: async () => {
-              setShowFeedbackModal(false);
-              setFeedbackRate(0);
-              setFeedbackContent("");
-              setFeedbackContext({
-                nursingID: null,
-                customizeTaskID: null,
-                serviceID: null,
-              });
-              // Reload feedback và booking data để hiển thị đánh giá mới
-              await loadAllFeedbacks();
-              await loadUserData();
-            },
-          },
-        ]);
-      } else {
-        // Dịch message tiếng Anh thành tiếng Việt
-        const translatedError = translateErrorMessage(result.error);
-        Alert.alert("Lỗi", translatedError);
-      }
-    } catch (error) {
-      console.error("Error submitting feedback:", error);
-      Alert.alert("Lỗi", "Không thể gửi đánh giá");
-    }
-  };
-
-  // Hàm dịch message tiếng Anh thành tiếng Việt
-  const translateErrorMessage = (message) => {
-    if (!message) return "Không thể gửi đánh giá";
-
-    const translations = {
-      "Customize Task with ID": "Nhiệm vụ với ID",
-      "has already had Feedback": "đã có đánh giá rồi",
-      "already had Feedback": "đã có đánh giá rồi",
-      Feedback: "Đánh giá",
-      "already exists": "đã tồn tại",
-      "not found": "không tìm thấy",
-      invalid: "không hợp lệ",
-      required: "bắt buộc",
-      failed: "thất bại",
-      error: "lỗi",
-      success: "thành công",
-    };
-
-    let translatedMessage = message;
-
-    // Dịch các cụm từ phổ biến
-    Object.keys(translations).forEach((english) => {
-      const vietnamese = translations[english];
-      translatedMessage = translatedMessage.replace(
-        new RegExp(english, "gi"),
-        vietnamese
-      );
-    });
-
-    // Xử lý message cụ thể
-    if (
-      message.includes("Customize Task with ID") &&
-      message.includes("has already had Feedback")
-    ) {
-      const taskId = message.match(/\d+/)?.[0] || "";
-      return `Nhiệm vụ #${taskId} đã có đánh giá rồi`;
-    }
-
-    return translatedMessage;
-  };
-
-  // Component hiển thị feedback cho từng task
-  const FeedbackRenderer = ({ task, onOpenModal, feedbackMap }) => {
-    const feedback = task?.customizeTaskID
-      ? feedbackMap[task.customizeTaskID]
-      : null;
-
-    const canFeedback = (() => {
-      // Chỉ cho phép feedback khi đã hoàn thành hoặc qua giờ hẹn
-      if (!task || !task.nursingID) return false;
-
-      // Kiểm tra xem đã có feedback chưa
-      if (feedback) return false;
-
-      return true;
-    })();
-
-    if (feedback) {
-      return (
-        <View style={styles.feedbackDisplay}>
-          <Text style={styles.feedbackLabel}>Đánh giá của bạn:</Text>
-          <View style={styles.feedbackStars}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Ionicons
-                key={i}
-                name={
-                  i <= (feedback.rate || 0) ? "star" : "star-outline"
-                }
-                size={16}
-                color="#FFD700"
-              />
-            ))}
-          </View>
-          {feedback.content ? (
-            <Text style={styles.feedbackContent}>
-              {feedback.content}
-            </Text>
-          ) : null}
-        </View>
-      );
-    }
-
-    if (!canFeedback) return null;
-
-    return (
-      <TouchableOpacity
-        style={styles.feedbackButton}
-        onPress={() => onOpenModal(task)}>
-        <LinearGradient
-          colors={["#4CAF50", "#45A049"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.feedbackButtonGradient}>
-          <Ionicons name="star" size={14} color="#FFFFFF" />
-          <Text style={styles.feedbackButtonText}>Đánh giá</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    );
-  };
+  // Hàm dịch message tiếng Anh thành tiếng Việt - ĐÃ XÓA
+  // const translateErrorMessage = (message) => { ... };
 
   const loadNurses = async () => {
     try {
@@ -1628,6 +1429,109 @@ export default function BookingHistoryScreen() {
           </View>
         </View>
 
+        {/* Tóm tắt dịch vụ đã hoàn thành - hiển thị ngay cho booking completed */}
+        {booking.status === "completed" && (
+          <View style={styles.completedServicesSummary}>
+            <TouchableOpacity
+              style={styles.completedServicesToggle}
+              onPress={() => {
+                setExpandedBookings((prev) => ({
+                  ...prev,
+                  [`completed_${booking.bookingID}`]:
+                    !prev[`completed_${booking.bookingID}`],
+                }));
+              }}>
+              <Text style={styles.completedServicesToggleText}>
+                {expandedBookings[`completed_${booking.bookingID}`]
+                  ? "Ẩn dịch vụ đã hoàn thành"
+                  : "Xem dịch vụ đã hoàn thành"}
+              </Text>
+              <Ionicons
+                name={
+                  expandedBookings[`completed_${booking.bookingID}`]
+                    ? "chevron-up"
+                    : "chevron-down"
+                }
+                size={16}
+                color="#4CAF50"
+              />
+            </TouchableOpacity>
+
+            {expandedBookings[`completed_${booking.bookingID}`] && (
+              <>
+                <Text style={styles.sectionTitle}>
+                  Dịch vụ đã hoàn thành:
+                </Text>
+                {customizeTasksMap[booking.bookingID] &&
+                  customizeTasksMap[booking.bookingID].map(
+                    (task, taskIndex) => {
+                      const serviceInfo = services.find(
+                        (s) => s.serviceID === task.serviceID
+                      );
+                      const assignedNurse = task.nursingID
+                        ? nurses.find(
+                            (n) => n.nursingID === task.nursingID
+                          )
+                        : null;
+
+                      return (
+                        <View
+                          key={task.customizeTaskID}
+                          style={styles.completedServiceItem}>
+                          <View style={styles.completedServiceHeader}>
+                            <Text style={styles.completedServiceName}>
+                              {taskIndex + 1}.{" "}
+                              {serviceInfo?.serviceName ||
+                                `Dịch vụ ${task.serviceID}`}
+                            </Text>
+                            <Text
+                              style={styles.completedServiceStatus}>
+                              Hoàn thành
+                            </Text>
+                          </View>
+
+                          {assignedNurse && (
+                            <View
+                              style={styles.completedServiceNurse}>
+                              <Text
+                                style={
+                                  styles.completedServiceNurseLabel
+                                }>
+                                Điều dưỡng thực hiện:
+                              </Text>
+                              <Text
+                                style={
+                                  styles.completedServiceNurseName
+                                }>
+                                {assignedNurse.fullName}
+                              </Text>
+                            </View>
+                          )}
+
+                          <View
+                            style={styles.completedServiceDetails}>
+                            <Text
+                              style={styles.completedServiceOrder}>
+                              Thứ tự thực hiện: {task.taskOrder}
+                            </Text>
+                            {serviceInfo?.description && (
+                              <Text
+                                style={
+                                  styles.completedServiceDescription
+                                }>
+                                {serviceInfo.description}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    }
+                  )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Service/Package Details */}
         {details.extraData && (
           <View style={styles.serviceDetails}>
@@ -1813,13 +1717,13 @@ export default function BookingHistoryScreen() {
                                       )}
 
                                       {/* Hiển thị feedback hoặc nút đánh giá */}
-                                      <FeedbackRenderer
+                                      {/* <FeedbackRenderer
                                         task={task}
                                         onOpenModal={
                                           openFeedbackModal
                                         }
                                         feedbackMap={feedbackMap}
-                                      />
+                                      /> */}
                                     </View>
                                   );
                                 })}
@@ -1934,55 +1838,59 @@ export default function BookingHistoryScreen() {
                   }
                   return null;
                 })()}
+
+                {/* Actions: pay and cancel */}
+                {(() => {
+                  const inv = invoiceMap[booking.bookingID];
+                  const invoiceStatus = inv?.status;
+                  const canCancelByInvoice =
+                    invoiceStatus === "pending" ||
+                    invoiceStatus === "paid";
+                  const canCancelByBooking =
+                    bookingStatus === "pending" ||
+                    bookingStatus === "paid";
+                  // Không hiển thị actions cho booking đã hoàn thành
+                  const showActions =
+                    (canCancelByBooking || canCancelByInvoice) &&
+                    bookingStatus !== "completed";
+                  if (!showActions) return null;
+                  return (
+                    <View style={styles.paymentSection}>
+                      {bookingStatus === "pending" && (
+                        <TouchableOpacity
+                          style={styles.paymentButton}
+                          onPress={() =>
+                            handlePayment(booking.bookingID)
+                          }>
+                          <Ionicons
+                            name="card-outline"
+                            size={20}
+                            color="#FFFFFF"
+                          />
+                          <Text style={styles.paymentButtonText}>
+                            Thanh toán ngay
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => handleCancelBooking(booking)}>
+                        <Ionicons
+                          name="close-circle-outline"
+                          size={20}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.cancelButtonText}>
+                          Hủy booking
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
               </View>
             )}
           </View>
         )}
-
-        {/* Actions: pay and cancel */}
-        {(() => {
-          const inv = invoiceMap[booking.bookingID];
-          const invoiceStatus = inv?.status;
-          const canCancelByInvoice =
-            invoiceStatus === "pending" || invoiceStatus === "paid";
-          const canCancelByBooking =
-            bookingStatus === "pending" || bookingStatus === "paid";
-          // Không hiển thị actions cho booking đã hoàn thành
-          const showActions =
-            (canCancelByBooking || canCancelByInvoice) &&
-            bookingStatus !== "completed";
-          if (!showActions) return null;
-          return (
-            <View style={styles.paymentSection}>
-              {bookingStatus === "pending" && (
-                <TouchableOpacity
-                  style={styles.paymentButton}
-                  onPress={() => handlePayment(booking.bookingID)}>
-                  <Ionicons
-                    name="card-outline"
-                    size={20}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.paymentButtonText}>
-                    Thanh toán ngay
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => handleCancelBooking(booking)}>
-                <Ionicons
-                  name="close-circle-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.cancelButtonText}>
-                  Hủy booking
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
-        })()}
       </View>
     );
   };
@@ -2309,59 +2217,8 @@ export default function BookingHistoryScreen() {
         </View>
       </Modal>
 
-      {/* Modal đánh giá */}
-      <Modal
-        visible={showFeedbackModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowFeedbackModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                Đánh giá điều dưỡng
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowFeedbackModal(false)}
-                style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.feedbackModalContent}>
-              <Text style={styles.feedbackModalSubtitle}>
-                Vui lòng đánh giá chất lượng dịch vụ
-              </Text>
-
-              {/* Stars */}
-              {renderStars(feedbackRate, setFeedbackRate)}
-
-              {/* Feedback content */}
-              <Text style={styles.feedbackInputLabel}>
-                Nhận xét (tùy chọn):
-              </Text>
-              <TextInput
-                style={styles.feedbackInput}
-                placeholder="Nhập nhận xét của bạn..."
-                value={feedbackContent}
-                onChangeText={setFeedbackContent}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-
-              {/* Submit button */}
-              <TouchableOpacity
-                style={styles.submitFeedbackButton}
-                onPress={submitFeedback}>
-                <Text style={styles.submitFeedbackButtonText}>
-                  Gửi đánh giá
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Modal đánh giá - ĐÃ XÓA */}
+      {/* <Modal visible={showFeedbackModal} ... /> */}
     </LinearGradient>
   );
 }
@@ -3198,6 +3055,75 @@ const styles = StyleSheet.create({
   submitFeedbackButtonText: {
     color: "white",
     fontSize: 16,
+    fontWeight: "bold",
+  },
+  completedServicesSummary: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  completedServiceItem: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  completedServiceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  completedServiceName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  completedServiceStatus: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4CAF50",
+  },
+  completedServiceNurse: {
+    marginTop: 5,
+    paddingTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  completedServiceNurseLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5,
+  },
+  completedServiceNurseName: {
+    fontSize: 14,
+    color: "#666",
+  },
+  completedServiceDetails: {
+    marginTop: 5,
+    paddingTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  completedServiceOrder: {
+    fontSize: 14,
+    color: "#666",
+  },
+  completedServiceDescription: {
+    fontSize: 14,
+    color: "#666",
+  },
+  completedServicesToggle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  completedServicesToggleText: {
+    fontSize: 14,
+    color: "#4CAF50",
     fontWeight: "bold",
   },
 });
