@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   Alert,
@@ -8,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -16,9 +18,11 @@ import AuthService from "../../services/authService";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizeTaskService from "../../services/customizeTaskService";
+import MedicalNoteService from "../../services/medicalNoteService";
 import RelativeService from "../../services/relativeService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import WorkScheduleService from "../../services/workScheduleService";
+import { getMajorDisplayText } from "../../utils/majorUtils";
 
 // Configure Vietnamese locale for calendar
 LocaleConfig.locales["vi"] = {
@@ -83,6 +87,13 @@ export default function WorkScheduleScreen() {
   });
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [markedDates, setMarkedDates] = useState({});
+
+  // Medical notes states
+  const [medicalNotes, setMedicalNotes] = useState([]);
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
+  const [newNote, setNewNote] = useState({
+    note: "",
+  });
 
   // Kiểm tra xem có thể điểm danh hay không
   const canMarkAttendance = (schedule) => {
@@ -155,6 +166,113 @@ export default function WorkScheduleScreen() {
     } catch (error) {
       console.error("Error marking attendance:", error);
       Alert.alert("Lỗi", "Có lỗi xảy ra khi điểm danh");
+    }
+  };
+
+  // Load medical notes cho schedule
+  const loadMedicalNotes = async (schedule, customizeTask) => {
+    try {
+      // Sử dụng customizeTaskID từ schedule parameter trước, nếu không có thì dùng từ scheduleDetails
+      let customizeTaskID = schedule?.customizeTaskID;
+
+      if (!customizeTaskID && customizeTask) {
+        customizeTaskID = customizeTask.customizeTaskID;
+      }
+
+      if (!customizeTaskID) {
+        setMedicalNotes([]);
+        return;
+      }
+
+      // Thử dùng endpoint riêng trước
+      let result =
+        await MedicalNoteService.getMedicalNotesByCustomizeTaskId(
+          customizeTaskID
+        );
+
+      // Nếu endpoint riêng không hoạt động, thử dùng getAll và filter
+      if (!result.success || !result.data) {
+        const allNotesResult =
+          await MedicalNoteService.getAllMedicalNotes();
+
+        if (allNotesResult.success && allNotesResult.data) {
+          // Filter theo customizeTaskID
+          const filteredNotes = allNotesResult.data.filter(
+            (note) => note.customizeTaskID === customizeTaskID
+          );
+          result = { success: true, data: filteredNotes };
+        }
+      }
+
+      if (result.success) {
+        setMedicalNotes(result.data);
+      } else {
+        setMedicalNotes([]);
+      }
+    } catch (error) {
+      console.error("Error loading medical notes:", error);
+      setMedicalNotes([]);
+    }
+  };
+
+  // Reload medical notes
+  const reloadMedicalNotes = async () => {
+    if (scheduleDetails.customizeTask) {
+      await loadMedicalNotes(
+        selectedSchedule,
+        scheduleDetails.customizeTask
+      );
+    }
+  };
+
+  // Thêm medical note mới
+  const handleAddMedicalNote = async () => {
+    if (!selectedSchedule) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin lịch làm việc");
+      return;
+    }
+
+    if (!newNote.note.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập nội dung ghi chú");
+      return;
+    }
+
+    // Lấy customizeTaskID từ scheduleDetails.customizeTask
+    const customizeTaskID =
+      scheduleDetails.customizeTask?.customizeTaskID;
+
+    if (!customizeTaskID) {
+      Alert.alert(
+        "Lỗi",
+        "Không tìm thấy thông tin công việc để thêm ghi chú"
+      );
+      return;
+    }
+
+    try {
+      const noteData = {
+        customizeTaskID: customizeTaskID,
+        note: newNote.note.trim(),
+      };
+
+      const result = await MedicalNoteService.createMedicalNote(
+        noteData
+      );
+
+      if (result.success) {
+        Alert.alert("Thành công", "Đã thêm ghi chú thành công!");
+
+        // Reset form
+        resetMedicalNoteForm();
+
+        // Reload medical notes
+        await reloadMedicalNotes();
+      } else {
+        Alert.alert("Lỗi", result.error || "Không thể thêm ghi chú");
+      }
+    } catch (error) {
+      console.error("Error adding medical note:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi thêm ghi chú");
     }
   };
 
@@ -251,7 +369,12 @@ export default function WorkScheduleScreen() {
   const processMarkedDates = (schedules) => {
     const marked = {};
 
-    schedules.forEach((schedule) => {
+    // Filter out cancelled schedules first
+    const activeSchedules = schedules.filter(
+      (schedule) => schedule.status !== "cancelled"
+    );
+
+    activeSchedules.forEach((schedule) => {
       const dateKey = schedule.workDate.split("T")[0]; // Extract YYYY-MM-DD
 
       if (!marked[dateKey]) {
@@ -288,7 +411,9 @@ export default function WorkScheduleScreen() {
   const processTodaySchedules = (schedules) => {
     const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
     const todaySchedules = schedules.filter(
-      (schedule) => schedule.workDate.split("T")[0] === today
+      (schedule) =>
+        schedule.workDate.split("T")[0] === today &&
+        schedule.status !== "cancelled" // Filter out cancelled schedules
     );
 
     // Sort today's schedules by time
@@ -303,9 +428,11 @@ export default function WorkScheduleScreen() {
     const dateKey = day.dateString;
     setSelectedDate(dateKey);
 
-    // Find schedules for selected date
+    // Find schedules for selected date (excluding cancelled ones)
     const daySchedules = workSchedules.filter(
-      (schedule) => schedule.workDate.split("T")[0] === dateKey
+      (schedule) =>
+        schedule.workDate.split("T")[0] === dateKey &&
+        schedule.status !== "cancelled"
     );
 
     setSelectedSchedules(daySchedules);
@@ -328,13 +455,26 @@ export default function WorkScheduleScreen() {
 
   // Format major/specialty for display
   const formatMajor = (major) => {
-    switch (major?.toLowerCase()) {
-      case "nurse":
-        return "Chuyên gia điều dưỡng";
-      case "specialist":
-        return "Chuyên gia tư vấn";
+    return getMajorDisplayText(major);
+  };
+
+  // Format booking status to Vietnamese
+  const formatBookingStatus = (status) => {
+    switch (status?.toLowerCase()) {
+      case "pending":
+        return "Chờ xác nhận";
+      case "confirmed":
+        return "Đã xác nhận";
+      case "completed":
+        return "Đã hoàn thành";
+      case "cancelled":
+        return "Đã hủy";
+      case "in_progress":
+        return "Đang thực hiện";
+      case "rescheduled":
+        return "Đã đổi lịch";
       default:
-        return major || "Không xác định";
+        return status || "Không xác định";
     }
   };
 
@@ -426,6 +566,11 @@ export default function WorkScheduleScreen() {
         customizeTask,
         relatives,
       });
+
+      // Load medical notes cho schedule này sau khi đã có customizeTask
+      if (customizeTask) {
+        await loadMedicalNotes(schedule, customizeTask);
+      }
     } catch (error) {
       console.error(
         "WorkScheduleScreen: Error loading schedule details:",
@@ -447,6 +592,14 @@ export default function WorkScheduleScreen() {
       customizeTask: null,
       relatives: [],
     });
+  };
+
+  // Reset medical note form
+  const resetMedicalNoteForm = () => {
+    setNewNote({
+      note: "",
+    });
+    setShowAddNoteModal(false);
   };
 
   const renderScheduleItem = (schedule, isToday = false) => {
@@ -547,7 +700,7 @@ export default function WorkScheduleScreen() {
                     styles.detailText,
                     { color: "#4FC3F7", fontWeight: "600" },
                   ]}>
-                  Nhấn để xem thông tin bệnh nhân
+                  Nhấn để xem thông tin khách hàng
                 </Text>
               </View>
             )}
@@ -867,7 +1020,9 @@ export default function WorkScheduleScreen() {
                           Trạng thái đặt lịch:
                         </Text>
                         <Text style={styles.detailValue}>
-                          {scheduleDetails.booking.status}
+                          {formatBookingStatus(
+                            scheduleDetails.booking.status
+                          )}
                         </Text>
                       </View>
                     </View>
@@ -991,43 +1146,91 @@ export default function WorkScheduleScreen() {
                     </View>
                   )}
 
-                {/* Feedback Section */}
-                {canGiveFeedback(selectedSchedule) && (
-                  <View style={styles.detailSection}>
+                {/* Medical Notes Section */}
+                <View style={styles.detailSection}>
+                  <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>
-                      Đánh giá làm việc
+                      Ghi chú ({medicalNotes.length})
                     </Text>
-                    <View style={styles.detailCard}>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>
-                          Đánh giá:
-                        </Text>
-                        {renderStars(feedbackRate, setFeedbackRate)}
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>
-                          Nội dung:
-                        </Text>
-                        <TextInput
-                          style={styles.feedbackInput}
-                          multiline
-                          numberOfLines={4}
-                          value={feedbackContent}
-                          onChangeText={setFeedbackContent}
-                          placeholder="Nhập nội dung đánh giá (tùy chọn)"
-                          placeholderTextColor="#999"
-                        />
-                      </View>
-                      <TouchableOpacity
-                        style={styles.submitFeedbackButton}
-                        onPress={handleSubmitFeedback}>
-                        <Text style={styles.submitFeedbackButtonText}>
-                          Gửi đánh giá
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                    {scheduleDetails.customizeTask &&
+                      medicalNotes.length === 0 && (
+                        <TouchableOpacity
+                          style={styles.addNoteButton}
+                          onPress={() => setShowAddNoteModal(true)}>
+                          <Ionicons
+                            name="add-circle"
+                            size={20}
+                            color="#4CAF50"
+                          />
+                          <Text style={styles.addNoteButtonText}>
+                            Thêm ghi chú
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                   </View>
-                )}
+
+                  {/* Debug info */}
+                  {/* Removed debug info since auto-load is working */}
+
+                  {medicalNotes.length > 0 ? (
+                    <>
+                      <View style={styles.existingNotesInfo}>
+                        <Text style={styles.existingNotesText}>
+                          Đã có ghi chú cho lịch hẹn này. Không thể
+                          thêm ghi chú mới.
+                        </Text>
+                      </View>
+                      {medicalNotes.map((note, index) => (
+                        <View
+                          key={note.medicalNoteID}
+                          style={styles.medicalNoteItem}>
+                          <View style={styles.medicalNoteHeader}>
+                            <Text style={styles.medicalNoteTitle}>
+                              Ghi chú #{index + 1}
+                            </Text>
+                            <Text style={styles.medicalNoteDate}>
+                              {MedicalNoteService.formatDate(
+                                note.createdAt
+                              )}
+                            </Text>
+                          </View>
+
+                          {note.note && (
+                            <View style={styles.noteContent}>
+                              <Text style={styles.noteLabel}>
+                                Nội dung:
+                              </Text>
+                              <Text style={styles.noteText}>
+                                {note.note}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Thông tin bổ sung */}
+                          <View style={styles.noteFooter}>
+                            <Text style={styles.noteFooterText}>
+                              Tạo lúc:{" "}
+                              {MedicalNoteService.formatDateTime(
+                                note.createdAt
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  ) : (
+                    <View style={styles.noMedicalNotesContainer}>
+                      <Text style={styles.noMedicalNotesText}>
+                        {scheduleDetails.customizeTask
+                          ? "Chưa có ghi chú nào cho lịch hẹn này."
+                          : "Không thể thêm ghi chú vì chưa có thông tin công việc"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Feedback Section */}
+                {/* Removed feedback section - nurses don't need to evaluate their work */}
               </ScrollView>
             )}
 
@@ -1179,6 +1382,69 @@ export default function WorkScheduleScreen() {
 
       {/* Detail Modal */}
       {renderDetailModal()}
+
+      {/* Add Medical Note Modal */}
+      <Modal
+        visible={showAddNoteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={resetMedicalNoteForm}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm ghi chú </Text>
+              <TouchableOpacity onPress={resetMedicalNoteForm}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.detailSection}>
+                <Text style={styles.sectionTitle}>
+                  Nội dung ghi chú
+                </Text>
+                <View style={styles.detailCard}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Ghi chú:</Text>
+                    <TextInput
+                      style={styles.feedbackInput}
+                      multiline
+                      numberOfLines={4}
+                      value={newNote.note}
+                      onChangeText={(text) =>
+                        setNewNote({ ...newNote, note: text })
+                      }
+                      placeholder="Nhập nội dung ghi chú..."
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[
+                  styles.closeButton,
+                  { backgroundColor: "#CCC", marginRight: 10 },
+                ]}
+                onPress={resetMedicalNoteForm}>
+                <Text style={styles.closeButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.closeButton,
+                  { backgroundColor: "#4CAF50" },
+                ]}
+                onPress={handleAddMedicalNote}>
+                <Text style={styles.closeButtonText}>
+                  Thêm ghi chú
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -1287,6 +1553,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 15,
+    alignSelf: "flex-end",
+    marginLeft: "auto",
   },
   statusText: {
     color: "white",
@@ -1298,8 +1566,8 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
+    alignItems: "flex-start",
+    marginBottom: 10,
   },
   detailText: {
     fontSize: 13,
@@ -1377,6 +1645,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
   },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
   highlightedCard: {
     backgroundColor: "#e3f2fd",
     borderWidth: 2,
@@ -1386,7 +1659,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     fontWeight: "500",
-    flex: 1,
+    flex: 0,
+    width: 80,
+    marginRight: 10,
   },
   detailValue: {
     fontSize: 14,
@@ -1408,12 +1683,15 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
+    flexDirection: "row",
+    justifyContent: "space-around",
   },
   closeButton: {
     backgroundColor: "#4FC3F7",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+    width: "45%",
   },
   closeButtonText: {
     color: "white",
@@ -1447,6 +1725,98 @@ const styles = StyleSheet.create({
     color: "#999",
     fontStyle: "italic",
   },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  addNoteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e8f5e8",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  addNoteButtonText: {
+    marginLeft: 5,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4CAF50",
+  },
+  medicalNoteItem: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  medicalNoteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  medicalNoteTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  medicalNoteDate: {
+    fontSize: 12,
+    color: "#666",
+  },
+  noteContent: {
+    marginBottom: 8,
+  },
+  noteLabel: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  noteText: {
+    fontSize: 14,
+    color: "#333",
+    fontStyle: "italic",
+  },
+  noMedicalNotesContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  noMedicalNotesText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  existingNotesInfo: {
+    backgroundColor: "#e8f5e8",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  existingNotesText: {
+    fontSize: 14,
+    color: "#2E7D32",
+    fontWeight: "500",
+    textAlign: "center",
+  },
   feedbackInput: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -1456,17 +1826,15 @@ const styles = StyleSheet.create({
     color: "#333",
     minHeight: 80,
     textAlignVertical: "top",
+    flex: 1,
   },
-  submitFeedbackButton: {
-    backgroundColor: "#4CAF50",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 15,
+  noteFooter: {
+    marginTop: 8,
+    alignItems: "flex-end",
   },
-  submitFeedbackButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+  noteFooterText: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
   },
 });

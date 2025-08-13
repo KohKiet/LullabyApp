@@ -28,15 +28,15 @@ export default function NursesScreen() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      
-      const result = await NursingSpecialistService.getAllDetailedNurses();
-      
+
+      const result =
+        await NursingSpecialistService.getAllDetailedNurses();
+
       if (result.success) {
         setNurses(result.data);
       } else {
         Alert.alert("Lỗi", "Không thể tải danh sách điều dưỡng viên");
       }
-      
     } catch (error) {
       Alert.alert("Lỗi", "Không thể kết nối đến server");
     } finally {
@@ -82,12 +82,14 @@ export default function NursesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Thông tin chi tiết</Text>
+              <Text style={styles.modalTitle}>
+                Thông tin chi tiết
+              </Text>
               <TouchableOpacity onPress={closeDetailModal}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               <View style={styles.modalAvatarContainer}>
                 <Avatar
@@ -96,7 +98,9 @@ export default function NursesScreen() {
                   name={selectedNurse.fullName}
                   fallbackType="initials"
                 />
-                <Text style={styles.modalName}>{selectedNurse.fullName}</Text>
+                <Text style={styles.modalName}>
+                  {selectedNurse.fullName}
+                </Text>
                 <View style={styles.modalGenderBadge}>
                   <Text style={styles.modalGenderText}>
                     {getGenderText(selectedNurse.gender)}
@@ -105,10 +109,16 @@ export default function NursesScreen() {
               </View>
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Thông tin liên hệ</Text>
-                
+                <Text style={styles.modalSectionTitle}>
+                  Thông tin liên hệ
+                </Text>
+
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="mail-outline" size={20} color="#FF8AB3" />
+                  <Ionicons
+                    name="mail-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
                   <Text style={styles.modalInfoLabel}>Email:</Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedNurse.email || "Chưa cập nhật"}
@@ -116,42 +126,88 @@ export default function NursesScreen() {
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="call-outline" size={20} color="#FF8AB3" />
-                  <Text style={styles.modalInfoLabel}>Số điện thoại:</Text>
+                  <Ionicons
+                    name="call-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Số điện thoại:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedNurse.phoneNumber || "Chưa cập nhật"}
                   </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="home-outline" size={20} color="#FF8AB3" />
+                  <Ionicons
+                    name="home-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
                   <Text style={styles.modalInfoLabel}>Địa chỉ:</Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedNurse.address || "Chưa cập nhật"}
                   </Text>
                 </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons
+                    name="location-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>Khu vực:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedNurse.zoneName ||
+                      `Khu vực ${selectedNurse.zoneID}`}
+                    {selectedNurse.city && `, ${selectedNurse.city}`}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Thông tin chuyên môn</Text>
-                
+                <Text style={styles.modalSectionTitle}>
+                  Thông tin chuyên môn
+                </Text>
+
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="person-outline" size={20} color="#FF8AB3" />
-                  <Text style={styles.modalInfoLabel}>Chuyên môn:</Text>
-                  <Text style={styles.modalInfoValue}>Điều dưỡng viên</Text>
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Chuyên môn:
+                  </Text>
+                  <Text style={styles.modalInfoValue}>
+                    Điều dưỡng viên
+                  </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="briefcase-outline" size={20} color="#FF8AB3" />
-                  <Text style={styles.modalInfoLabel}>Kinh nghiệm:</Text>
+                  <Ionicons
+                    name="briefcase-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Kinh nghiệm:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedNurse.experience || "Chưa cập nhật"}
                   </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="calendar-outline" size={20} color="#FF8AB3" />
-                  <Text style={styles.modalInfoLabel}>Ngày sinh:</Text>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Ngày sinh:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
                     {formatDate(selectedNurse.dateOfBirth)}
                   </Text>
@@ -159,8 +215,14 @@ export default function NursesScreen() {
 
                 {selectedNurse.createAt && (
                   <View style={styles.modalInfoRow}>
-                    <Ionicons name="time-outline" size={20} color="#FF8AB3" />
-                    <Text style={styles.modalInfoLabel}>Tham gia:</Text>
+                    <Ionicons
+                      name="time-outline"
+                      size={20}
+                      color="#FF8AB3"
+                    />
+                    <Text style={styles.modalInfoLabel}>
+                      Tham gia:
+                    </Text>
                     <Text style={styles.modalInfoValue}>
                       {formatDate(selectedNurse.createAt)}
                     </Text>
@@ -172,20 +234,36 @@ export default function NursesScreen() {
                 <View style={styles.modalInfoSection}>
                   <Text style={styles.modalSectionTitle}>Slogan</Text>
                   <View style={styles.modalSloganContainer}>
-                    <Ionicons name="chatbubble-outline" size={20} color="#FF8AB3" />
-                    <Text style={styles.modalSloganText}>{selectedNurse.slogan}</Text>
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={20}
+                      color="#FF8AB3"
+                    />
+                    <Text style={styles.modalSloganText}>
+                      {selectedNurse.slogan}
+                    </Text>
                   </View>
                 </View>
               )}
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Trạng thái</Text>
-                <View style={[
-                  styles.modalStatusBadge,
-                  { backgroundColor: selectedNurse.status === "active" ? "#4CAF50" : "#FF6B6B" }
-                ]}>
+                <Text style={styles.modalSectionTitle}>
+                  Trạng thái
+                </Text>
+                <View
+                  style={[
+                    styles.modalStatusBadge,
+                    {
+                      backgroundColor:
+                        selectedNurse.status === "active"
+                          ? "#4CAF50"
+                          : "#FF6B6B",
+                    },
+                  ]}>
                   <Text style={styles.modalStatusText}>
-                    {selectedNurse.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                    {selectedNurse.status === "active"
+                      ? "Hoạt động"
+                      : "Không hoạt động"}
                   </Text>
                 </View>
               </View>
@@ -204,7 +282,9 @@ export default function NursesScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.gradientBg}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Đang tải danh sách điều dưỡng viên...</Text>
+          <Text style={styles.loadingText}>
+            Đang tải danh sách điều dưỡng viên...
+          </Text>
         </View>
       </LinearGradient>
     );
@@ -242,7 +322,9 @@ export default function NursesScreen() {
         {nurses.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="medical-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>Chưa có điều dưỡng viên nào</Text>
+            <Text style={styles.emptyText}>
+              Chưa có điều dưỡng viên nào
+            </Text>
             <Text style={styles.emptySubtext}>
               Vui lòng thử lại sau hoặc liên hệ admin
             </Text>
@@ -264,7 +346,9 @@ export default function NursesScreen() {
 
               <View style={styles.infoContainer}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.fullName}>{nurse.fullName}</Text>
+                  <Text style={styles.fullName}>
+                    {nurse.fullName}
+                  </Text>
                   <View style={styles.genderBadge}>
                     <Text style={styles.genderText}>
                       {getGenderText(nurse.gender)}
@@ -272,60 +356,18 @@ export default function NursesScreen() {
                   </View>
                 </View>
 
+                {/* Hiển thị thông tin khu vực */}
                 <View style={styles.detailRow}>
                   <Ionicons
-                    name="mail-outline"
+                    name="location-outline"
                     size={16}
                     color="#666"
                   />
                   <Text style={styles.detailText}>
-                    {nurse.email || "Chưa cập nhật"}
+                    {nurse.zoneName || `Khu vực ${nurse.zoneID}`}
+                    {nurse.city && `, ${nurse.city}`}
                   </Text>
                 </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="call-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>
-                    {nurse.phoneNumber || "Chưa cập nhật"}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="person-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>Điều dưỡng viên</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>
-                    {formatDate(nurse.dateOfBirth)}
-                  </Text>
-                </View>
-
-                {nurse.address && (
-                  <View style={styles.detailRow}>
-                    <Ionicons
-                      name="home-outline"
-                      size={16}
-                      color="#666"
-                    />
-                    <Text style={styles.detailText}>
-                      {nurse.address}
-                    </Text>
-                  </View>
-                )}
 
                 {nurse.experience && (
                   <View style={styles.detailRow}>
@@ -347,33 +389,30 @@ export default function NursesScreen() {
                       size={16}
                       color="#FF8AB3"
                     />
-                    <Text style={styles.sloganText}>{nurse.slogan}</Text>
+                    <Text style={styles.sloganText}>
+                      {nurse.slogan}
+                    </Text>
                   </View>
                 )}
 
                 <View style={styles.statusContainer}>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: nurse.status === "active" ? "#4CAF50" : "#FF6B6B" }
-                  ]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          nurse.status === "active"
+                            ? "#4CAF50"
+                            : "#FF6B6B",
+                      },
+                    ]}>
                     <Text style={styles.statusText}>
-                      {nurse.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                      {nurse.status === "active"
+                        ? "Hoạt động"
+                        : "Không hoạt động"}
                     </Text>
                   </View>
                 </View>
-
-                {nurse.createAt && (
-                  <View style={styles.detailRow}>
-                    <Ionicons
-                      name="time-outline"
-                      size={16}
-                      color="#666"
-                    />
-                    <Text style={styles.detailText}>
-                      Tham gia: {formatDate(nurse.createAt)}
-                    </Text>
-                  </View>
-                )}
               </View>
             </TouchableOpacity>
           ))

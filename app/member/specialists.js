@@ -28,15 +28,15 @@ export default function SpecialistsScreen() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      
-      const result = await NursingSpecialistService.getAllDetailedSpecialists();
-      
+
+      const result =
+        await NursingSpecialistService.getAllDetailedSpecialists();
+
       if (result.success) {
         setSpecialists(result.data);
       } else {
         Alert.alert("Lỗi", "Không thể tải danh sách tư vấn viên");
       }
-      
     } catch (error) {
       Alert.alert("Lỗi", "Không thể kết nối đến server");
     } finally {
@@ -82,12 +82,14 @@ export default function SpecialistsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Thông tin chi tiết</Text>
+              <Text style={styles.modalTitle}>
+                Thông tin chi tiết
+              </Text>
               <TouchableOpacity onPress={closeDetailModal}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               <View style={styles.modalAvatarContainer}>
                 <Avatar
@@ -96,7 +98,9 @@ export default function SpecialistsScreen() {
                   name={selectedSpecialist.fullName}
                   fallbackType="initials"
                 />
-                <Text style={styles.modalName}>{selectedSpecialist.fullName}</Text>
+                <Text style={styles.modalName}>
+                  {selectedSpecialist.fullName}
+                </Text>
                 <View style={styles.modalGenderBadge}>
                   <Text style={styles.modalGenderText}>
                     {getGenderText(selectedSpecialist.gender)}
@@ -105,10 +109,16 @@ export default function SpecialistsScreen() {
               </View>
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Thông tin liên hệ</Text>
-                
+                <Text style={styles.modalSectionTitle}>
+                  Thông tin liên hệ
+                </Text>
+
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="mail-outline" size={20} color="#4FC3F7" />
+                  <Ionicons
+                    name="mail-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
                   <Text style={styles.modalInfoLabel}>Email:</Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedSpecialist.email || "Chưa cập nhật"}
@@ -116,42 +126,90 @@ export default function SpecialistsScreen() {
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="call-outline" size={20} color="#4FC3F7" />
-                  <Text style={styles.modalInfoLabel}>Số điện thoại:</Text>
+                  <Ionicons
+                    name="call-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Số điện thoại:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
-                    {selectedSpecialist.phoneNumber || "Chưa cập nhật"}
+                    {selectedSpecialist.phoneNumber ||
+                      "Chưa cập nhật"}
                   </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="home-outline" size={20} color="#4FC3F7" />
+                  <Ionicons
+                    name="home-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
                   <Text style={styles.modalInfoLabel}>Địa chỉ:</Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedSpecialist.address || "Chưa cập nhật"}
                   </Text>
                 </View>
+
+                <View style={styles.modalInfoRow}>
+                  <Ionicons
+                    name="location-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>Khu vực:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedSpecialist.zoneName ||
+                      `Khu vực ${selectedSpecialist.zoneID}`}
+                    {selectedSpecialist.city &&
+                      `, ${selectedSpecialist.city}`}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Thông tin chuyên môn</Text>
-                
+                <Text style={styles.modalSectionTitle}>
+                  Thông tin chuyên môn
+                </Text>
+
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="person-outline" size={20} color="#4FC3F7" />
-                  <Text style={styles.modalInfoLabel}>Chuyên môn:</Text>
-                  <Text style={styles.modalInfoValue}>Tư vấn viên</Text>
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Chuyên môn:
+                  </Text>
+                  <Text style={styles.modalInfoValue}>
+                    Tư vấn viên
+                  </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="briefcase-outline" size={20} color="#4FC3F7" />
-                  <Text style={styles.modalInfoLabel}>Kinh nghiệm:</Text>
+                  <Ionicons
+                    name="briefcase-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Kinh nghiệm:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
                     {selectedSpecialist.experience || "Chưa cập nhật"}
                   </Text>
                 </View>
 
                 <View style={styles.modalInfoRow}>
-                  <Ionicons name="calendar-outline" size={20} color="#4FC3F7" />
-                  <Text style={styles.modalInfoLabel}>Ngày sinh:</Text>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color="#FF8AB3"
+                  />
+                  <Text style={styles.modalInfoLabel}>
+                    Ngày sinh:
+                  </Text>
                   <Text style={styles.modalInfoValue}>
                     {formatDate(selectedSpecialist.dateOfBirth)}
                   </Text>
@@ -159,8 +217,14 @@ export default function SpecialistsScreen() {
 
                 {selectedSpecialist.createAt && (
                   <View style={styles.modalInfoRow}>
-                    <Ionicons name="time-outline" size={20} color="#4FC3F7" />
-                    <Text style={styles.modalInfoLabel}>Tham gia:</Text>
+                    <Ionicons
+                      name="time-outline"
+                      size={20}
+                      color="#FF8AB3"
+                    />
+                    <Text style={styles.modalInfoLabel}>
+                      Tham gia:
+                    </Text>
                     <Text style={styles.modalInfoValue}>
                       {formatDate(selectedSpecialist.createAt)}
                     </Text>
@@ -172,20 +236,36 @@ export default function SpecialistsScreen() {
                 <View style={styles.modalInfoSection}>
                   <Text style={styles.modalSectionTitle}>Slogan</Text>
                   <View style={styles.modalSloganContainer}>
-                    <Ionicons name="chatbubble-outline" size={20} color="#4FC3F7" />
-                    <Text style={styles.modalSloganText}>{selectedSpecialist.slogan}</Text>
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={20}
+                      color="#FF8AB3"
+                    />
+                    <Text style={styles.modalSloganText}>
+                      {selectedSpecialist.slogan}
+                    </Text>
                   </View>
                 </View>
               )}
 
               <View style={styles.modalInfoSection}>
-                <Text style={styles.modalSectionTitle}>Trạng thái</Text>
-                <View style={[
-                  styles.modalStatusBadge,
-                  { backgroundColor: selectedSpecialist.status === "active" ? "#4CAF50" : "#FF6B6B" }
-                ]}>
+                <Text style={styles.modalSectionTitle}>
+                  Trạng thái
+                </Text>
+                <View
+                  style={[
+                    styles.modalStatusBadge,
+                    {
+                      backgroundColor:
+                        selectedSpecialist.status === "active"
+                          ? "#4CAF50"
+                          : "#FF6B6B",
+                    },
+                  ]}>
                   <Text style={styles.modalStatusText}>
-                    {selectedSpecialist.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                    {selectedSpecialist.status === "active"
+                      ? "Hoạt động"
+                      : "Không hoạt động"}
                   </Text>
                 </View>
               </View>
@@ -204,7 +284,9 @@ export default function SpecialistsScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.gradientBg}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Đang tải danh sách tư vấn viên...</Text>
+          <Text style={styles.loadingText}>
+            Đang tải danh sách tư vấn viên...
+          </Text>
         </View>
       </LinearGradient>
     );
@@ -220,7 +302,7 @@ export default function SpecialistsScreen() {
         <TouchableOpacity
           style={styles.backBtnOuter}
           onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color="#4FC3F7" />
+          <Ionicons name="arrow-back" size={28} color="#FF8AB3" />
         </TouchableOpacity>
         <LinearGradient
           colors={["#F8F9FA", "#FFFFFF"]}
@@ -241,8 +323,10 @@ export default function SpecialistsScreen() {
 
         {specialists.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>Chưa có tư vấn viên nào</Text>
+            <Ionicons name="medical-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>
+              Chưa có tư vấn viên nào
+            </Text>
             <Text style={styles.emptySubtext}>
               Vui lòng thử lại sau hoặc liên hệ admin
             </Text>
@@ -264,7 +348,9 @@ export default function SpecialistsScreen() {
 
               <View style={styles.infoContainer}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.fullName}>{specialist.fullName}</Text>
+                  <Text style={styles.fullName}>
+                    {specialist.fullName}
+                  </Text>
                   <View style={styles.genderBadge}>
                     <Text style={styles.genderText}>
                       {getGenderText(specialist.gender)}
@@ -272,62 +358,19 @@ export default function SpecialistsScreen() {
                   </View>
                 </View>
 
+                {/* Hiển thị thông tin khu vực */}
                 <View style={styles.detailRow}>
                   <Ionicons
-                    name="mail-outline"
+                    name="location-outline"
                     size={16}
                     color="#666"
                   />
                   <Text style={styles.detailText}>
-                    {specialist.email || "Chưa cập nhật"}
+                    {specialist.zoneName ||
+                      `Khu vực ${specialist.zoneID}`}
+                    {specialist.city && `, ${specialist.city}`}
                   </Text>
                 </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="call-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>
-                    {specialist.phoneNumber || "Chưa cập nhật"}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="person-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>
-                    Tư vấn viên
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={16}
-                    color="#666"
-                  />
-                  <Text style={styles.detailText}>
-                    {formatDate(specialist.dateOfBirth)}
-                  </Text>
-                </View>
-
-                {specialist.address && (
-                  <View style={styles.detailRow}>
-                    <Ionicons
-                      name="home-outline"
-                      size={16}
-                      color="#666"
-                    />
-                    <Text style={styles.detailText}>
-                      {specialist.address}
-                    </Text>
-                  </View>
-                )}
 
                 {specialist.experience && (
                   <View style={styles.detailRow}>
@@ -347,7 +390,7 @@ export default function SpecialistsScreen() {
                     <Ionicons
                       name="chatbubble-outline"
                       size={16}
-                      color="#4FC3F7"
+                      color="#FF8AB3"
                     />
                     <Text style={styles.sloganText}>
                       {specialist.slogan}
@@ -356,28 +399,23 @@ export default function SpecialistsScreen() {
                 )}
 
                 <View style={styles.statusContainer}>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: specialist.status === "active" ? "#4CAF50" : "#FF6B6B" }
-                  ]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          specialist.status === "active"
+                            ? "#4CAF50"
+                            : "#FF6B6B",
+                      },
+                    ]}>
                     <Text style={styles.statusText}>
-                      {specialist.status === "active" ? "Hoạt động" : "Không hoạt động"}
+                      {specialist.status === "active"
+                        ? "Hoạt động"
+                        : "Không hoạt động"}
                     </Text>
                   </View>
                 </View>
-
-                {specialist.createAt && (
-                  <View style={styles.detailRow}>
-                    <Ionicons
-                      name="time-outline"
-                      size={16}
-                      color="#666"
-                    />
-                    <Text style={styles.detailText}>
-                      Tham gia: {formatDate(specialist.createAt)}
-                    </Text>
-                  </View>
-                )}
               </View>
             </TouchableOpacity>
           ))
@@ -524,7 +562,7 @@ const styles = StyleSheet.create({
   },
   sloganText: {
     fontSize: 13,
-    color: "#4FC3F7",
+    color: "#FF8AB3",
     fontStyle: "italic",
     marginLeft: 8,
     flex: 1,
@@ -630,7 +668,7 @@ const styles = StyleSheet.create({
   },
   modalSloganText: {
     fontSize: 14,
-    color: "#4FC3F7",
+    color: "#FF8AB3",
     fontStyle: "italic",
     marginLeft: 10,
     flex: 1,

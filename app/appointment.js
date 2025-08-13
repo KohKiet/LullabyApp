@@ -19,6 +19,7 @@ import CareProfileService from "../services/careProfileService";
 import CustomizePackageService from "../services/customizePackageService";
 import CustomizeTaskService from "../services/customizeTaskService";
 import FeedbackService from "../services/feedbackService";
+import MedicalNoteService from "../services/medicalNoteService";
 import NursingSpecialistService from "../services/nursingSpecialistService";
 import ServiceTaskService from "../services/serviceTaskService";
 import ServiceTypeService from "../services/serviceTypeService";
@@ -44,6 +45,9 @@ export default function AppointmentScreen() {
   const [serviceTasks, setServiceTasks] = useState([]);
   const [nurses, setNurses] = useState([]);
   const [careProfiles, setCareProfiles] = useState([]);
+
+  // Medical notes state
+  const [medicalNotesMap, setMedicalNotesMap] = useState({});
 
   // Feedback state
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -128,22 +132,15 @@ export default function AppointmentScreen() {
       );
 
       if (cachedBookings) {
-        setBookings(JSON.parse(cachedBookings));
-      }
-      if (cachedServices) {
-        setServices(JSON.parse(cachedServices));
-      }
-      if (cachedNurses) {
-        setNurses(JSON.parse(cachedNurses));
-      }
-      if (cachedCareProfiles) {
-        setCareProfiles(JSON.parse(cachedCareProfiles));
-      }
-
-      // Load customize packages và tasks từ cache
-      if (cachedBookings) {
         const bookingsData = JSON.parse(cachedBookings);
-        for (const booking of bookingsData) {
+        // Filter out cancelled bookings from cached data
+        const activeBookingsData = bookingsData.filter(
+          (booking) => booking.status !== "cancelled"
+        );
+        setBookings(activeBookingsData);
+
+        // Load customize packages và tasks từ cache cho active bookings
+        for (const booking of activeBookingsData) {
           const cachedPackages = await AsyncStorage.getItem(
             `cachedCustomizePackages-${booking.bookingID}`
           );
@@ -164,6 +161,15 @@ export default function AppointmentScreen() {
             }));
           }
         }
+      }
+      if (cachedServices) {
+        setServices(JSON.parse(cachedServices));
+      }
+      if (cachedNurses) {
+        setNurses(JSON.parse(cachedNurses));
+      }
+      if (cachedCareProfiles) {
+        setCareProfiles(JSON.parse(cachedCareProfiles));
       }
     } catch (error) {
       console.error("Error loading cached data:", error);
@@ -232,20 +238,112 @@ export default function AppointmentScreen() {
       }
 
       if (userBookings.length > 0) {
-        // Load customize packages và tasks cho tất cả bookings
-        for (const booking of userBookings) {
+        // Filter out cancelled bookings
+        const activeBookings = userBookings.filter(
+          (booking) => booking.status !== "cancelled"
+        );
+
+        // Load customize packages và tasks cho tất cả active bookings trước
+        for (const booking of activeBookings) {
           await loadCustomizePackages(booking.bookingID);
           await loadCustomizeTasks(booking.bookingID);
         }
-      }
 
-      setBookings(userBookings);
-      await AsyncStorage.setItem(
-        "cachedBookings",
-        JSON.stringify(userBookings)
-      );
+        // Sau khi đã load đầy đủ customize tasks, mới load medical notes
+        for (const booking of activeBookings) {
+          await loadMedicalNotes(booking.bookingID);
+        }
+
+        setBookings(activeBookings);
+        await AsyncStorage.setItem(
+          "cachedBookings",
+          JSON.stringify(activeBookings)
+        );
+      } else {
+        setBookings([]);
+      }
     } catch (error) {
       console.error("Error loading bookings:", error);
+    }
+  };
+
+  // Load medical notes cho booking
+  const loadMedicalNotes = async (bookingID) => {
+    try {
+      console.log(
+        `Loading medical notes for booking ${bookingID}...`
+      );
+
+      // Thử dùng endpoint riêng trước
+      let result =
+        await MedicalNoteService.getMedicalNotesByBookingId(
+          bookingID
+        );
+
+      // Nếu endpoint riêng không hoạt động, thử dùng getAll và filter
+      if (!result.success || !result.data) {
+        console.log(
+          "Debug - Fallback to getAllMedicalNotes and filter by customizeTaskID"
+        );
+        const allNotesResult =
+          await MedicalNoteService.getAllMedicalNotes();
+
+        console.log("Debug - GetAll API result:", allNotesResult);
+        console.log("Debug - All notes data:", allNotesResult.data);
+
+        if (allNotesResult.success && allNotesResult.data) {
+          // Debug: Xem tất cả bookings và tasks
+          console.log("Debug - All bookings:", bookings);
+          console.log(
+            "Debug - All customizeTasksMap:",
+            customizeTasksMap
+          );
+
+          // Lấy tất cả customize tasks của booking này
+          const bookingTasks = customizeTasksMap[bookingID] || [];
+          console.log("Debug - Booking tasks:", bookingTasks);
+
+          // Lấy tất cả customizeTaskID của booking
+          const bookingTaskIDs = bookingTasks.map(
+            (task) => task.customizeTaskID
+          );
+          console.log("Debug - Booking task IDs:", bookingTaskIDs);
+
+          // Filter medical notes theo customizeTaskID
+          const filteredNotes = allNotesResult.data.filter((note) =>
+            bookingTaskIDs.includes(note.customizeTaskID)
+          );
+
+          console.log("Debug - Filtered notes:", filteredNotes);
+          result = { success: true, data: filteredNotes };
+        }
+      }
+
+      if (result.success) {
+        console.log(
+          `Medical notes for booking ${bookingID}:`,
+          result.data
+        );
+        setMedicalNotesMap((prev) => ({
+          ...prev,
+          [bookingID]: result.data,
+        }));
+      } else {
+        console.log(
+          `No medical notes for booking ${bookingID}:`,
+          result.error
+        );
+        setMedicalNotesMap((prev) => ({
+          ...prev,
+          [bookingID]: [],
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading medical notes:", error);
+      setMedicalNotesMap((prev) => ({
+        ...prev,
+        [bookingID]: [],
+      }));
     }
   };
 
@@ -1456,6 +1554,68 @@ export default function AppointmentScreen() {
                       </View>
                     )
                   )}
+
+                  {/* Medical Notes Section - Ghi chú y tế */}
+                  {(() => {
+                    const medicalNotes =
+                      medicalNotesMap[booking.bookingID] || [];
+                    if (medicalNotes.length > 0) {
+                      return (
+                        <View style={styles.medicalNotesSection}>
+                          <Text style={styles.sectionTitle}>
+                            Ghi chú :
+                          </Text>
+                          {medicalNotes.map((note, noteIndex) => {
+                            // Tìm thông tin điều dưỡng nếu có
+                            const nurseInfo = note.nursingID
+                              ? nurses.find(
+                                  (n) =>
+                                    n.nursingID === note.nursingID
+                                )
+                              : null;
+                            return (
+                              <View
+                                key={note.medicalNoteID}
+                                style={styles.medicalNoteItem}>
+                                <Text style={styles.noteContent}>
+                                  {note.note}
+                                </Text>
+                                <View style={styles.noteFooter}>
+                                  {nurseInfo && (
+                                    <Text
+                                      style={styles.noteFooterText}>
+                                      Điều dưỡng: {nurseInfo.fullName}
+                                    </Text>
+                                  )}
+                                  <Text style={styles.noteFooterText}>
+                                    Tạo lúc:{" "}
+                                    {MedicalNoteService.formatDateTime(
+                                      note.createdAt
+                                    )}
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      );
+                    } else if (booking.status === "completed") {
+                      return (
+                        <View style={styles.medicalNotesSection}>
+                          <Text style={styles.sectionTitle}>
+                            Ghi chú :
+                          </Text>
+                          <View
+                            style={styles.noMedicalNotesContainer}>
+                            <Text style={styles.noMedicalNotesText}>
+                              Chưa có ghi chú cho lịch hẹn này
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
                 </View>
               )}
             </View>
@@ -1998,5 +2158,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "white",
+  },
+  medicalNotesSection: {
+    marginTop: 15,
+    padding: 15,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  medicalNoteItem: {
+    backgroundColor: "white",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  noteContent: {
+    fontSize: 14,
+    color: "#333",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  noteFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 5,
+  },
+  noteFooterText: {
+    fontSize: 12,
+    color: "#666",
+  },
+  noMedicalNotesContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  noMedicalNotesText: {
+    fontSize: 14,
+    color: "#666",
+    fontStyle: "italic",
+  },
+  testApiButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+  },
+  testApiButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
   },
 });

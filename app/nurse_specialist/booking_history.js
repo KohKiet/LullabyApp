@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   Alert,
@@ -18,6 +18,7 @@ import CustomizeTaskService from "../../services/customizeTaskService";
 import RelativeService from "../../services/relativeService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import WorkScheduleService from "../../services/workScheduleService";
+import { getMajorDisplayText } from "../../utils/majorUtils";
 
 export default function BookingHistoryScreen() {
   const router = useRouter();
@@ -45,11 +46,9 @@ export default function BookingHistoryScreen() {
     cancelled: 0,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-    }, [])
-  );
+  useCallback(() => {
+    loadUserData();
+  }, []);
 
   const loadUserData = async () => {
     try {
@@ -207,14 +206,7 @@ export default function BookingHistoryScreen() {
 
   // Format major/specialty for display
   const formatMajor = (major) => {
-    switch (major?.toLowerCase()) {
-      case "nurse":
-        return "Chuyên gia điều dưỡng";
-      case "specialist":
-        return "Chuyên gia tư vấn";
-      default:
-        return major || "Không xác định";
-    }
+    return getMajorDisplayText(major);
   };
 
   const openScheduleDetail = async (schedule) => {

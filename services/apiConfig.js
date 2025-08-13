@@ -131,6 +131,19 @@ export const WALLET_ENDPOINTS = {
   DELETE_WALLET: (id) => `${BASE_URL}/api/Wallet/delete/${id}`,
 };
 
+// Medical Note Endpoints
+export const MEDICAL_NOTE_ENDPOINTS = {
+  GET_ALL: `${BASE_URL}/api/MedicalNote/GetAll`,
+  GET_BY_ID: (id) => `${BASE_URL}/api/MedicalNote/${id}`,
+  GET_BY_CUSTOMIZE_TASK_ID: (customizeTaskID) =>
+    `${BASE_URL}/api/MedicalNote/GetByCustomizeTaskId/${customizeTaskID}`,
+  GET_BY_BOOKING_ID: (bookingID) =>
+    `${BASE_URL}/api/MedicalNote/GetByBookingId/${bookingID}`,
+  CREATE: `${BASE_URL}/api/MedicalNote`,
+  UPDATE: (id) => `${BASE_URL}/api/MedicalNote/${id}`,
+  DELETE: (id) => `${BASE_URL}/api/MedicalNote/${id}`,
+};
+
 // API Configuration Object
 export const API_CONFIG = {
   BASE_URL,
@@ -144,4 +157,5 @@ export const API_CONFIG = {
   ROLE_ENDPOINTS,
   TEMPLATE_ENDPOINTS,
   WALLET_ENDPOINTS,
+  MEDICAL_NOTE_ENDPOINTS,
 };

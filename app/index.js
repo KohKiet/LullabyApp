@@ -481,9 +481,7 @@ export default function HomeScreen() {
             style={[styles.card, styles.singleCard]}>
             <TouchableOpacity
               style={styles.cardContent}
-              onPress={() =>
-                router.push("/nurse_specialist/booking_history")
-              }>
+              onPress={() => router.push("/nurse/booking-history")}>
               <Ionicons
                 name="time-outline"
                 size={40}

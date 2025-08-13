@@ -1,4 +1,9 @@
 import {
+  compareMajor,
+  isNurse,
+  isSpecialist,
+} from "../utils/majorUtils";
+import {
   API_CONFIG,
   NURSING_SPECIALIST_ENDPOINTS,
   ZONE_ENDPOINTS,
@@ -269,7 +274,7 @@ class NursingSpecialistService {
       const allResult = await this.getAllNursingSpecialists();
       if (allResult.success) {
         const filteredSpecialists = allResult.data.filter(
-          (specialist) => specialist.major === major
+          (specialist) => compareMajor(specialist.major, major)
         );
         return { success: true, data: filteredSpecialists };
       } else {
@@ -359,6 +364,30 @@ class NursingSpecialistService {
         return allResult;
       }
 
+      // Lấy thông tin zones
+      let zonesMap = new Map();
+      try {
+        const zonesResponse = await fetch(
+          ZONE_ENDPOINTS.GET_ALL_ZONES,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (zonesResponse.ok) {
+          const zonesData = await zonesResponse.json();
+          zonesData.forEach((zone) => {
+            zonesMap.set(zone.zoneID, zone);
+          });
+          console.log("Zones loaded:", zonesData.length, "zones");
+        }
+      } catch (zoneError) {
+        console.log("Error loading zones:", zoneError.message);
+      }
+
       const accountIds = allResult.data
         .map((specialist) => specialist.accountID)
         .filter((id) => id != null);
@@ -387,6 +416,7 @@ class NursingSpecialistService {
 
       const detailedSpecialists = allResult.data.map((specialist) => {
         const accountData = accountDataMap.get(specialist.accountID);
+        const zoneInfo = zonesMap.get(specialist.zoneID);
 
         if (accountData) {
           const detailedData = {
@@ -400,6 +430,9 @@ class NursingSpecialistService {
             createAt: accountData.createAt,
             nursingID: specialist.nursingID,
             zoneID: specialist.zoneID,
+            zoneName:
+              zoneInfo?.zoneName || `Khu vực ${specialist.zoneID}`,
+            city: zoneInfo?.city || "Không xác định",
             gender: specialist.gender,
             dateOfBirth: specialist.dateOfBirth,
             address: specialist.address,
@@ -410,7 +443,12 @@ class NursingSpecialistService {
 
           return detailedData;
         } else {
-          return specialist;
+          return {
+            ...specialist,
+            zoneName:
+              zoneInfo?.zoneName || `Khu vực ${specialist.zoneID}`,
+            city: zoneInfo?.city || "Không xác định",
+          };
         }
       });
 
@@ -430,7 +468,7 @@ class NursingSpecialistService {
       }
 
       const specialistsData = allDetailedResult.data.filter(
-        (specialist) => specialist.major === "specialist"
+        (specialist) => isSpecialist(specialist.major)
       );
 
       return { success: true, data: specialistsData };
@@ -448,8 +486,8 @@ class NursingSpecialistService {
         return allDetailedResult;
       }
 
-      const nursesData = allDetailedResult.data.filter(
-        (nurse) => nurse.major === "nurse"
+      const nursesData = allDetailedResult.data.filter((nurse) =>
+        isNurse(nurse.major)
       );
 
       return { success: true, data: nursesData };

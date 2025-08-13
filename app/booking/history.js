@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,7 +18,9 @@ import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizePackageService from "../../services/customizePackageService";
 import CustomizeTaskService from "../../services/customizeTaskService";
+import FeedbackService from "../../services/feedbackService";
 import InvoiceService from "../../services/invoiceService";
+import MedicalNoteService from "../../services/medicalNoteService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
 import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
@@ -44,6 +47,20 @@ export default function BookingHistoryScreen() {
   const [services, setServices] = useState([]); // Cache services
   const [serviceTasks, setServiceTasks] = useState([]); // Cache service tasks
 
+  // State cho medical notes
+  const [medicalNotesMap, setMedicalNotesMap] = useState({});
+
+  // State cho feedback
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackRate, setFeedbackRate] = useState(0);
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackContext, setFeedbackContext] = useState({
+    nursingID: null,
+    customizeTaskID: null,
+    serviceID: null,
+  });
+  const [feedbackMap, setFeedbackMap] = useState({});
+
   // State cho modal chọn nurse
   const [showNurseModal, setShowNurseModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -64,6 +81,7 @@ export default function BookingHistoryScreen() {
         await loadZoneDetails();
         await loadServices();
         await loadServiceTasks();
+        await loadAllFeedbacks();
       } else {
         Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
         router.replace("/auth/login");
@@ -141,8 +159,15 @@ export default function BookingHistoryScreen() {
           setInvoiceMap(nextInvoiceMap);
         }
 
-        setBookings(userBookings);
-        await loadAllBookingDetails(userBookings);
+        // Sắp xếp bookings theo bookingID (mới nhất trước)
+        const sortedBookings = [...userBookings].sort((a, b) => {
+          return b.bookingID - a.bookingID; // Sắp xếp giảm dần (bookingID lớn nhất trước)
+        });
+
+        // Cập nhật state với bookings đã sắp xếp
+        setBookings(sortedBookings);
+
+        await loadAllBookingDetails(sortedBookings);
       } else {
         setBookings([]);
       }
@@ -158,6 +183,7 @@ export default function BookingHistoryScreen() {
   const loadAllBookingDetails = async (bookings) => {
     try {
       console.log("Loading all booking details...");
+
       const detailsMap = {};
 
       // Load tất cả care profiles một lần
@@ -217,10 +243,251 @@ export default function BookingHistoryScreen() {
       bookings.forEach(async (booking) => {
         await loadCustomizePackages(booking.bookingID);
         await loadCustomizeTasks(booking.bookingID);
+        await loadMedicalNotes(booking.bookingID);
       });
     } catch (error) {
       console.error("Error loading booking details:", error);
+      Alert.alert("Lỗi", "Không thể tải chi tiết lịch hẹn");
     }
+  };
+
+  // Load medical notes cho booking
+  const loadMedicalNotes = async (bookingID) => {
+    try {
+      console.log(
+        `Loading medical notes for booking ${bookingID}...`
+      );
+      const result =
+        await MedicalNoteService.getMedicalNotesByBookingId(
+          bookingID
+        );
+      if (result.success) {
+        console.log(
+          `Medical notes for booking ${bookingID}:`,
+          result.data
+        );
+        setMedicalNotesMap((prev) => ({
+          ...prev,
+          [bookingID]: result.data,
+        }));
+      } else {
+        console.log(
+          `No medical notes for booking ${bookingID}:`,
+          result.error
+        );
+        setMedicalNotesMap((prev) => ({
+          ...prev,
+          [bookingID]: [],
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading medical notes:", error);
+      setMedicalNotesMap((prev) => ({
+        ...prev,
+        [bookingID]: [],
+      }));
+    }
+  };
+
+  // Load tất cả feedback
+  const loadAllFeedbacks = async () => {
+    try {
+      const res = await FeedbackService.getAllFeedbacks();
+      if (res.success) {
+        const map = {};
+        res.data.forEach((feedback) => {
+          if (feedback.customizeTaskID) {
+            map[feedback.customizeTaskID] = feedback;
+          }
+        });
+        setFeedbackMap(map);
+      }
+    } catch (error) {
+      console.error("Error loading feedbacks:", error);
+    }
+  };
+
+  // Mở modal đánh giá
+  const openFeedbackModal = (task) => {
+    setFeedbackContext({
+      nursingID: task.nursingID,
+      customizeTaskID: task.customizeTaskID,
+      serviceID: task.serviceID,
+    });
+    setFeedbackRate(0);
+    setFeedbackContent("");
+    setShowFeedbackModal(true);
+  };
+
+  // Render stars cho đánh giá
+  const renderStars = (rate, onSelect) => {
+    const stars = [1, 2, 3, 4, 5];
+    return (
+      <View style={styles.starsContainer}>
+        {stars.map((value) => (
+          <TouchableOpacity
+            key={value}
+            onPress={() => onSelect(value)}
+            style={styles.starButton}>
+            <Ionicons
+              name={value <= rate ? "star" : "star-outline"}
+              size={24}
+              color={value <= rate ? "#FFD700" : "#CCC"}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  // Gửi đánh giá
+  const submitFeedback = async () => {
+    if (!feedbackContext.nursingID || !feedbackContext.serviceID) {
+      Alert.alert("Lỗi", "Thiếu thông tin để gửi đánh giá");
+      return;
+    }
+    if (feedbackRate <= 0) {
+      Alert.alert("Lỗi", "Vui lòng chọn số sao đánh giá");
+      return;
+    }
+
+    try {
+      const result = await FeedbackService.submitFeedback({
+        nursingID: feedbackContext.nursingID,
+        customizeTaskID: feedbackContext.customizeTaskID || 0,
+        serviceID: feedbackContext.serviceID,
+        rate: feedbackRate,
+        content: feedbackContent || "",
+      });
+
+      if (result.success) {
+        Alert.alert("Thành công", "Cảm ơn bạn đã đánh giá!", [
+          {
+            text: "OK",
+            onPress: async () => {
+              setShowFeedbackModal(false);
+              setFeedbackRate(0);
+              setFeedbackContent("");
+              setFeedbackContext({
+                nursingID: null,
+                customizeTaskID: null,
+                serviceID: null,
+              });
+              // Reload feedback và booking data để hiển thị đánh giá mới
+              await loadAllFeedbacks();
+              await loadUserData();
+            },
+          },
+        ]);
+      } else {
+        // Dịch message tiếng Anh thành tiếng Việt
+        const translatedError = translateErrorMessage(result.error);
+        Alert.alert("Lỗi", translatedError);
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      Alert.alert("Lỗi", "Không thể gửi đánh giá");
+    }
+  };
+
+  // Hàm dịch message tiếng Anh thành tiếng Việt
+  const translateErrorMessage = (message) => {
+    if (!message) return "Không thể gửi đánh giá";
+
+    const translations = {
+      "Customize Task with ID": "Nhiệm vụ với ID",
+      "has already had Feedback": "đã có đánh giá rồi",
+      "already had Feedback": "đã có đánh giá rồi",
+      Feedback: "Đánh giá",
+      "already exists": "đã tồn tại",
+      "not found": "không tìm thấy",
+      invalid: "không hợp lệ",
+      required: "bắt buộc",
+      failed: "thất bại",
+      error: "lỗi",
+      success: "thành công",
+    };
+
+    let translatedMessage = message;
+
+    // Dịch các cụm từ phổ biến
+    Object.keys(translations).forEach((english) => {
+      const vietnamese = translations[english];
+      translatedMessage = translatedMessage.replace(
+        new RegExp(english, "gi"),
+        vietnamese
+      );
+    });
+
+    // Xử lý message cụ thể
+    if (
+      message.includes("Customize Task with ID") &&
+      message.includes("has already had Feedback")
+    ) {
+      const taskId = message.match(/\d+/)?.[0] || "";
+      return `Nhiệm vụ #${taskId} đã có đánh giá rồi`;
+    }
+
+    return translatedMessage;
+  };
+
+  // Component hiển thị feedback cho từng task
+  const FeedbackRenderer = ({ task, onOpenModal, feedbackMap }) => {
+    const feedback = task?.customizeTaskID
+      ? feedbackMap[task.customizeTaskID]
+      : null;
+
+    const canFeedback = (() => {
+      // Chỉ cho phép feedback khi đã hoàn thành hoặc qua giờ hẹn
+      if (!task || !task.nursingID) return false;
+
+      // Kiểm tra xem đã có feedback chưa
+      if (feedback) return false;
+
+      return true;
+    })();
+
+    if (feedback) {
+      return (
+        <View style={styles.feedbackDisplay}>
+          <Text style={styles.feedbackLabel}>Đánh giá của bạn:</Text>
+          <View style={styles.feedbackStars}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Ionicons
+                key={i}
+                name={
+                  i <= (feedback.rate || 0) ? "star" : "star-outline"
+                }
+                size={16}
+                color="#FFD700"
+              />
+            ))}
+          </View>
+          {feedback.content ? (
+            <Text style={styles.feedbackContent}>
+              {feedback.content}
+            </Text>
+          ) : null}
+        </View>
+      );
+    }
+
+    if (!canFeedback) return null;
+
+    return (
+      <TouchableOpacity
+        style={styles.feedbackButton}
+        onPress={() => onOpenModal(task)}>
+        <LinearGradient
+          colors={["#4CAF50", "#45A049"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.feedbackButtonGradient}>
+          <Ionicons name="star" size={14} color="#FFFFFF" />
+          <Text style={styles.feedbackButtonText}>Đánh giá</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
   };
 
   const loadNurses = async () => {
@@ -659,7 +926,7 @@ export default function BookingHistoryScreen() {
                   {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
+                      "Content-Type": "application/json-patch+json",
                     },
                     body: JSON.stringify({
                       bookingID: bookingID,
@@ -773,7 +1040,9 @@ export default function BookingHistoryScreen() {
         if (availableNursesList.length === 0) {
           Alert.alert(
             "Thông báo",
-            "Không có điều dưỡng viên nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút."
+            `Không có ${getMajorVietnameseText(
+              requiredMajor
+            )} nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút.`
           );
           return;
         }
@@ -788,11 +1057,11 @@ export default function BookingHistoryScreen() {
       // Xác định major cần thiết
       const requiredMajor = serviceInfo.major || "Nurse"; // Default là Nurse nếu không có
 
-      // Lọc nurses có cùng zoneID, major phù hợp và không bị conflict
+      // Lọc nurses có cùng zoneID và major phù hợp
       const nursesWithSameZoneAndMajor = nurses.filter(
         (nurse) =>
           nurse.zoneID === zoneDetail.zoneID &&
-          nurse.major?.toLowerCase() === requiredMajor?.toLowerCase()
+          compareMajor(nurse.major, requiredMajor)
       );
 
       // Lấy workdate từ booking
@@ -810,11 +1079,9 @@ export default function BookingHistoryScreen() {
       if (availableNursesList.length === 0) {
         Alert.alert(
           "Thông báo",
-          `Không có ${
-            requiredMajor === "Nurse"
-              ? "điều dưỡng viên"
-              : "tư vấn viên"
-          } nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút.`
+          `Không có ${getMajorVietnameseText(
+            requiredMajor
+          )} nào khả dụng trong khu vực này. Vui lòng đặt lịch cách nhau ít nhất 30 phút.`
         );
         return;
       }
@@ -973,7 +1240,7 @@ export default function BookingHistoryScreen() {
       const availableNursesList = nurses.filter(
         (nurse) =>
           nurse.zoneID === zoneDetail.zoneID &&
-          nurse.major === requiredMajor
+          nurse.major?.toLowerCase() === requiredMajor?.toLowerCase()
       );
 
       if (availableNursesList.length === 0) {
@@ -996,11 +1263,9 @@ export default function BookingHistoryScreen() {
       if (activeNurses.length === 0) {
         Alert.alert(
           "Thông báo",
-          `Chỉ có ${
-            requiredMajor === "Nurse"
-              ? "điều dưỡng viên"
-              : "tư vấn viên"
-          } không hoạt động trong khu vực này. Bạn có muốn tiếp tục?`
+          `Chỉ có ${getMajorVietnameseText(
+            requiredMajor
+          )} không hoạt động trong khu vực này. Bạn có muốn tiếp tục?`
         );
       }
 
@@ -1043,11 +1308,9 @@ export default function BookingHistoryScreen() {
 
         Alert.alert(
           "Thành công",
-          `Đã chọn ${
-            requiredMajor === "Nurse"
-              ? "điều dưỡng viên"
-              : "tư vấn viên"
-          }: ${selectedNurse.fullName} cho lịch hẹn #${bookingID}`
+          `Đã chọn ${getMajorVietnameseText(requiredMajor)}: ${
+            selectedNurse.fullName
+          } cho lịch hẹn #${bookingID}`
         );
       } else {
         Alert.alert("Lỗi", "Không thể cập nhật tất cả task");
@@ -1195,35 +1458,8 @@ export default function BookingHistoryScreen() {
       return diffMs > twoHoursMs;
     });
 
-    // Sắp xếp theo workdate: ngày sớm nhất ở trên, ngày đã qua ở dưới
-    filteredBookings.sort((a, b) => {
-      const dateA = new Date(a.workdate);
-      const dateB = new Date(b.workdate);
-      const now = new Date();
-
-      // Kiểm tra nếu workdate không hợp lệ
-      if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-        return 0;
-      }
-
-      // Nếu cả hai ngày đều đã qua hoặc chưa đến
-      if (
-        (dateA < now && dateB < now) ||
-        (dateA >= now && dateB >= now)
-      ) {
-        return dateA - dateB; // Sắp xếp theo thứ tự thời gian
-      }
-
-      // Nếu một ngày đã qua và một ngày chưa đến
-      if (dateA < now && dateB >= now) {
-        return 1; // Ngày đã qua xuống dưới
-      }
-      if (dateA >= now && dateB < now) {
-        return -1; // Ngày chưa đến lên trên
-      }
-
-      return 0;
-    });
+    // Giữ nguyên thứ tự sắp xếp theo bookingID (đã được sắp xếp trong loadBookingHistory)
+    // Không cần sắp xếp lại ở đây
 
     return filteredBookings;
   };
@@ -1575,6 +1811,15 @@ export default function BookingHistoryScreen() {
                                           </Text>
                                         </View>
                                       )}
+
+                                      {/* Hiển thị feedback hoặc nút đánh giá */}
+                                      <FeedbackRenderer
+                                        task={task}
+                                        onOpenModal={
+                                          openFeedbackModal
+                                        }
+                                        feedbackMap={feedbackMap}
+                                      />
                                     </View>
                                   );
                                 })}
@@ -1585,6 +1830,110 @@ export default function BookingHistoryScreen() {
                     )}
                   </View>
                 )}
+
+                {/* Medical Notes Section - Ghi chú */}
+                {(() => {
+                  const medicalNotes =
+                    medicalNotesMap[booking.bookingID] || [];
+                  if (medicalNotes.length > 0) {
+                    return (
+                      <View style={styles.medicalNotesSection}>
+                        <Text style={styles.sectionTitle}>
+                          Ghi chú y tế:
+                        </Text>
+                        {medicalNotes.map((note, noteIndex) => {
+                          // Tìm thông tin điều dưỡng nếu có
+                          const nurseInfo = note.nursingID
+                            ? nurses.find(
+                                (n) => n.nursingID === note.nursingID
+                              )
+                            : null;
+
+                          return (
+                            <View
+                              key={note.medicalNoteID}
+                              style={styles.medicalNoteItem}>
+                              <View style={styles.medicalNoteHeader}>
+                                <Text style={styles.medicalNoteTitle}>
+                                  Ghi chú #{noteIndex + 1}
+                                </Text>
+                                <Text style={styles.medicalNoteDate}>
+                                  {MedicalNoteService.formatDate(
+                                    note.createdAt
+                                  )}
+                                </Text>
+                              </View>
+
+                              {/* Thông tin điều dưỡng */}
+                              {nurseInfo && (
+                                <View style={styles.nurseInfoNote}>
+                                  <Text style={styles.nurseInfoLabel}>
+                                    Điều dưỡng viên:
+                                  </Text>
+                                  <Text style={styles.nurseInfoName}>
+                                    {nurseInfo.fullName}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* Nội dung ghi chú */}
+                              {note.note && (
+                                <View style={styles.noteContent}>
+                                  <Text style={styles.noteLabel}>
+                                    Ghi chú:
+                                  </Text>
+                                  <Text style={styles.noteText}>
+                                    {note.note}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* Lời khuyên */}
+                              {note.advice && (
+                                <View style={styles.adviceContent}>
+                                  <Text style={styles.adviceLabel}>
+                                    Lời khuyên:
+                                  </Text>
+                                  <Text style={styles.adviceText}>
+                                    {note.advice}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* Hình ảnh nếu có */}
+                              {note.image &&
+                                note.image.trim() !== "" && (
+                                  <View style={styles.imageContent}>
+                                    <Text style={styles.imageLabel}>
+                                      Hình ảnh:
+                                    </Text>
+                                    <Text style={styles.imageText}>
+                                      {note.image}
+                                    </Text>
+                                  </View>
+                                )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    );
+                  } else if (booking.status === "completed") {
+                    // Chỉ hiển thị thông báo khi booking đã hoàn thành
+                    return (
+                      <View style={styles.medicalNotesSection}>
+                        <Text style={styles.sectionTitle}>
+                          Ghi chú y tế:
+                        </Text>
+                        <View style={styles.noMedicalNotesContainer}>
+                          <Text style={styles.noMedicalNotesText}>
+                            Chưa có ghi chú y tế cho lịch hẹn này
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
               </View>
             )}
           </View>
@@ -1598,8 +1947,10 @@ export default function BookingHistoryScreen() {
             invoiceStatus === "pending" || invoiceStatus === "paid";
           const canCancelByBooking =
             bookingStatus === "pending" || bookingStatus === "paid";
+          // Không hiển thị actions cho booking đã hoàn thành
           const showActions =
-            canCancelByBooking || canCancelByInvoice;
+            (canCancelByBooking || canCancelByInvoice) &&
+            bookingStatus !== "completed";
           if (!showActions) return null;
           return (
             <View style={styles.paymentSection}>
@@ -1638,6 +1989,15 @@ export default function BookingHistoryScreen() {
 
   const handleCancelBooking = async (booking) => {
     try {
+      // Không cho phép hủy booking đã hoàn thành
+      if (booking.status === "completed") {
+        Alert.alert(
+          "Không thể hủy",
+          "Lịch hẹn đã hoàn thành không thể hủy."
+        );
+        return;
+      }
+
       Alert.alert(
         "Xác nhận hủy",
         `Bạn có chắc muốn hủy lịch hẹn #${booking.bookingID}?` +
@@ -1945,6 +2305,60 @@ export default function BookingHistoryScreen() {
                 ))}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal đánh giá */}
+      <Modal
+        visible={showFeedbackModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowFeedbackModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Đánh giá điều dưỡng
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowFeedbackModal(false)}
+                style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.feedbackModalContent}>
+              <Text style={styles.feedbackModalSubtitle}>
+                Vui lòng đánh giá chất lượng dịch vụ
+              </Text>
+
+              {/* Stars */}
+              {renderStars(feedbackRate, setFeedbackRate)}
+
+              {/* Feedback content */}
+              <Text style={styles.feedbackInputLabel}>
+                Nhận xét (tùy chọn):
+              </Text>
+              <TextInput
+                style={styles.feedbackInput}
+                placeholder="Nhập nhận xét của bạn..."
+                value={feedbackContent}
+                onChangeText={setFeedbackContent}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              {/* Submit button */}
+              <TouchableOpacity
+                style={styles.submitFeedbackButton}
+                onPress={submitFeedback}>
+                <Text style={styles.submitFeedbackButtonText}>
+                  Gửi đánh giá
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2618,5 +3032,172 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginLeft: 10,
+  },
+  medicalNotesSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  medicalNoteItem: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  medicalNoteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  medicalNoteTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  medicalNoteDate: {
+    fontSize: 14,
+    color: "#666",
+  },
+  nurseInfoNote: {
+    marginBottom: 5,
+  },
+  nurseInfoLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  nurseInfoName: {
+    fontSize: 14,
+    color: "#666",
+  },
+  noteContent: {
+    marginBottom: 5,
+  },
+  noteLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  noteText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  adviceContent: {
+    marginBottom: 5,
+  },
+  adviceLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  adviceText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  imageContent: {
+    marginBottom: 5,
+  },
+  imageLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  imageText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  noMedicalNotesContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  noMedicalNotesText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+  },
+  feedbackDisplay: {
+    marginBottom: 10,
+  },
+  feedbackLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  feedbackStars: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  feedbackButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    alignItems: "center",
+    marginRight: 10,
+  },
+  feedbackButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+  },
+  feedbackButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 5,
+  },
+  feedbackContent: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 5,
+    fontStyle: "italic",
+  },
+  starsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  starButton: {
+    marginHorizontal: 2,
+  },
+  feedbackModalContent: {
+    padding: 20,
+    alignItems: "center",
+  },
+  feedbackModalSubtitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  feedbackInputLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#666",
+    marginBottom: 5,
+  },
+  feedbackInput: {
+    width: "100%",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#DDD",
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  submitFeedbackButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  submitFeedbackButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

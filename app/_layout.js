@@ -41,6 +41,7 @@ export default function RootLayout() {
       />
       <Stack.Screen name="booking" options={{ headerShown: false }} />
       <Stack.Screen name="wallet" options={{ headerShown: false }} />
+      <Stack.Screen name="nurse" options={{ headerShown: false }} />
     </Stack>
   );
 }

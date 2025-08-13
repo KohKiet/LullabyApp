@@ -119,7 +119,7 @@ class WalletService {
         retryCount
       );
 
-      const url = `${WALLET_ENDPOINTS.BASE_URL}/api/TransactionHistory/AddMoneyToWalletMobile`;
+      const url = `${WALLET_ENDPOINTS.BASE_URL}/api/TransactionHistory/AddMoneyToWallet`;
       console.log("WalletService: PayOS API URL:", url);
 
       const requestBody = {
