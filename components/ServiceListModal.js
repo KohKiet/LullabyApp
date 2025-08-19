@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
+import RelativeService from "../services/relativeService";
 import ServiceTypeService from "../services/serviceTypeService";
 
 export default function ServiceListModal({
@@ -23,6 +24,7 @@ export default function ServiceListModal({
   selectedCareProfile,
 }) {
   const [selectedServices, setSelectedServices] = useState({});
+  const [relativeCount, setRelativeCount] = useState(0);
   // Thêm state cho chọn ngày/giờ
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -32,6 +34,28 @@ export default function ServiceListModal({
   // Chỉ cho phép chọn giờ từ 6:00 đến 17:00, phút: 00, 10, 20, 30, 40, 50
   const hours = Array.from({ length: 12 }, (_, i) => i + 6);
   const minutes = [0, 10, 20, 30, 40, 50];
+
+  // Load relative count when modal opens
+  useEffect(() => {
+    if (visible && selectedCareProfile?.careProfileID) {
+      loadRelativeCount();
+    }
+  }, [visible, selectedCareProfile]);
+
+  const loadRelativeCount = async () => {
+    try {
+      const result =
+        await RelativeService.getRelativeCountByCareProfile(
+          selectedCareProfile.careProfileID
+        );
+      if (result.success) {
+        setRelativeCount(result.relativeCount);
+      }
+    } catch (error) {
+      console.error("Error loading relative count:", error);
+      setRelativeCount(0);
+    }
+  };
 
   const resetSelection = () => {
     setSelectedServices({});
@@ -56,10 +80,24 @@ export default function ServiceListModal({
     setSelectedServices((prev) => {
       const newSelected = { ...prev };
       if (newSelected[serviceId]) {
+        const service = services.find(
+          (s) => s.serviceID === serviceId
+        );
+        const currentQuantity = newSelected[serviceId].quantity || 1;
+
+        // Xác định số suất tối đa
+        let maxQuantity = 1;
+        if (service && !service.forMom) {
+          // Nếu forMom = false, cho phép chọn tối đa bằng số relative
+          maxQuantity = Math.max(1, relativeCount);
+        }
+        // Nếu forMom = true, chỉ cho phép chọn 1 suất
+
         const newQuantity = Math.max(
           1,
-          (newSelected[serviceId].quantity || 1) + delta
+          Math.min(maxQuantity, currentQuantity + delta)
         );
+
         newSelected[serviceId] = {
           ...newSelected[serviceId],
           quantity: newQuantity,
@@ -235,7 +273,7 @@ export default function ServiceListModal({
         {/* Quantity Controls - Only show if selected */}
         {isSelected && (
           <View style={styles.quantityContainer}>
-            <Text style={styles.quantityLabel}>Số lượng:</Text>
+            <Text style={styles.quantityLabel}>Suất:</Text>
             <View style={styles.quantityControls}>
               <TouchableOpacity
                 style={styles.quantityButton}
@@ -244,14 +282,66 @@ export default function ServiceListModal({
               </TouchableOpacity>
               <Text style={styles.quantityText}>{quantity}</Text>
               <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => updateQuantity(item.serviceID, 1)}>
-                <Ionicons name="add" size={16} color="#4CAF50" />
+                style={[
+                  styles.quantityButton,
+                  (() => {
+                    const service = services.find(
+                      (s) => s.serviceID === item.serviceID
+                    );
+                    const maxQuantity =
+                      service && !service.forMom
+                        ? Math.max(1, relativeCount)
+                        : 1;
+                    return quantity >= maxQuantity
+                      ? styles.disabledQuantityButton
+                      : null;
+                  })(),
+                ]}
+                onPress={() => updateQuantity(item.serviceID, 1)}
+                disabled={(() => {
+                  const service = services.find(
+                    (s) => s.serviceID === item.serviceID
+                  );
+                  const maxQuantity =
+                    service && !service.forMom
+                      ? Math.max(1, relativeCount)
+                      : 1;
+                  return quantity >= maxQuantity;
+                })()}>
+                <Ionicons
+                  name="add"
+                  size={16}
+                  color={(() => {
+                    const service = services.find(
+                      (s) => s.serviceID === item.serviceID
+                    );
+                    const maxQuantity =
+                      service && !service.forMom
+                        ? Math.max(1, relativeCount)
+                        : 1;
+                    return quantity >= maxQuantity
+                      ? "#CCC"
+                      : "#4CAF50";
+                  })()}
+                />
               </TouchableOpacity>
             </View>
             <Text style={styles.subtotalText}>
               Tổng:{" "}
               {ServiceTypeService.formatPrice(item.price * quantity)}
+            </Text>
+            {/* Hiển thị thông tin giới hạn */}
+            <Text style={styles.quantityLimitText}>
+              {(() => {
+                const service = services.find(
+                  (s) => s.serviceID === item.serviceID
+                );
+                if (service && service.forMom) {
+                  return "Chỉ được chọn 1 suất (dịch vụ cho mẹ)";
+                } else {
+                  return `Tối đa ${relativeCount} suất (theo số người trong hồ sơ)`;
+                }
+              })()}
             </Text>
           </View>
         )}
@@ -292,6 +382,10 @@ export default function ServiceListModal({
   );
 
   const selectedCount = Object.keys(selectedServices).length;
+  const totalSuats = Object.values(selectedServices).reduce(
+    (total, service) => total + (service.quantity || 1),
+    0
+  );
   const totalAmount = calculateTotalAmount();
 
   return (
@@ -325,7 +419,7 @@ export default function ServiceListModal({
             <View style={styles.bookingSummary}>
               <View style={styles.summaryInfo}>
                 <Text style={styles.summaryText}>
-                  Đã chọn: {selectedCount} dịch vụ
+                  Đã chọn: {selectedCount} dịch vụ ({totalSuats} suất)
                 </Text>
                 <Text style={styles.totalAmount}>
                   Tổng tiền:{" "}
@@ -578,6 +672,9 @@ const styles = StyleSheet.create({
   quantityButton: {
     padding: 5,
   },
+  disabledQuantityButton: {
+    opacity: 0.5,
+  },
   quantityText: {
     fontSize: 16,
     fontWeight: "bold",
@@ -589,6 +686,13 @@ const styles = StyleSheet.create({
     color: "#333",
     marginTop: 10,
     textAlign: "right",
+  },
+  quantityLimitText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 5,
+    fontStyle: "italic",
+    textAlign: "center",
   },
   bookingSummary: {
     padding: 20,

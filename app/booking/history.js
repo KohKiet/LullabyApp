@@ -518,7 +518,7 @@ export default function BookingHistoryScreen() {
         let success = false;
 
         if (walletID) {
-          walletUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${walletID}`;
+          walletUrl = `https://phamlequyanh.name.vn/api/Wallet/${walletID}`;
           console.log("Trying Wallet API with walletID:", walletUrl);
 
           const walletResponse = await fetch(walletUrl);
@@ -540,7 +540,7 @@ export default function BookingHistoryScreen() {
 
         // Nếu walletID thất bại hoặc không có, thử với accountID
         if (!success) {
-          walletUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${accountID}`;
+          walletUrl = `https://phamlequyanh.name.vn/api/Wallet/${accountID}`;
           console.log("Trying Wallet API with accountID:", walletUrl);
 
           const walletResponse = await fetch(walletUrl);
@@ -570,7 +570,7 @@ export default function BookingHistoryScreen() {
           for (let testID = 1; testID <= 5; testID++) {
             if (testID === accountID) continue; // Bỏ qua accountID đã thử
 
-            const testUrl = `https://cool-dhawan.103-28-36-58.plesk.page/api/Wallet/${testID}`;
+            const testUrl = `https://phamlequyanh.name.vn/api/Wallet/${testID}`;
             console.log(`Trying alternative ID ${testID}:`, testUrl);
 
             try {
@@ -723,7 +723,7 @@ export default function BookingHistoryScreen() {
               try {
                 // Gọi API thanh toán
                 const response = await fetch(
-                  "https://cool-dhawan.103-28-36-58.plesk.page/api/Invoice",
+                  "https://phamlequyanh.name.vn/api/Invoice",
                   {
                     method: "POST",
                     headers: {
@@ -901,7 +901,7 @@ export default function BookingHistoryScreen() {
     try {
       // Sử dụng API mới để cập nhật điều dưỡng
       const response = await fetch(
-        `https://cool-dhawan.103-28-36-58.plesk.page/api/CustomizeTask/UpdateNursing/${selectedTask.customizeTaskID}/${nurse.nursingID}`,
+        `https://phamlequyanh.name.vn/api/CustomizeTask/UpdateNursing/${selectedTask.customizeTaskID}/${nurse.nursingID}`,
         {
           method: "PUT",
           headers: {

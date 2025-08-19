@@ -5,8 +5,9 @@ import { API_CONFIG, AUTH_ENDPOINTS } from "./apiConfig";
 const USER_STORAGE_KEY = "user";
 const TOKEN_STORAGE_KEY = "auth_token";
 
-// Network timeout (10 seconds)
-const NETWORK_TIMEOUT = 10000;
+// Network timeout (in milliseconds)
+// Increased to tolerate slower responses on new server
+const NETWORK_TIMEOUT = 20000;
 
 class AuthService {
   // Helper function to create fetch with timeout
@@ -135,7 +136,8 @@ class AuthService {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json-patch+json",
+            accept: "*/*",
           },
           body: JSON.stringify({
             EmailOrPhoneNumber: emailOrPhone,

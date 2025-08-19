@@ -8,7 +8,7 @@ const isAndroid = Platform.OS === "android";
 const isIOS = Platform.OS === "ios";
 
 // Base URL configuration
-const BASE_URL = "https://cool-dhawan.103-28-36-58.plesk.page";
+const BASE_URL = "https://phamlequyanh.name.vn";
 
 console.log("API Config: Using production URL:", BASE_URL);
 console.log(
@@ -64,6 +64,8 @@ export const RELATIVE_ENDPOINTS = {
   GET_RELATIVE_BY_ID: (id) => `${BASE_URL}/api/relatives/get/${id}`,
   GET_RELATIVES_BY_CARE_PROFILE_ID: (careProfileID) =>
     `${BASE_URL}/api/relatives/getbycareprofileid/${careProfileID}`,
+  GET_RELATIVE_COUNT_BY_CARE_PROFILE: (careProfileID) =>
+    `${BASE_URL}/api/relatives/countbycareprofile/${careProfileID}`,
   CREATE_RELATIVE: `${BASE_URL}/api/relatives/create`,
   UPDATE_RELATIVE: (id) => `${BASE_URL}/api/relatives/update/${id}`,
   DELETE_RELATIVE: (id) => `${BASE_URL}/api/relatives/delete/${id}`,

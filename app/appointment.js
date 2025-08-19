@@ -209,7 +209,7 @@ export default function AppointmentScreen() {
         try {
           // Sử dụng API Booking/GetAllByCareProfile thay vì BookingService
           const response = await fetch(
-            `https://cool-dhawan.103-28-36-58.plesk.page/api/Booking/GetAllByCareProfile/${careProfileID}`,
+            `https://phamlequyanh.name.vn/api/Booking/GetAllByCareProfile/${careProfileID}`,
             {
               method: "GET",
               headers: {
@@ -350,7 +350,7 @@ export default function AppointmentScreen() {
   const loadHolidays = async () => {
     try {
       const response = await fetch(
-        "https://cool-dhawan.103-28-36-58.plesk.page/api/Holiday/GetAll",
+        "https://phamlequyanh.name.vn/api/Holiday/GetAll",
         {
           method: "GET",
           headers: {

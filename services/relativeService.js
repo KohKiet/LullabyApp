@@ -208,6 +208,43 @@ class RelativeService {
     if (status === "inactive") return "Không hoạt động";
     return status || "N/A";
   }
+
+  async getRelativeCountByCareProfile(careProfileID) {
+    try {
+      const response = await fetch(
+        RELATIVE_ENDPOINTS.GET_RELATIVE_COUNT_BY_CARE_PROFILE(
+          careProfileID
+        ),
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        data: data,
+        relativeCount: data.relativeCount || 0,
+      };
+    } catch (error) {
+      console.error(
+        "Error getting relative count by care profile:",
+        error
+      );
+      return {
+        success: false,
+        error: error.message,
+        relativeCount: 0,
+      };
+    }
+  }
 }
 
 // Export singleton instance
