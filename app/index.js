@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaskedView from "@react-native-masked-view/masked-view";
-import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -23,6 +22,7 @@ import WalletCard from "../components/WalletCard";
 import AuthService from "../services/authService";
 import BookingService from "../services/bookingService";
 import CareProfileService from "../services/careProfileService";
+import NotificationService from "../services/notificationService";
 import RoleService from "../services/roleService";
 import ServiceTypeService from "../services/serviceTypeService";
 
@@ -45,25 +45,45 @@ export default function HomeScreen() {
   const [selectedCareProfile, setSelectedCareProfile] =
     useState(null);
   const [pendingBookingType, setPendingBookingType] = useState(null); // 'service' hoặc 'package'
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     loadUserData();
   }, []);
 
   // Reload user data khi screen được focus (khi quay lại từ logout)
-  useFocusEffect(
-    React.useCallback(() => {
-      loadUserData();
-    }, [])
-  );
+  useEffect(() => {
+    loadUserData();
+    checkUnreadNotifications();
+  }, []);
 
   const loadUserData = async () => {
     try {
       const user = await AuthService.getUserData();
       if (user) {
-        setUserData(user);
+        // Ensure latest account info (e.g., avatarUrl)
+        let mergedUser = user;
+        try {
+          const accountId = user.accountID || user.id;
+          if (accountId && !user.avatarUrl) {
+            const resp = await fetch(
+              `${
+                process.env.EXPO_PUBLIC_API_BASE_URL ||
+                "https://phamlequyanh.name.vn"
+              }/api/accounts/get/${accountId}`,
+              { headers: { accept: "application/json" } }
+            );
+            if (resp.ok) {
+              const acc = await resp.json();
+              mergedUser = { ...user, ...acc };
+              // persist merged data so other screens see avatarUrl
+              await AuthService.saveUser(mergedUser);
+            }
+          }
+        } catch (_) {}
+        setUserData(mergedUser);
         // Load care profiles sau khi có user data
-        await loadCareProfiles(user);
+        await loadCareProfiles(mergedUser);
       } else {
         // Nếu không có user data (đã logout), set về null
         setUserData(null);
@@ -313,6 +333,32 @@ export default function HomeScreen() {
     }
   };
 
+  const checkUnreadNotifications = async () => {
+    try {
+      if (userData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            userData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
+  };
+
   // Render content cho Member
   const renderMemberContent = () => (
     <>
@@ -334,7 +380,7 @@ export default function HomeScreen() {
                 color="#FFFFFF"
               />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                Tư vấn viên
+                Chuyên viên tư vấn
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -352,7 +398,7 @@ export default function HomeScreen() {
                 color="#FFFFFF"
               />
               <Text style={[styles.cardText, { color: "#FFFFFF" }]}>
-                Điều dưỡng viên
+                Chuyên viên chăm sóc
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -584,19 +630,21 @@ export default function HomeScreen() {
             style={styles.logoBox}>
             {/* Gradient Lullaby Text */}
             <MaskedView
+              style={{ height: 33, width: "100%" }}
               maskElement={
                 <Text
                   style={[
                     styles.mainText,
                     { backgroundColor: "transparent" },
                   ]}>
-                  𝓛𝓾𝓵𝓵𝓪𝓫𝔂
+                  Lullaby
                 </Text>
               }>
               <LinearGradient
                 colors={["#4FC3F7", "#FF8AB3", "#26C6DA"]}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}>
+                end={{ x: 1, y: 0 }}
+                style={{ flex: 1 }}>
                 <Text style={[styles.mainText, { opacity: 0 }]}>
                   Lullaby
                 </Text>
@@ -679,7 +727,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   logoBox: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 15,
     alignItems: "center",
@@ -691,11 +739,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 8,
+    minWidth: 200,
+    justifyContent: "center",
   },
   mainText: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#333333",
+    textAlign: "center",
+    includeFontPadding: false,
+    lineHeight: 32,
   },
   subText: {
     fontSize: 20,

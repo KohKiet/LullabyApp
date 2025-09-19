@@ -153,17 +153,21 @@ class AuthService {
         const data = await response.json();
         console.log("🔍 Login response data:", data);
 
-        // API trả về format: { account: {...}, message: "...", token: "..." }
-        if (data.account && data.token) {
+        // API trả về format: { account: {...}, message: "...", token?: "..." }
+        // Token có thể nằm ở data.token hoặc lồng trong data.account.token
+        const account = data.account || {};
+        const token =
+          data.token || (account ? account.token : undefined);
+        if (account && token) {
           const userData = {
-            ...data.account,
-            token: data.token, // Thêm token vào user data
+            ...account,
+            token: token,
           };
           console.log("🔍 User data from API:", userData);
 
           // Lưu user và token
           await this.saveUser(userData);
-          await this.saveToken(data.token);
+          await this.saveToken(token);
 
           return { success: true, user: userData };
         } else {

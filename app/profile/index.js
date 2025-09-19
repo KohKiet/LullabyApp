@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import AuthService from "../../services/authService";
 import CareProfileService from "../../services/careProfileService";
+import NotificationService from "../../services/notificationService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
 import RelativeService from "../../services/relativeService";
 import RoleService from "../../services/roleService";
@@ -58,21 +59,36 @@ export default function ProfileScreen() {
   const [editingRelative, setEditingRelative] = useState(null);
   const [showEditRelativeForm, setShowEditRelativeForm] =
     useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   // Zone selection states
   const [zones, setZones] = useState([]);
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [selectedZone, setSelectedZone] = useState(null);
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
+  // Medical notes states
+  const [showMedicalNotesModal, setShowMedicalNotesModal] =
+    useState(false);
+  const [
+    selectedCareProfileForNotes,
+    setSelectedCareProfileForNotes,
+  ] = useState(null);
+  const [medicalNotes, setMedicalNotes] = useState([]);
+  const [isLoadingMedicalNotes, setIsLoadingMedicalNotes] =
+    useState(false);
 
   useEffect(() => {
     if (userData) {
-      loadCareProfiles();
+      loadCareProfiles(userData.accountID || userData.id);
+      loadRelatives(userData.accountID || userData.id);
+      loadZones();
     }
   }, [userData]);
+
+  useEffect(() => {
+    loadUserData();
+    checkUnreadNotifications();
+  }, []);
 
   const loadUserData = async () => {
     try {
@@ -106,7 +122,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const loadCareProfiles = async () => {
+  const loadCareProfiles = async (accountID) => {
     if (!userData) return;
 
     try {
@@ -114,7 +130,7 @@ export default function ProfileScreen() {
 
       const result =
         await CareProfileService.getCareProfilesByAccountId(
-          userData.accountID || userData.id
+          accountID
         );
 
       if (result.success) {
@@ -414,6 +430,158 @@ export default function ProfileScreen() {
     setShowZoneModal(false);
   };
 
+  // Medical notes functions
+  const openMedicalNotesModal = (careProfileId) => {
+    setSelectedCareProfileForNotes(careProfileId);
+    setShowMedicalNotesModal(true);
+    loadMedicalNotes(careProfileId);
+  };
+
+  const closeMedicalNotesModal = () => {
+    setShowMedicalNotesModal(false);
+    setSelectedCareProfileForNotes(null);
+    setMedicalNotes([]);
+  };
+
+  const loadMedicalNotes = async (careProfileId) => {
+    try {
+      setIsLoadingMedicalNotes(true);
+      const response = await fetch(
+        `https://phamlequyanh.name.vn/api/MedicalNote/by-careprofile-service?careProfileId=${careProfileId}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Raw medical notes data:", data);
+
+        // Enhance notes with additional information
+        const enhancedNotes = await Promise.all(
+          data.map(async (note) => {
+            const enhancedNote = { ...note };
+
+            // Fetch nursing specialist name
+            try {
+              const nursingResponse = await fetch(
+                `https://phamlequyanh.name.vn/api/nursingspecialists/get/${note.nursingID}`,
+                { headers: { accept: "*/*" } }
+              );
+              if (nursingResponse.ok) {
+                const nursingData = await nursingResponse.json();
+                enhancedNote.nursingName =
+                  nursingData.fullName ||
+                  nursingData.nursingFullName ||
+                  nursingData.name;
+                console.log(
+                  "Fetched nursing name:",
+                  enhancedNote.nursingName
+                );
+              } else {
+                console.log(
+                  "Failed to fetch nursing name, status:",
+                  nursingResponse.status
+                );
+              }
+            } catch (error) {
+              console.log("Could not fetch nursing name:", error);
+            }
+
+            // Fetch relative name if relativeID exists
+            if (note.relativeID) {
+              try {
+                const relativeResponse = await fetch(
+                  `https://phamlequyanh.name.vn/api/relatives/get/${note.relativeID}`,
+                  { headers: { accept: "*/*" } }
+                );
+                if (relativeResponse.ok) {
+                  const relativeData = await relativeResponse.json();
+                  enhancedNote.relativeName =
+                    relativeData.relativeName || relativeData.name;
+                  console.log(
+                    "Fetched relative name:",
+                    enhancedNote.relativeName
+                  );
+                } else {
+                  console.log(
+                    "Failed to fetch relative name, status:",
+                    relativeResponse.status
+                  );
+                }
+              } catch (error) {
+                console.log("Could not fetch relative name:", error);
+              }
+            }
+
+            // Fetch service name via customize task
+            try {
+              // First get the customize task to find the serviceID
+              const customizeTaskResponse = await fetch(
+                `https://phamlequyanh.name.vn/api/CustomizeTask/${note.customizeTaskID}`,
+                { headers: { accept: "*/*" } }
+              );
+              if (customizeTaskResponse.ok) {
+                const customizeTaskData =
+                  await customizeTaskResponse.json();
+                const serviceID = customizeTaskData.serviceID;
+
+                if (serviceID) {
+                  // Now fetch the service type using the serviceID
+                  const serviceResponse = await fetch(
+                    `https://phamlequyanh.name.vn/api/servicetypes/get/${serviceID}`,
+                    { headers: { accept: "*/*" } }
+                  );
+                  if (serviceResponse.ok) {
+                    const serviceData = await serviceResponse.json();
+                    enhancedNote.serviceName =
+                      serviceData.serviceName || serviceData.name;
+                    console.log(
+                      "Fetched service name:",
+                      enhancedNote.serviceName
+                    );
+                  } else {
+                    console.log(
+                      "Failed to fetch service name, status:",
+                      serviceResponse.status
+                    );
+                  }
+                } else {
+                  console.log("No serviceID found in customize task");
+                }
+              } else {
+                console.log(
+                  "Failed to fetch customize task, status:",
+                  customizeTaskResponse.status
+                );
+              }
+            } catch (error) {
+              console.log("Could not fetch service name:", error);
+            }
+
+            return enhancedNote;
+          })
+        );
+
+        setMedicalNotes(enhancedNotes);
+      } else {
+        console.error(
+          "Failed to load medical notes:",
+          response.status
+        );
+        setMedicalNotes([]);
+      }
+    } catch (error) {
+      console.error("Error loading medical notes:", error);
+      setMedicalNotes([]);
+    } finally {
+      setIsLoadingMedicalNotes(false);
+    }
+  };
+
   const selectZone = (zone) => {
     setSelectedZone(zone);
     handleCareProfileFormChange("zoneDetailID", zone.zoneDetailID);
@@ -676,11 +844,19 @@ export default function ProfileScreen() {
       }
 
       const updateData = {
+        relativeID: editingRelative.relativeID,
         relativeName: relativeForm.relativeName.trim(),
-        dateOfBirth: new Date(relativeForm.dateOfBirth).toISOString(),
-        gender: relativeForm.gender,
-        image: editingRelative.image || "",
-        note: relativeForm.note.trim(),
+        dateOfBirth: relativeForm.dateOfBirth, // API expects YYYY-MM-DD
+        gender:
+          relativeForm.gender === "Nam" ||
+          relativeForm.gender === "Male"
+            ? "Nam"
+            : relativeForm.gender === "Nữ" ||
+              relativeForm.gender === "Female"
+            ? "Nữ"
+            : relativeForm.gender,
+        image: editingRelative.image || "string",
+        note: relativeForm.note.trim() || "",
       };
 
       const result = await RelativeService.updateRelative(
@@ -689,10 +865,20 @@ export default function ProfileScreen() {
       );
 
       if (result.success) {
-        Alert.alert(
-          "Thành công",
-          `Đã cập nhật thông tin con: ${result.data.relative.relativeName}`
-        );
+        const childName = updateData.relativeName;
+        let msg =
+          (result.data && (result.data.message || result.data.msg)) ||
+          "";
+        if (msg) {
+          // Dịch sang TV và thay ID bằng tên
+          msg = msg.replace(
+            /Relative\s+with\s+ID\s+\d+\s+updated\s+successfully\.?/i,
+            `Đã cập nhật ${childName} thành công.`
+          );
+        } else {
+          msg = `Đã cập nhật ${childName} thành công.`;
+        }
+        Alert.alert("Thành công", msg);
         // Reload relatives for this care profile
         await loadRelatives(editingRelative.careProfileID);
         // Close form
@@ -1082,13 +1268,13 @@ export default function ProfileScreen() {
                       styles.statusBadge,
                       {
                         backgroundColor:
-                          profile.status === "Active"
+                          profile.status === "active"
                             ? "#4CAF50"
                             : "#FF6B6B",
                       },
                     ]}>
                     <Text style={styles.statusText}>
-                      {profile.status === "Active"
+                      {profile.status === "active"
                         ? "Hoạt động"
                         : "Không hoạt động"}
                     </Text>
@@ -1233,6 +1419,25 @@ export default function ProfileScreen() {
                         { color: "#2196F3" },
                       ]}>
                       Thêm thông tin con
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.viewNotesButton}
+                    onPress={() =>
+                      openMedicalNotesModal(profile.careProfileID)
+                    }>
+                    <Ionicons
+                      name="document-text"
+                      size={20}
+                      color="#FF9800"
+                    />
+                    <Text
+                      style={[
+                        styles.viewNotesButtonText,
+                        { color: "#FF9800" },
+                      ]}>
+                      Xem ghi chú
                     </Text>
                   </TouchableOpacity>
 
@@ -1784,6 +1989,177 @@ export default function ProfileScreen() {
     );
   };
 
+  const renderMedicalNotesModal = () => {
+    if (!showMedicalNotesModal) return null;
+
+    const selectedProfile = careProfiles.find(
+      (profile) =>
+        profile.careProfileID === selectedCareProfileForNotes
+    );
+
+    return (
+      <Modal
+        visible={showMedicalNotesModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeMedicalNotesModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Ghi chú y tế -{" "}
+                {selectedProfile?.profileName || "Hồ sơ"}
+              </Text>
+              <TouchableOpacity
+                style={styles.closeIconButton}
+                onPress={closeMedicalNotesModal}>
+                <Ionicons name="close" size={24} color="#FF6B6B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalBody}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+              contentContainerStyle={styles.scrollContentContainer}>
+              {isLoadingMedicalNotes ? (
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>
+                    Đang tải ghi chú y tế...
+                  </Text>
+                </View>
+              ) : medicalNotes.length > 0 ? (
+                <View style={styles.medicalNotesList}>
+                  {medicalNotes.map((note, index) => (
+                    <View
+                      key={note.medicalNoteID || index}
+                      style={styles.medicalNoteItem}>
+                      <View style={styles.medicalNoteHeader}>
+                        <Text style={styles.medicalNoteTitle}>
+                          Ghi chú #{note.medicalNoteID}
+                        </Text>
+                        <Text style={styles.medicalNoteDate}>
+                          {new Date(
+                            note.createdAt
+                          ).toLocaleTimeString("vi-VN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}{" "}
+                          {new Date(
+                            note.createdAt
+                          ).toLocaleDateString("vi-VN")}
+                        </Text>
+                      </View>
+
+                      <View style={styles.medicalNoteContent}>
+                        <View style={styles.medicalNoteField}>
+                          <Text style={styles.medicalNoteFieldLabel}>
+                            Chuyên viên:
+                          </Text>
+                          <Text style={styles.medicalNoteFieldValue}>
+                            {note.nursingName ||
+                              `Chuyên viên #${note.nursingID}`}
+                          </Text>
+                        </View>
+
+                        <View style={styles.medicalNoteField}>
+                          <Text style={styles.medicalNoteFieldLabel}>
+                            Họ và tên:
+                          </Text>
+                          <Text style={styles.medicalNoteFieldValue}>
+                            {note.relativeName ||
+                              (note.relativeID
+                                ? `Người nhận #${note.relativeID}`
+                                : selectedProfile?.profileName ||
+                                  "Mẹ")}
+                          </Text>
+                        </View>
+
+                        <View style={styles.medicalNoteField}>
+                          <Text style={styles.medicalNoteFieldLabel}>
+                            Dịch vụ:
+                          </Text>
+                          <Text style={styles.medicalNoteFieldValue}>
+                            {note.serviceName ||
+                              `Dịch vụ #${note.customizeTaskID}`}
+                          </Text>
+                        </View>
+
+                        <View style={styles.medicalNoteField}>
+                          <Text style={styles.medicalNoteFieldLabel}>
+                            Ghi chú:
+                          </Text>
+                          <View style={styles.noteContentContainer}>
+                            <Text style={styles.medicalNoteText}>
+                              {note.note}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {note.advice && (
+                          <View style={styles.medicalNoteField}>
+                            <Text
+                              style={styles.medicalNoteFieldLabel}>
+                              Lời khuyên:
+                            </Text>
+                            <Text
+                              style={styles.medicalNoteAdviceText}>
+                              {note.advice}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>
+                    Chưa có ghi chú y tế nào cho hồ sơ này
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeMedicalNotesModal}>
+                <Text style={styles.closeButtonText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const checkUnreadNotifications = async () => {
+    try {
+      if (userData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            userData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
+  };
+
   if (isLoading) {
     return (
       <LinearGradient
@@ -1899,6 +2275,7 @@ export default function ProfileScreen() {
         {renderRelativeForm()}
         {renderEditRelativeForm()}
         {renderDatePicker()}
+        {renderMedicalNotesModal()}
 
         {/* Zone Selection Modal */}
         <Modal
@@ -2592,6 +2969,132 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  viewNotesButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff3e0",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#FF9800",
+  },
+  viewNotesButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  medicalNotesList: {
+    paddingVertical: 10,
+    flexGrow: 1,
+  },
+  medicalNoteItem: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4CAF50",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#E8F5E8",
+  },
+  medicalNoteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8F5E8",
+  },
+  medicalNoteTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  medicalNoteDate: {
+    fontSize: 12,
+    color: "#666",
+  },
+  medicalNoteContent: {
+    marginBottom: 10,
+  },
+  medicalNoteField: {
+    marginBottom: 14,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 10,
+  },
+  medicalNoteFieldLabel: {
+    fontSize: 12,
+    color: "#6C757D",
+    marginBottom: 4,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  medicalNoteFieldValue: {
+    fontSize: 15,
+    color: "#2C3E50",
+    fontWeight: "700",
+  },
+  noteContentContainer: {
+    marginTop: 8,
+  },
+  medicalNoteText: {
+    fontSize: 16,
+    color: "#2196F3",
+    lineHeight: 22,
+    fontWeight: "600",
+    backgroundColor: "#E3F2FD",
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#2196F3",
+  },
+  medicalNoteAdvice: {
+    backgroundColor: "#e8f5e8",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  medicalNoteAdviceLabel: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#4CAF50",
+    marginBottom: 5,
+  },
+  medicalNoteAdviceText: {
+    fontSize: 13,
+    color: "#333",
+    lineHeight: 18,
+  },
+  medicalNoteDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  medicalNoteDetail: {
+    fontSize: 12,
+    color: "#666",
+    backgroundColor: "#e9ecef",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
   editDeleteContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -2630,5 +3133,31 @@ const styles = StyleSheet.create({
   separator: {
     height: 1,
     backgroundColor: "#eee",
+  },
+  closeButton: {
+    backgroundColor: "#FF6B6B",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignSelf: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  closeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  closeIconButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#FFF5F5",
   },
 });

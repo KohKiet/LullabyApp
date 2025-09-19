@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -16,6 +15,7 @@ import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizeTaskService from "../../services/customizeTaskService";
 import MedicalNoteService from "../../services/medicalNoteService";
+import NotificationService from "../../services/notificationService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import { getMajorDisplayText } from "../../utils/majorUtils";
@@ -30,19 +30,12 @@ export default function NurseBookingHistoryScreen() {
   const [services, setServices] = useState({});
   const [careProfiles, setCareProfiles] = useState({});
   const [medicalNotesMap, setMedicalNotesMap] = useState({});
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     loadUserData();
+    checkUnreadNotifications();
   }, []);
-
-  // Reload data when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      if (userData) {
-        loadNurseBookings(userData);
-      }
-    }, [userData])
-  );
 
   const loadUserData = async () => {
     try {
@@ -256,6 +249,52 @@ export default function NurseBookingHistoryScreen() {
     }
   };
 
+  const formatTimeRange = (startString, endString) => {
+    if (!startString) return "N/A";
+
+    try {
+      const start = new Date(startString);
+      if (isNaN(start.getTime())) {
+        return startString;
+      }
+
+      // Format start time
+      const startStr = `${start
+        .getHours()
+        .toString()
+        .padStart(2, "0")}:${start
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}`;
+      const dateStr = `${start
+        .getDate()
+        .toString()
+        .padStart(2, "0")}/${(start.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}/${start.getFullYear()}`;
+
+      // Nếu có end time, format thành range
+      if (endString) {
+        const end = new Date(endString);
+        if (!isNaN(end.getTime())) {
+          const endStr = `${end
+            .getHours()
+            .toString()
+            .padStart(2, "0")}:${end
+            .getMinutes()
+            .toString()
+            .padStart(2, "0")}`;
+          return `${startStr} - ${endStr} ${dateStr}`;
+        }
+      }
+
+      // Chỉ có start time
+      return `${startStr} ${dateStr}`;
+    } catch (error) {
+      return `${startString}${endString ? ` - ${endString}` : ""}`;
+    }
+  };
+
   const formatStatus = (status) => {
     switch (status?.toLowerCase()) {
       case "pending":
@@ -287,6 +326,32 @@ export default function NurseBookingHistoryScreen() {
         return "#9C27B0";
       default:
         return "#999";
+    }
+  };
+
+  const checkUnreadNotifications = async () => {
+    try {
+      if (userData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            userData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
     }
   };
 
@@ -527,7 +592,10 @@ export default function NurseBookingHistoryScreen() {
                             Thời gian làm việc:
                           </Text>
                           <Text style={styles.detailValue}>
-                            {formatDateTime(booking.workdate)}
+                            {formatTimeRange(
+                              booking.workdate,
+                              booking.endTime
+                            )}
                           </Text>
                         </View>
                       </View>

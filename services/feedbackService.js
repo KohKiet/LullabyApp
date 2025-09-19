@@ -1,6 +1,46 @@
 import { API_CONFIG } from "./apiConfig";
 
 class FeedbackService {
+  // Trả về điểm trung bình (number) cho nursingID
+  async getAverageRatingByNursing(nursingID) {
+    try {
+      const url = `${API_CONFIG.BASE_URL}/api/Feedback/AverageRatingByNursing/${nursingID}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          accept: "*/*",
+        },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `HTTP ${response.status}` };
+      }
+
+      // API có thể trả về text số thuần (ví dụ: "4.3")
+      const text = await response.text();
+      const value = parseFloat(text);
+      if (!Number.isNaN(value)) {
+        return { success: true, data: value };
+      }
+
+      // Fallback nếu server trả JSON
+      try {
+        const json = JSON.parse(text);
+        const numeric =
+          typeof json === "number" ? json : parseFloat(json?.value);
+        return {
+          success: true,
+          data: Number.isNaN(numeric) ? 0 : numeric,
+        };
+      } catch (_) {
+        return { success: true, data: 0 };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Gửi đánh giá
   async submitFeedback({
     nursingID,
     customizeTaskID,
@@ -46,6 +86,7 @@ class FeedbackService {
     }
   }
 
+  // Lấy feedback theo CustomizeTaskID
   async getFeedbackByCustomizeTaskID(customizeTaskID) {
     try {
       const response = await fetch(
@@ -62,7 +103,6 @@ class FeedbackService {
         const data = await response.json();
         return { success: true, data };
       } else {
-        // Treat non-2xx as not found/no feedback
         return { success: false, error: `HTTP ${response.status}` };
       }
     } catch (error) {
@@ -73,6 +113,7 @@ class FeedbackService {
     }
   }
 
+  // Lấy tất cả feedbacks
   async getAllFeedbacks() {
     try {
       const response = await fetch(

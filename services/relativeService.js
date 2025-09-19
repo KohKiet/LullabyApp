@@ -129,15 +129,19 @@ class RelativeService {
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json-patch+json",
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(updateData),
         }
       );
 
       if (response.ok) {
-        const data = await response.json();
-        return { success: true, data: data };
+        // API may return either { message: "..." } or a full object
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (_) {}
+        return { success: true, data: data || {} };
       } else {
         let errorMessage = "Update failed";
         try {

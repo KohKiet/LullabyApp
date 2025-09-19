@@ -12,14 +12,18 @@ import {
   View,
 } from "react-native";
 import { API_CONFIG } from "../../services/apiConfig";
+import AuthService from "../../services/authService";
 import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
+import NotificationService from "../../services/notificationService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
+import RelativeService from "../../services/relativeService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import TransactionHistoryService from "../../services/transactionHistoryService";
 import WalletService from "../../services/walletService";
+import WishlistService from "../../services/wishlistService";
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -34,6 +38,7 @@ export default function PaymentScreen() {
   const [isProcessingPayment, setIsProcessingPayment] =
     useState(false);
   const [services, setServices] = useState([]); // Thêm state cho services
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   // Staff selection states
   const [selectionMode, setSelectionMode] = useState(null); // 'user' | 'system'
@@ -43,6 +48,19 @@ export default function PaymentScreen() {
   const [pickerSlotIndex, setPickerSlotIndex] = useState(null);
   const [selectedNurseIds, setSelectedNurseIds] = useState([]);
   const [requiredNurseCount, setRequiredNurseCount] = useState(1);
+  const [freeNurses, setFreeNurses] = useState([]);
+  const [conflictBlacklist, setConflictBlacklist] = useState([]); // nursingIDs to hide due to conflict
+  const [nurseSelections, setNurseSelections] = useState({}); // slotIndex -> nursingID
+  const [showRelativePicker, setShowRelativePicker] = useState(false);
+  const [relativePickerTask, setRelativePickerTask] = useState(null);
+
+  // Relative selection states
+  const [relatives, setRelatives] = useState([]); // relatives of care profile
+  const [relativeSelections, setRelativeSelections] = useState({}); // customizeTaskID -> relativeID
+
+  // Wishlist states
+  const [wishlistMap, setWishlistMap] = useState({}); // nursingID -> {isFavorite: boolean, wishlistID: number}
+  const [customerID, setCustomerID] = useState(null);
 
   // Map each slot to a specific serviceID (for service bookings)
   const slotServiceIds = React.useMemo(() => {
@@ -78,26 +96,180 @@ export default function PaymentScreen() {
     packageTasks,
   ]);
 
+  // Determine if all customize tasks have a chosen relative
+  const allRelativesChosen = React.useMemo(() => {
+    if (!customizeTasks || customizeTasks.length === 0) return false;
+    return customizeTasks.every((t) => {
+      const selected = relativeSelections[t.customizeTaskID];
+      const existing = t.relativeID;
+      return !!(selected || existing);
+    });
+  }, [customizeTasks, relativeSelections]);
+
+  const isPayActionEnabled = () => {
+    if (isProcessingPayment) return false;
+    // Relatives are optional; backend will handle default assignment
+    if (selectionMode === "system") return true;
+    if (selectionMode === "user") {
+      return selectedNurseIds.length >= requiredNurseCount;
+    }
+    return false; // must choose a mode first
+  };
+
+  // Helper: load all required data on screen focus/initial mount
+  const loadUserData = async () => {
+    try {
+      // Load booking, care profile and invoice (loadBookingData handles those and storage fallbacks)
+      await loadBookingData();
+      // Preload nurses and compatibility links to support manual selection
+      await loadNurses();
+      await loadNurseServiceLinks();
+
+      // Load customer ID for wishlist
+      const userResult = await AuthService.getUser();
+      if (userResult.success && userResult.data) {
+        setCustomerID(userResult.data.accountID);
+        console.log(
+          "🔍 Loaded customer ID:",
+          userResult.data.accountID
+        );
+      } else {
+        console.error("Error loading user data:", userResult.error);
+        // Fallback to default customer ID for testing
+        setCustomerID(2);
+      }
+    } catch (error) {
+      console.error("PaymentScreen: loadUserData error:", error);
+      // Fallback to default customer ID for testing
+      setCustomerID(2);
+    }
+  };
+
+  const loadWishlistData = async () => {
+    if (!customerID) {
+      console.log(
+        "🔍 Customer ID not available yet, skipping wishlist load"
+      );
+      return;
+    }
+
+    try {
+      console.log("🔍 Loading wishlist for customer ID:", customerID);
+      const result = await WishlistService.getWishlistByCustomer(
+        customerID
+      );
+      console.log("🔍 Wishlist result:", result);
+
+      if (result.success && result.data) {
+        const wishlistData = result.data;
+        const wishlistMapData = {};
+
+        wishlistData.forEach((item) => {
+          wishlistMapData[item.nursingID] = {
+            isFavorite: true,
+            wishlistID: item.wishlistID,
+          };
+        });
+
+        setWishlistMap(wishlistMapData);
+        console.log("🔍 Wishlist map updated:", wishlistMapData);
+      } else {
+        console.error("🔍 Error loading wishlist:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading wishlist:", error);
+    }
+  };
+
+  // Check if two time slots conflict (overlap)
+  const doTimeSlotsConflict = (start1, end1, start2, end2) => {
+    const time1Start = new Date(`2000-01-01T${start1}`);
+    const time1End = new Date(`2000-01-01T${end1}`);
+    const time2Start = new Date(`2000-01-01T${start2}`);
+    const time2End = new Date(`2000-01-01T${end2}`);
+
+    return time1Start < time2End && time2Start < time1End;
+  };
+
+  // Get conflicting nurse IDs for a specific slot
+  const getConflictingNurseIds = (slotIndex) => {
+    const conflictingIds = [];
+    const currentSlotTime = customizeTasks[slotIndex];
+
+    if (!currentSlotTime) return conflictingIds;
+
+    // Check all other slots for time conflicts
+    customizeTasks.forEach((task, otherSlotIndex) => {
+      if (otherSlotIndex === slotIndex) return; // Skip current slot
+
+      const otherSlotTime = task;
+      if (!otherSlotTime) return;
+
+      // Check if times overlap
+      if (
+        doTimeSlotsConflict(
+          currentSlotTime.startTime,
+          currentSlotTime.endTime,
+          otherSlotTime.startTime,
+          otherSlotTime.endTime
+        )
+      ) {
+        // If this other slot has a selected nurse, add to conflicts
+        const selectedNurseId = nurseSelections[otherSlotIndex];
+        if (selectedNurseId) {
+          conflictingIds.push(selectedNurseId);
+        }
+      }
+    });
+
+    return conflictingIds;
+  };
+
   useEffect(() => {
     if (bookingId) {
-      loadBookingData();
-      // Preload nurses for selection
-      loadNurses();
-      loadNurseServiceLinks();
-
-      // Add timeout to prevent infinite loading
-      const timeoutId = setTimeout(() => {
-        if (isLoading) {
-          setIsLoading(false);
-          loadFromAsyncStorage();
-        }
-      }, 10000); // 10 seconds timeout
-
-      return () => clearTimeout(timeoutId);
-    } else {
-      console.log("PaymentScreen: No bookingId provided");
+      loadInvoiceData(bookingId);
+      loadPackageTasks(bookingId);
+      loadServices();
     }
   }, [bookingId]);
+
+  useEffect(() => {
+    loadUserData();
+    checkUnreadNotifications();
+    loadWishlistData();
+  }, []);
+
+  useEffect(() => {
+    if (customerID) {
+      loadWishlistData();
+    }
+  }, [customerID]);
+
+  const checkUnreadNotifications = async () => {
+    try {
+      if (careProfileData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            careProfileData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
+  };
 
   // Update requiredNurseCount when extraData changes
   useEffect(() => {
@@ -140,6 +312,17 @@ export default function PaymentScreen() {
         const customizeTasks = await customizeTasksResponse.json();
         console.log("Customize tasks loaded:", customizeTasks);
 
+        // keep tasks for relative selection UI
+        setCustomizeTasks(customizeTasks || []);
+        // Pre-fill relative selections
+        const pre = {};
+        (customizeTasks || []).forEach((t) => {
+          if (t.relativeID) pre[t.customizeTaskID] = t.relativeID;
+        });
+        if (Object.keys(pre).length > 0) {
+          setRelativeSelections((prev) => ({ ...pre, ...prev }));
+        }
+
         // Update required nurse count based on actual tasks
         const actualRequiredCount = customizeTasks.length;
         setRequiredNurseCount(actualRequiredCount);
@@ -181,10 +364,54 @@ export default function PaymentScreen() {
       } else {
         console.log("Failed to load customize tasks");
         setNurseServiceLinks([]);
+        // Fallback: synthesize tasks from extraData if available
+        if (
+          extraData?.serviceType === "service" &&
+          extraData?.services?.length
+        ) {
+          const synthesized = [];
+          extraData.services.forEach((s) => {
+            const q = s.quantity || 1;
+            for (let i = 0; i < q; i++) {
+              synthesized.push({
+                customizeTaskID: -(synthesized.length + 1), // temp negative id
+                serviceID: s.serviceID,
+                taskOrder: i + 1,
+                startTime: extraData.workdate,
+                endTime: extraData.workdate,
+                relativeID: null,
+              });
+            }
+          });
+          setCustomizeTasks(synthesized);
+          setRequiredNurseCount(synthesized.length);
+        }
       }
     } catch (error) {
       console.error("Error loading nurse service links:", error);
       setNurseServiceLinks([]);
+      // Fallback: synthesize tasks from extraData
+      if (
+        extraData?.serviceType === "service" &&
+        extraData?.services?.length
+      ) {
+        const synthesized = [];
+        extraData.services.forEach((s) => {
+          const q = s.quantity || 1;
+          for (let i = 0; i < q; i++) {
+            synthesized.push({
+              customizeTaskID: -(synthesized.length + 1),
+              serviceID: s.serviceID,
+              taskOrder: i + 1,
+              startTime: extraData.workdate,
+              endTime: extraData.workdate,
+              relativeID: null,
+            });
+          }
+        });
+        setCustomizeTasks(synthesized);
+        setRequiredNurseCount(synthesized.length);
+      }
     }
   };
 
@@ -193,29 +420,240 @@ export default function PaymentScreen() {
     // Removed debug logging for production
   }, [isLoading, bookingData, extraData]);
 
-  const isPayActionEnabled = () => {
-    if (isProcessingPayment) return false;
-    if (selectionMode === "system") return true;
-    if (selectionMode === "user") {
-      return selectedNurseIds.length >= requiredNurseCount;
+  // Build map for quick name lookup
+  const relativeNameById = React.useMemo(() => {
+    const map = {};
+    (relatives || []).forEach((r) => {
+      map[r.relativeID] =
+        r.relativeName || r.name || `Người #${r.relativeID}`;
+    });
+    return map;
+  }, [relatives]);
+
+  // Load customize tasks for booking to drive relative selection
+  const [customizeTasks, setCustomizeTasks] = useState([]);
+  useEffect(() => {
+    const loadTasks = async () => {
+      if (!bookingId) return;
+      try {
+        const res = await fetch(
+          `${API_CONFIG.BASE_URL}/api/CustomizeTask/GetAllByBooking/${bookingId}`,
+          { headers: { accept: "*/*" } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setCustomizeTasks(data || []);
+          // Pre-fill selections from server relativeID if present
+          const pre = {};
+          (data || []).forEach((t) => {
+            if (t.relativeID) pre[t.customizeTaskID] = t.relativeID;
+          });
+          setRelativeSelections((prev) => ({ ...pre, ...prev }));
+        } else {
+          setCustomizeTasks([]);
+        }
+      } catch (e) {
+        setCustomizeTasks([]);
+      }
+    };
+    loadTasks();
+  }, [bookingId]);
+
+  const assignRelative = async (taskId, relativeID) => {
+    const result = await CustomizeTaskService.updateRelative(
+      taskId,
+      relativeID
+    );
+    if (!result.success) {
+      Alert.alert(
+        "Lỗi",
+        translateRelativeError(result.error, relativeID)
+      );
+      return false;
     }
-    return false; // must choose a mode first
+    setRelativeSelections((prev) => ({
+      ...prev,
+      [taskId]: relativeID,
+    }));
+    return true;
   };
 
-  const openNursePicker = (slotIndex) => {
+  const translateRelativeError = (message, relativeID) => {
+    const name =
+      relativeNameById[relativeID] || `Relative ${relativeID}`;
+    let text = String(message || "");
+    text = text.replace(/Relative\s+with\s+ID\s+\d+/i, name);
+    text = text.replace(
+      /selected\s+to\s+the\s+same\s+service\s+in\s+booking/i,
+      "đã được gán cho dịch vụ này trong booking"
+    );
+    return (
+      text || "Không thể chọn người nhận dịch vụ cho công việc này."
+    );
+  };
+
+  const openNursePicker = async (slotIndex) => {
     setPickerSlotIndex(slotIndex);
+    try {
+      const res = await fetch(
+        `${API_CONFIG.BASE_URL}/api/nursingspecialists/GetAllFree/${bookingId}`,
+        { headers: { accept: "*/*" } }
+      );
+      let list = [];
+      if (res.ok) {
+        const data = await res.json();
+        list = Array.isArray(data) ? data : [];
+      }
+
+      // Filter by service compatibility for this slot (if known)
+      const requiredServiceId = slotServiceIds[slotIndex] || null;
+      if (requiredServiceId) {
+        const link = (nurseServiceLinks || []).find(
+          (l) => l.serviceID === requiredServiceId
+        );
+        if (
+          link &&
+          Array.isArray(link.nurses) &&
+          link.nurses.length > 0
+        ) {
+          const compatibleIds = link.nurses
+            .map((n) => n.nursingID)
+            .filter((id) => id != null);
+          list = list.filter((n) =>
+            compatibleIds.includes(n.nursingID)
+          );
+        } else {
+          // If no compatibility data, show none to avoid listing wrong nurses
+          list = [];
+        }
+      }
+
+      // Remove nurses known to conflict (from previous attempts)
+      if (conflictBlacklist.length > 0) {
+        list = list.filter(
+          (n) => !conflictBlacklist.includes(n.nursingID)
+        );
+      }
+
+      // NEW: Remove nurses who are already selected for conflicting time slots
+      const conflictingNurseIds = getConflictingNurseIds(slotIndex);
+      console.log(
+        "🔍 Conflicting nurse IDs for slot",
+        slotIndex,
+        ":",
+        conflictingNurseIds
+      );
+      list = list.filter(
+        (n) => !conflictingNurseIds.includes(n.nursingID)
+      );
+
+      setFreeNurses(list);
+    } catch (e) {
+      setFreeNurses([]);
+    }
     setShowNursePicker(true);
   };
 
   const chooseNurseForSlot = (nurseId) => {
+    // Validate against current free list
+    const isFree = (freeNurses || []).some(
+      (n) => n.nursingID === nurseId
+    );
+    if (!isFree) {
+      Alert.alert(
+        "Lỗi",
+        "Chỉ được chọn chuyên viên có trong danh sách trống hiện tại."
+      );
+      return;
+    }
+
+    // Prevent overlapping assignments for the same nurse within this booking
+    const thisTask = customizeTasks[pickerSlotIndex];
+    const parseDate = (s) => new Date(s).getTime();
+    const isOverlap = (aStart, aEnd, bStart, bEnd) => {
+      if (!aStart || !aEnd || !bStart || !bEnd) return false;
+      const as = parseDate(aStart);
+      const ae = parseDate(aEnd);
+      const bs = parseDate(bStart);
+      const be = parseDate(bEnd);
+      return as < be && bs < ae; // intervals intersect
+    };
+    if (thisTask) {
+      for (let i = 0; i < selectedNurseIds.length; i++) {
+        if (i === pickerSlotIndex) continue;
+        if (selectedNurseIds[i] === nurseId) {
+          const otherTask = customizeTasks[i];
+          if (
+            otherTask &&
+            isOverlap(
+              thisTask.startTime,
+              thisTask.endTime,
+              otherTask.startTime,
+              otherTask.endTime
+            )
+          ) {
+            Alert.alert(
+              "Trùng chuyên viên",
+              "Khung giờ này chuyên viên đã được chọn cho một dịch vụ khác trùng thời gian. Bạn hãy chọn lại nhé."
+            );
+            return;
+          }
+        }
+      }
+    }
+
     setSelectedNurseIds((prev) => {
       const next = [...prev];
       next[pickerSlotIndex] = nurseId;
-      // Ensure length trimmed to required count
       return next.slice(0, requiredNurseCount);
     });
+
+    // Update nurse selections tracking
+    setNurseSelections((prev) => ({
+      ...prev,
+      [pickerSlotIndex]: nurseId,
+    }));
+
     setShowNursePicker(false);
     setPickerSlotIndex(null);
+  };
+
+  const openRelativePicker = (task) => {
+    setRelativePickerTask(task);
+    setShowRelativePicker(true);
+  };
+
+  // Handle nurse selection change - clear previous selection and update tracking
+  const handleNurseSelectionChange = (slotIndex, newNurseId) => {
+    // Clear previous selection for this slot
+    setSelectedNurseIds((prev) => {
+      const next = [...prev];
+      next[slotIndex] = newNurseId;
+      return next;
+    });
+
+    // Update nurse selections tracking
+    setNurseSelections((prev) => ({
+      ...prev,
+      [slotIndex]: newNurseId,
+    }));
+
+    console.log(
+      "🔍 Nurse selection updated for slot",
+      slotIndex,
+      ":",
+      newNurseId
+    );
+  };
+
+  const chooseRelative = async (relativeID) => {
+    if (!relativePickerTask) return;
+    await assignRelative(
+      relativePickerTask.customizeTaskID,
+      relativeID
+    );
+    setShowRelativePicker(false);
+    setRelativePickerTask(null);
   };
 
   const loadBookingData = async () => {
@@ -339,6 +777,14 @@ export default function PaymentScreen() {
 
       if (result.success) {
         setCareProfileData(result.data);
+        // Load relatives by careProfile
+        try {
+          const relRes =
+            await RelativeService.getRelativesByCareProfileId(
+              result.data.careProfileID
+            );
+          if (relRes.success) setRelatives(relRes.data || []);
+        } catch (_) {}
       } else {
         setCareProfileData(null);
       }
@@ -467,6 +913,32 @@ export default function PaymentScreen() {
     }
   };
 
+  // Dịch thông báo lỗi UpdateNursing sang tiếng Việt và thay ID bằng tên
+  const translateUpdateNursingError = (message) => {
+    if (!message) return "";
+    let text = String(message);
+    // Map ID -> tên từ danh sách nurses nếu có
+    const idToName = (nurses || []).reduce((acc, n) => {
+      acc[n.nursingID] =
+        n.fullName || n.nursingFullName || `ID ${n.nursingID}`;
+      return acc;
+    }, {});
+
+    // Thay thế "Nursing with ID X" bằng tên
+    text = text.replace(/Nursing\s+with\s+ID\s+(\d+)/i, (_, id) => {
+      const name = idToName[parseInt(id, 10)] || `ID ${id}`;
+      return `Chuyên viên ${name}`;
+    });
+
+    // Cụm từ phổ biến
+    text = text.replace(/conflict\s+schedule/gi, "bị trùng lịch");
+    text = text.replace(/not\s+found/gi, "không tồn tại");
+    text = text.replace(/unauthorized/gi, "không có quyền");
+    text = text.replace(/nursing/gi, "chuyên viên");
+
+    return text;
+  };
+
   const handlePayment = async () => {
     // Enforce selection requirement
     if (!selectionMode) {
@@ -562,10 +1034,25 @@ export default function PaymentScreen() {
             if (failed) {
               Alert.alert(
                 "Lỗi",
-                `Không thể lưu lựa chọn điều dưỡng. ${
-                  failed.error || "Vui lòng thử lại."
+                `Không thể lưu lựa chọn chuyên viên. ${
+                  translateUpdateNursingError(failed.error) ||
+                  "Vui lòng thử lại."
                 }`
               );
+              // Parse nursing ID from error to blacklist in next pickers
+              const match = String(failed.error || "").match(
+                /ID\s+(\d+)/i
+              );
+              if (match) {
+                const conflictId = parseInt(match[1], 10);
+                if (!Number.isNaN(conflictId)) {
+                  setConflictBlacklist((prev) =>
+                    prev.includes(conflictId)
+                      ? prev
+                      : [...prev, conflictId]
+                  );
+                }
+              }
               return;
             }
           }
@@ -648,6 +1135,13 @@ export default function PaymentScreen() {
           data.message === "Invoice paid successfully."
             ? "Thanh toán hóa đơn thành công"
             : data.message;
+
+        // Show success notification
+        global.__notify?.({
+          title: "Thanh toán thành công!",
+          message:
+            "Bạn đã đặt lịch thành công, hãy tiến hành chọn chuyên viên.",
+        });
 
         Alert.alert("Thành công", displayMessage, [
           {
@@ -744,6 +1238,24 @@ export default function PaymentScreen() {
         return "#FF6B6B";
       default:
         return "#666";
+    }
+  };
+
+  const formatTimeRange = (startString, endString) => {
+    try {
+      const s = new Date(startString);
+      const e = new Date(endString);
+      const hh = (n) => String(n).padStart(2, "0");
+      const start = `${hh(s.getHours())}:${hh(s.getMinutes())}`;
+      const end = `${hh(e.getHours())}:${hh(e.getMinutes())}`;
+      const day = hh(s.getDate());
+      const month = hh(s.getMonth() + 1);
+      const year = s.getFullYear();
+      return `${start} - ${end} ${day}/${month}/${year}`;
+    } catch (error) {
+      return `${formatDateTime(startString)} - ${formatDateTime(
+        endString
+      )}`;
     }
   };
 
@@ -923,6 +1435,112 @@ export default function PaymentScreen() {
     );
   };
 
+  const renderRelativeSelector = () => {
+    if (!customizeTasks || customizeTasks.length === 0) return null;
+    return (
+      <View style={styles.relativeCard}>
+        <Text style={styles.relativeTitle}>
+          Chọn người nhận dịch vụ
+        </Text>
+        {customizeTasks.map((task, idx) => {
+          // Check if this service is for mom (forMom: true)
+          const svc = services.find(
+            (s) => s.serviceID === task.serviceID
+          );
+          const isForMom = svc?.forMom === true;
+
+          return (
+            <View
+              key={task.customizeTaskID}
+              style={styles.relativeRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.relativeTaskLabel}>
+                  {svc?.serviceName || `Dịch vụ ${task.serviceID}`}
+                </Text>
+                <Text style={styles.relativeTimeText}>
+                  {formatTimeRange(task.startTime, task.endTime)}
+                </Text>
+                {isForMom && (
+                  <Text style={styles.momServiceText}>
+                    (Dịch vụ cho mẹ)
+                  </Text>
+                )}
+              </View>
+              {!isForMom && (
+                <TouchableOpacity
+                  style={styles.relativePicker}
+                  onPress={() => {
+                    if (!relatives || relatives.length === 0) {
+                      Alert.alert(
+                        "Lỗi",
+                        "Chưa có người trong hồ sơ chăm sóc"
+                      );
+                      return;
+                    }
+                    openRelativePicker(task);
+                  }}>
+                  <Text style={styles.relativePickerText}>
+                    {relativeSelections[task.customizeTaskID]
+                      ? relativeNameById[
+                          relativeSelections[task.customizeTaskID]
+                        ] ||
+                        `ID ${
+                          relativeSelections[task.customizeTaskID]
+                        }`
+                      : "Chọn người"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderRelativeSummary = () => {
+    if (!customizeTasks || customizeTasks.length === 0) return null;
+    return (
+      <View style={styles.relativeSummaryCard}>
+        <Text style={styles.relativeTitle}>Người nhận dịch vụ</Text>
+        {customizeTasks.map((task, idx) => {
+          const rid =
+            relativeSelections[task.customizeTaskID] ||
+            task.relativeID;
+          const name = rid
+            ? relativeNameById[rid] || `ID ${rid}`
+            : "Chưa chọn";
+          const svc = services.find(
+            (s) => s.serviceID === task.serviceID
+          );
+          return (
+            <View
+              key={`rel-summary-${task.customizeTaskID}`}
+              style={styles.relativeRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.relativeTaskLabel}>
+                  Dịch vụ {task.taskOrder || idx + 1}:{" "}
+                  {svc?.serviceName || `Dịch vụ ${task.serviceID}`}
+                </Text>
+                <Text style={styles.relativeSub}>
+                  Thời gian: {formatDateTime(task.startTime)} -{" "}
+                  {formatDateTime(task.endTime)}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.relativePickerText,
+                  { backgroundColor: "transparent", color: "#333" },
+                ]}>
+                {name}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   if (isLoading) {
     return (
       <LinearGradient
@@ -1066,7 +1684,11 @@ export default function PaymentScreen() {
                 styles.modeButton,
                 selectionMode === "user" && styles.modeButtonActive,
               ]}
-              onPress={() => setSelectionMode("user")}>
+              onPress={() => {
+                setSelectionMode("user");
+                // Reset previous selections to avoid stale, non-free picks
+                setSelectedNurseIds([]);
+              }}>
               <Text
                 style={[
                   styles.modeButtonText,
@@ -1081,7 +1703,10 @@ export default function PaymentScreen() {
                 styles.modeButton,
                 selectionMode === "system" && styles.modeButtonActive,
               ]}
-              onPress={() => setSelectionMode("system")}>
+              onPress={() => {
+                setSelectionMode("system");
+                setSelectedNurseIds([]);
+              }}>
               <Text
                 style={[
                   styles.modeButtonText,
@@ -1112,16 +1737,37 @@ export default function PaymentScreen() {
                   const serviceInfo = services?.find(
                     (s) => s.serviceID === serviceId
                   );
+                  // Map to corresponding task (by index fallback)
+                  const task = customizeTasks[idx];
+                  const rid = task
+                    ? relativeSelections[task.customizeTaskID] ||
+                      task.relativeID
+                    : null;
+                  const relName = rid
+                    ? relativeNameById[rid] || `ID ${rid}`
+                    : "Chưa chọn";
 
                   return (
                     <View key={idx} style={styles.slotRow}>
-                      <Text style={styles.slotLabel}>
-                        Vị trí {idx + 1}{" "}
-                        {serviceInfo
-                          ? `(${serviceInfo.serviceName})`
-                          : ""}
-                        :
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.slotLabel}>
+                          {serviceInfo
+                            ? serviceInfo.serviceName
+                            : "(dịch vụ)"}
+                        </Text>
+                        {task && (
+                          <Text style={styles.relativeTimeText}>
+                            {serviceInfo?.forMom
+                              ? careProfileData?.fullName || "Mẹ"
+                              : relName}
+                            ,{" "}
+                            {formatTimeRange(
+                              task.startTime,
+                              task.endTime
+                            )}
+                          </Text>
+                        )}
+                      </View>
                       <TouchableOpacity
                         style={styles.selectSlotButton}
                         onPress={() => openNursePicker(idx)}>
@@ -1139,6 +1785,13 @@ export default function PaymentScreen() {
             </View>
           )}
         </View>
+
+        {/* Relative Summary */}
+        {/* Removed as requested */}
+        {/* {renderRelativeSummary()} */}
+
+        {/* Relative Selection */}
+        {renderRelativeSelector()}
 
         {/* Payment Summary */}
         <View style={styles.paymentCard}>
@@ -1321,12 +1974,25 @@ export default function PaymentScreen() {
                 (s) => s.serviceID === requiredServiceId
               )?.serviceName;
 
-              // Find nurse service data for this service
-              const nurseServiceData = nurseServiceLinks.find(
-                (link) => link.serviceID === requiredServiceId
-              );
-
-              const availableNurses = nurseServiceData?.nurses || [];
+              // Intersect free nurses with nurses compatible for the required service (if any)
+              let availableNurses = freeNurses || [];
+              if (requiredServiceId) {
+                const link = (nurseServiceLinks || []).find(
+                  (l) => l.serviceID === requiredServiceId
+                );
+                if (
+                  link &&
+                  Array.isArray(link.nurses) &&
+                  link.nurses.length > 0
+                ) {
+                  const compatibleIds = link.nurses
+                    .map((n) => n.nursingID)
+                    .filter((id) => id != null);
+                  availableNurses = availableNurses.filter((n) =>
+                    compatibleIds.includes(n.nursingID)
+                  );
+                }
+              }
 
               return (
                 <>
@@ -1342,24 +2008,43 @@ export default function PaymentScreen() {
                           paddingVertical: 12,
                           color: "#666",
                         }}>
-                        Không có điều dưỡng phù hợp cho dịch vụ này
+                        Không có điều dưỡng trống cho thời gian này
                       </Text>
                     ) : (
-                      availableNurses.map((nurse) => (
-                        <TouchableOpacity
-                          key={nurse.nursingID}
-                          style={styles.nurseRow}
-                          onPress={() =>
-                            chooseNurseForSlot(nurse.nursingID)
-                          }>
-                          <Text style={styles.nurseNameText}>
-                            {nurse.nursingFullName}
-                          </Text>
-                          <Text style={styles.nurseMetaText}>
-                            Dịch vụ: {nurse.serviceName}
-                          </Text>
-                        </TouchableOpacity>
-                      ))
+                      availableNurses.map((nurse) => {
+                        const isInWishlist =
+                          wishlistMap[nurse.nursingID]?.isFavorite ||
+                          false;
+
+                        return (
+                          <TouchableOpacity
+                            key={nurse.nursingID}
+                            style={styles.nurseRow}
+                            onPress={() =>
+                              chooseNurseForSlot(nurse.nursingID)
+                            }>
+                            <View style={styles.nurseInfoContainer}>
+                              <Text style={styles.nurseNameText}>
+                                {nurse.fullName ||
+                                  nurse.nursingFullName}
+                              </Text>
+                              <Text style={styles.nurseMetaText}>
+                                {nurse.experience || ""}
+                              </Text>
+                            </View>
+                            {isInWishlist && (
+                              <View
+                                style={styles.wishlistIconContainer}>
+                                <Ionicons
+                                  name="heart"
+                                  size={20}
+                                  color="#FF6B6B"
+                                />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })
                     )}
                   </ScrollView>
                 </>
@@ -1368,6 +2053,40 @@ export default function PaymentScreen() {
             <TouchableOpacity
               style={[styles.cancelButton, { marginTop: 10 }]}
               onPress={() => setShowNursePicker(false)}>
+              <Text style={styles.cancelButtonText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Relative Picker Modal */}
+      {showRelativePicker && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Chọn người nhận dịch vụ
+            </Text>
+            <ScrollView style={{ width: "100%" }}>
+              {!relatives || relatives.length === 0 ? (
+                <Text style={{ paddingVertical: 12, color: "#666" }}>
+                  Chưa có người trong hồ sơ chăm sóc
+                </Text>
+              ) : (
+                relatives.map((rel) => (
+                  <TouchableOpacity
+                    key={rel.relativeID}
+                    style={styles.nurseRow}
+                    onPress={() => chooseRelative(rel.relativeID)}>
+                    <Text style={styles.nurseNameText}>
+                      {rel.relativeName || rel.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.cancelButton, { marginTop: 10 }]}
+              onPress={() => setShowRelativePicker(false)}>
               <Text style={styles.cancelButtonText}>Đóng</Text>
             </TouchableOpacity>
           </View>
@@ -1802,6 +2521,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
   },
+  disabledButton: {
+    backgroundColor: "#CCC",
+    opacity: 0.6,
+  },
   // Modal styles for nurse picker
   modalOverlay: {
     position: "absolute",
@@ -1828,9 +2551,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   nurseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#EEE",
+  },
+  nurseInfoContainer: {
+    flex: 1,
   },
   nurseNameText: {
     fontSize: 14,
@@ -1840,5 +2569,83 @@ const styles = StyleSheet.create({
   nurseMetaText: {
     fontSize: 12,
     color: "#666",
+  },
+  wishlistIconContainer: {
+    marginLeft: 10,
+    padding: 4,
+  },
+  // Relative selection styles
+  relativeCard: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  relativeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 10,
+  },
+  relativeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEE",
+  },
+  relativeTaskLabel: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  relativeSub: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  relativeTimeText: {
+    fontSize: 14,
+    color: "#333",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  momServiceText: {
+    fontSize: 12,
+    color: "#FF8AB3",
+    marginTop: 2,
+    fontStyle: "italic",
+  },
+  relativePicker: {
+    backgroundColor: "#4FC3F7",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginLeft: 10,
+  },
+  relativePickerText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  relativeHint: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    marginTop: 8,
+  },
+  relativeSummaryCard: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
   },
 });

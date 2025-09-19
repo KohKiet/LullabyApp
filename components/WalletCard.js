@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Linking,
   Modal,
   StyleSheet,
@@ -136,26 +137,30 @@ export default function WalletCard({ userData }) {
         setTopUpAmount("");
         setShowTopUpModal(false);
       } else {
-        Alert.alert("Lỗi", `Không thể nạp tiền: ${result.error}`);
+        Alert.alert(
+          "Thông báo",
+          `Không thể nạp tiền: ${result.error}`
+        );
       }
     } catch (error) {
       console.log("Error topping up wallet:", error);
 
       // Hiển thị lỗi cụ thể hơn
-      let errorMessage = "Đã xảy ra lỗi khi nạp tiền.";
+      let errorMessage = "Đã xảy ra sự cố khi nạp tiền.";
 
       if (error.message) {
         if (error.message.includes("Network request failed")) {
           errorMessage =
             "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
         } else if (error.message.includes("timeout")) {
-          errorMessage = "Yêu cầu bị timeout. Vui lòng thử lại sau.";
+          errorMessage =
+            "Yêu cầu bị ngắt kết nối. Vui lòng thử lại sau.";
         } else {
-          errorMessage = `Lỗi: ${error.message}`;
+          errorMessage = `Thông báo: ${error.message}`;
         }
       }
 
-      Alert.alert("Lỗi", errorMessage);
+      Alert.alert("Thông báo", errorMessage);
     }
   };
 
@@ -248,11 +253,25 @@ export default function WalletCard({ userData }) {
             {/* User Info */}
             <View style={styles.userInfo}>
               <View style={styles.avatarContainer}>
-                <Ionicons
-                  name="person-circle"
-                  size={32}
-                  color="#FFFFFF"
-                />
+                {userData?.avatarUrl ? (
+                  <Image
+                    source={{ uri: userData.avatarUrl }}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: "rgba(255,255,255,0.6)",
+                    }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons
+                    name="person-circle"
+                    size={32}
+                    color="#FFFFFF"
+                  />
+                )}
               </View>
               <View style={styles.nameContainer}>
                 <Text style={styles.userName}>

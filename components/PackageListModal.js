@@ -34,8 +34,8 @@ export default function PackageListModal({
   const [selectedHour, setSelectedHour] = useState(null);
   const [selectedMinute, setSelectedMinute] = useState(null);
 
-  // Chỉ cho phép chọn giờ từ 6:00 đến 17:00, phút: 00, 10, 20, 30, 40, 50
-  const hours = Array.from({ length: 12 }, (_, i) => i + 6);
+  // Chỉ cho phép chọn giờ từ 8:00 đến 19:50, phút: 00, 10, 20, 30, 40, 50
+  const hours = Array.from({ length: 12 }, (_, i) => i + 8);
   const minutes = [0, 10, 20, 30, 40, 50];
 
   // Mở calendar modal
@@ -43,15 +43,13 @@ export default function PackageListModal({
     setShowCalendar(true);
   };
   const closeCalendar = () => setShowCalendar(false);
-  // Khi chọn ngày xong, mở picker giờ
+  // Khi chọn ngày xong, không tự động mở picker giờ
   const handleCalendarConfirm = (date) => {
     setSelectedDate(date);
     setShowCalendar(false);
-    // Reset giờ phút khi chọn ngày mới
-    setSelectedHour(null);
-    setSelectedMinute(null);
-    // Mở picker giờ ngay lập tức
-    setShowTimePicker(true);
+    // Không reset giờ khi chọn ngày mới, để người dùng có thể giữ nguyên giờ
+    // setSelectedHour(null);
+    // setSelectedMinute(null);
   };
   // Khi chọn giờ xong
   const handleTimeConfirm = (hour, minute) => {
@@ -67,7 +65,7 @@ export default function PackageListModal({
     setShowTimePicker(true);
   };
 
-  // Kiểm tra hợp lệ: phải sau 3h10p từ hiện tại và trong khoảng 6:00-17:00
+  // Kiểm tra hợp lệ: phải sau 2 giờ từ hiện tại và trong khoảng 8:00-19:50
   const isValidDateTime = () => {
     if (
       !selectedDate ||
@@ -76,13 +74,14 @@ export default function PackageListModal({
     )
       return false;
     const now = new Date();
-    const minTime = new Date(
-      now.getTime() + (3 * 60 + 10) * 60 * 1000
-    );
+    const minTime = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const chosen = new Date(selectedDate);
     chosen.setHours(selectedHour, selectedMinute, 0, 0);
     if (chosen <= minTime) return false;
-    if (selectedHour < 6 || selectedHour >= 17) return false;
+    // Validate within 08:00 to 19:50
+    if (selectedHour < 8) return false;
+    if (selectedHour > 19) return false;
+    if (selectedHour === 19 && selectedMinute > 50) return false;
     return true;
   };
 
@@ -221,18 +220,51 @@ export default function PackageListModal({
       <Text style={styles.dateTimeLabel}>
         Chọn thời gian đặt lịch
       </Text>
+
+      {/* Nút chọn ngày */}
       <TouchableOpacity
         style={styles.dateTimeButton}
-        onPress={openCalendar}>
+        onPress={() => {
+          console.log("Date button pressed");
+          openCalendar();
+        }}>
         <Ionicons name="calendar-outline" size={20} color="#666" />
         <Text style={styles.dateTimeButtonText}>
-          {isValidDateTime() ? formatDateTime() : "Chọn ngày và giờ"}
+          {selectedDate
+            ? `${selectedDate
+                .getDate()
+                .toString()
+                .padStart(2, "0")}/${(selectedDate.getMonth() + 1)
+                .toString()
+                .padStart(2, "0")}/${selectedDate.getFullYear()}`
+            : "Chọn ngày"}
         </Text>
         <Ionicons name="chevron-down" size={16} color="#666" />
       </TouchableOpacity>
+
+      {/* Nút chọn giờ */}
+      <TouchableOpacity
+        style={[styles.dateTimeButton, { marginTop: 10 }]}
+        onPress={() => {
+          console.log("Time button pressed");
+          setShowTimePicker(true);
+        }}>
+        <Ionicons name="time-outline" size={20} color="#666" />
+        <Text style={styles.dateTimeButtonText}>
+          {selectedHour !== null && selectedMinute !== null
+            ? `${selectedHour
+                .toString()
+                .padStart(2, "0")}:${selectedMinute
+                .toString()
+                .padStart(2, "0")}`
+            : "Chọn giờ"}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color="#666" />
+      </TouchableOpacity>
+
       {!isValidDateTime() && selectedDate && (
         <Text style={styles.errorText}>
-          Thời gian phải sau 3h10p từ hiện tại, từ 6:00 đến 17:00
+          Thời gian phải sau 2 giờ từ hiện tại, từ 8:00 đến 19:50
         </Text>
       )}
     </View>
@@ -507,10 +539,19 @@ export default function PackageListModal({
                   * Chưa bao gồm phí phát sinh (nếu có)
                 </Text>
               </View>
+            </View>
+          )}
 
-              {/* Thêm phần chọn thời gian */}
+          {/* Phần chọn thời gian - tách riêng */}
+          {selectedPackage && selectedPackageData && (
+            <View style={styles.dateTimeContainer}>
               {renderDateTimeSection()}
+            </View>
+          )}
 
+          {/* Phần nút đặt lịch - tách riêng */}
+          {selectedPackage && selectedPackageData && (
+            <View style={styles.bookingContainer}>
               <TouchableOpacity
                 style={[
                   styles.bookingButton,
@@ -829,35 +870,38 @@ const styles = StyleSheet.create({
     color: "#FF6B6B",
   },
   bookingSummary: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    padding: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  dateTimeContainer: {
+    padding: 5,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  bookingContainer: {
+    padding: 5,
+    borderTopWidth: 0.5,
+    borderTopColor: "#E0E0E0",
     shadowRadius: 4,
     elevation: 3,
   },
   summaryInfo: {
-    marginBottom: 10,
+    marginBottom: 2,
   },
   summaryText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 4,
+    marginBottom: 1,
   },
   totalAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#FF6B6B",
   },
   extraFeeNote: {
-    fontSize: 12,
+    fontSize: 10,
     color: "red",
     marginTop: 5,
     fontStyle: "italic",

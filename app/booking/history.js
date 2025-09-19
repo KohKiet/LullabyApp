@@ -19,10 +19,13 @@ import CustomizePackageService from "../../services/customizePackageService";
 import CustomizeTaskService from "../../services/customizeTaskService";
 import InvoiceService from "../../services/invoiceService";
 import MedicalNoteService from "../../services/medicalNoteService";
+import NotificationService from "../../services/notificationService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
+import RelativeService from "../../services/relativeService";
 import ServiceTaskService from "../../services/serviceTaskService";
 import ServiceTypeService from "../../services/serviceTypeService";
 import TransactionHistoryService from "../../services/transactionHistoryService";
+import WorkScheduleService from "../../services/workScheduleService";
 import ZoneDetailService from "../../services/zoneDetailService";
 
 export default function BookingHistoryScreen() {
@@ -44,19 +47,38 @@ export default function BookingHistoryScreen() {
   const [zoneDetails, setZoneDetails] = useState([]);
   const [services, setServices] = useState([]); // Cache services
   const [serviceTasks, setServiceTasks] = useState([]); // Cache service tasks
+  const [relativeNameMap, setRelativeNameMap] = useState({});
 
   // State cho medical notes
   const [medicalNotesMap, setMedicalNotesMap] = useState({});
+
+  // State cho work schedules
+  const [workSchedulesMap, setWorkSchedulesMap] = useState({});
 
   // State cho modal chọn nurse
   const [showNurseModal, setShowNurseModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [availableNurses, setAvailableNurses] = useState([]);
   const [selectedStaffType, setSelectedStaffType] = useState(""); // "Nurse" hoặc "Specialist"
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [processedAutoCancellations, setProcessedAutoCancellations] =
+    useState(new Set());
 
   useEffect(() => {
     loadUserData();
+    checkUnreadNotifications();
   }, []);
+
+  // Auto-cancellation check every 15 minutes
+  useEffect(() => {
+    if (bookings.length > 0) {
+      const interval = setInterval(() => {
+        checkAndAutoCancelBookings(bookings);
+      }, 15 * 60 * 1000); // Check every 15 minutes
+
+      return () => clearInterval(interval);
+    }
+  }, [bookings, invoiceMap]);
 
   const loadUserData = async () => {
     try {
@@ -68,6 +90,7 @@ export default function BookingHistoryScreen() {
         await loadZoneDetails();
         await loadServices();
         await loadServiceTasks();
+        await loadWorkSchedules();
         // await loadAllFeedbacks(); // ĐÃ XÓA - không còn chức năng feedback
       } else {
         Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
@@ -77,6 +100,181 @@ export default function BookingHistoryScreen() {
       console.error("Error loading user data:", error);
       Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
       router.replace("/auth/login");
+    }
+  };
+
+  const checkUnreadNotifications = async () => {
+    try {
+      if (userData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            userData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
+  };
+
+  const checkAndAutoCancelBookings = async (bookings) => {
+    try {
+      const now = new Date();
+      const twoHoursFromNow = new Date(
+        now.getTime() + 2 * 60 * 60 * 1000
+      );
+
+      console.log("🔍 Checking for auto-cancellation...");
+      console.log("Current time:", now.toISOString());
+      console.log(
+        "Two hours from now:",
+        twoHoursFromNow.toISOString()
+      );
+
+      for (const booking of bookings) {
+        // Skip if already processed for auto-cancellation
+        if (processedAutoCancellations.has(booking.bookingID)) {
+          continue;
+        }
+
+        // Only check unpaid bookings that haven't been cancelled
+        const invoice = invoiceMap[booking.bookingID];
+        if (
+          invoice &&
+          (invoice.status === "paid" ||
+            invoice.status === "completed" ||
+            invoice.status === "success")
+        ) {
+          console.log(
+            `🔍 Skipping booking #${booking.bookingID} - already paid (status: ${invoice.status})`
+          );
+          continue; // Skip paid bookings
+        }
+
+        if (booking.status === "cancelled") {
+          continue; // Skip already cancelled bookings
+        }
+
+        // Parse booking date and time
+        const bookingDateTime = new Date(booking.workdate);
+
+        // Only check future bookings (not past ones)
+        if (bookingDateTime <= now) {
+          continue; // Skip past bookings
+        }
+
+        console.log(`🔍 Checking booking #${booking.bookingID}:`, {
+          bookingTime: bookingDateTime.toISOString(),
+          isUnpaid: !invoice || invoice.status !== "paid",
+          shouldCancel: bookingDateTime <= twoHoursFromNow,
+        });
+
+        // If booking is 2 hours away or less and unpaid, auto-cancel
+        if (bookingDateTime <= twoHoursFromNow) {
+          console.log(
+            `🔍 Auto-cancelling booking #${booking.bookingID}`
+          );
+          setProcessedAutoCancellations((prev) =>
+            new Set(prev).add(booking.bookingID)
+          );
+          await handleAutoCancelBooking(booking);
+        }
+      }
+    } catch (error) {
+      console.error("Error in auto-cancellation check:", error);
+    }
+  };
+
+  const handleAutoCancelBooking = async (booking) => {
+    try {
+      console.log(`🔍 Auto-cancelling booking #${booking.bookingID}`);
+
+      // First check if booking exists by trying to get its details
+      const checkResponse = await fetch(
+        `https://phamlequyanh.name.vn/api/Booking/GetById/${booking.bookingID}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (!checkResponse.ok) {
+        console.log(
+          `⚠️ Booking #${booking.bookingID} not found on server, removing from list`
+        );
+        // Remove booking from list since it doesn't exist on server
+        setBookings((prev) =>
+          prev.filter((b) => b.bookingID !== booking.bookingID)
+        );
+        return;
+      }
+
+      // Call the cancellation API
+      const response = await fetch(
+        `https://phamlequyanh.name.vn/api/Booking/Cancel/${booking.bookingID}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (response.ok) {
+        console.log(
+          `✅ Booking #${booking.bookingID} auto-cancelled successfully`
+        );
+
+        // Remove booking from list completely (user won't see it)
+        setBookings((prev) =>
+          prev.filter((b) => b.bookingID !== booking.bookingID)
+        );
+
+        // Show notification to user
+        Alert.alert(
+          "Booking đã tự động hủy",
+          `Lịch hẹn #${booking.bookingID} đã được tự động hủy do chưa thanh toán trong vòng 2 giờ trước giờ hẹn.`
+        );
+      } else if (response.status === 404) {
+        console.log(
+          `⚠️ Booking #${booking.bookingID} not found on server (404), removing from list`
+        );
+        // Remove booking from list since it doesn't exist on server
+        setBookings((prev) =>
+          prev.filter((b) => b.bookingID !== booking.bookingID)
+        );
+      } else {
+        console.error(
+          `❌ Failed to auto-cancel booking #${booking.bookingID}:`,
+          response.status
+        );
+        // If cancellation failed, keep booking but don't show "auto_cancelled" status
+        // It will show as "Chờ thanh toán" instead
+      }
+    } catch (error) {
+      console.error(
+        `❌ Error auto-cancelling booking #${booking.bookingID}:`,
+        error
+      );
+      // If there's an error, remove booking from list since we can't process it
+      setBookings((prev) =>
+        prev.filter((b) => b.bookingID !== booking.bookingID)
+      );
     }
   };
 
@@ -155,6 +353,9 @@ export default function BookingHistoryScreen() {
         setBookings(sortedBookings);
 
         await loadAllBookingDetails(sortedBookings);
+
+        // Check for auto-cancellation after loading all details
+        await checkAndAutoCancelBookings(sortedBookings);
       } else {
         setBookings([]);
       }
@@ -191,6 +392,50 @@ export default function BookingHistoryScreen() {
           careProfileMap[careProfileIds[index]] = result.data;
         }
       });
+
+      // Load relatives cho tất cả care profiles và tạo map relativeID -> name
+      try {
+        const relativeFetches = careProfileIds.map((id) =>
+          RelativeService.getRelativesByCareProfileId(id)
+        );
+        const relativesResults = await Promise.all(relativeFetches);
+        const nameMap = {};
+
+        console.log("Relatives results:", relativesResults);
+
+        relativesResults.forEach((res, index) => {
+          if (res.success && Array.isArray(res.data)) {
+            console.log(
+              `Care profile ${careProfileIds[index]} relatives:`,
+              res.data
+            );
+            res.data.forEach((rel) => {
+              if (rel?.relativeID) {
+                const relativeName =
+                  rel.fullName ||
+                  rel.name ||
+                  rel.nickname ||
+                  rel.relativeName;
+                nameMap[rel.relativeID] =
+                  relativeName || `Người thân #${rel.relativeID}`;
+                console.log(
+                  `Mapped relativeID ${rel.relativeID} to name: ${relativeName}`
+                );
+              }
+            });
+          } else {
+            console.log(
+              `Failed to load relatives for care profile ${careProfileIds[index]}:`,
+              res
+            );
+          }
+        });
+
+        console.log("Final relativeNameMap:", nameMap);
+        setRelativeNameMap(nameMap);
+      } catch (relErr) {
+        console.log("Load relatives failed:", relErr);
+      }
 
       // Load tất cả extra data từ AsyncStorage
       const extraDataPromises = bookings.map((booking) =>
@@ -353,6 +598,112 @@ export default function BookingHistoryScreen() {
       }
     } catch (error) {
       console.error("Error loading service tasks:", error);
+    }
+  };
+
+  const loadWorkSchedules = async () => {
+    try {
+      console.log("Loading work schedules...");
+      // Lấy tất cả work schedules để map với bookings
+      const result = await WorkScheduleService.getAllWorkSchedules();
+      if (result.success) {
+        console.log(
+          "Work schedules loaded:",
+          result.data.length,
+          "items"
+        );
+        // Tạo map để dễ dàng tìm kiếm
+        const schedulesMap = {};
+        result.data.forEach((schedule) => {
+          if (schedule.bookingID) {
+            if (!schedulesMap[schedule.bookingID]) {
+              schedulesMap[schedule.bookingID] = [];
+            }
+            schedulesMap[schedule.bookingID].push(schedule);
+          }
+        });
+        setWorkSchedulesMap(schedulesMap);
+        console.log(
+          "Work schedules map created:",
+          Object.keys(schedulesMap).length,
+          "bookings"
+        );
+      } else {
+        console.log("Failed to load work schedules:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading work schedules:", error);
+    }
+  };
+
+  const formatTimeRange = (startString, endString) => {
+    console.log("formatTimeRange called with:", {
+      startString,
+      endString,
+    });
+
+    // Nếu không có startString, trả về chuỗi rỗng
+    if (!startString) {
+      console.log("No startString, returning empty");
+      return "";
+    }
+
+    try {
+      const start = new Date(startString);
+      if (isNaN(start.getTime())) {
+        console.log("Invalid start date:", startString);
+        return startString; // Trả về string gốc nếu không parse được
+      }
+
+      // Nếu có endString, format thành range
+      if (endString) {
+        const end = new Date(endString);
+        if (isNaN(end.getTime())) {
+          console.log("Invalid end date:", endString);
+          // Nếu endString không hợp lệ, chỉ hiển thị start
+          const hh = (n) => n.toString().padStart(2, "0");
+          const dd = (n) => n.toString().padStart(2, "0");
+          const startStr = `${hh(start.getHours())}:${hh(
+            start.getMinutes()
+          )}`;
+          const dateStr = `${dd(start.getDate())}/${dd(
+            start.getMonth() + 1
+          )}/${start.getFullYear()}`;
+          return `${startStr} ${dateStr}`;
+        }
+
+        // Format thành range hoàn chỉnh
+        const hh = (n) => n.toString().padStart(2, "0");
+        const dd = (n) => n.toString().padStart(2, "0");
+        const startStr = `${hh(start.getHours())}:${hh(
+          start.getMinutes()
+        )}`;
+        const endStr = `${hh(end.getHours())}:${hh(
+          end.getMinutes()
+        )}`;
+        const dateStr = `${dd(start.getDate())}/${dd(
+          start.getMonth() + 1
+        )}/${start.getFullYear()}`;
+        const result = `${startStr} - ${endStr} ${dateStr}`;
+        console.log("Formatted range:", result);
+        return result;
+      } else {
+        // Chỉ có startString, format thành single time
+        const hh = (n) => n.toString().padStart(2, "0");
+        const dd = (n) => n.toString().padStart(2, "0");
+        const startStr = `${hh(start.getHours())}:${hh(
+          start.getMinutes()
+        )}`;
+        const dateStr = `${dd(start.getDate())}/${dd(
+          start.getMonth() + 1
+        )}/${start.getFullYear()}`;
+        const result = `${startStr} ${dateStr}`;
+        console.log("Formatted single time:", result);
+        return result;
+      }
+    } catch (e) {
+      console.error("Error in formatTimeRange:", e);
+      return `${startString}${endString ? ` - ${endString}` : ""}`;
     }
   };
 
@@ -1029,7 +1380,10 @@ export default function BookingHistoryScreen() {
             `Đã chọn điều dưỡng viên: ${selectedNurse.fullName} cho lịch hẹn #${bookingID}`
           );
         } else {
-          Alert.alert("Lỗi", "Không thể cập nhật tất cả task");
+          const firstFailed = updateResults.find((r) => !r.success);
+          const errText =
+            firstFailed?.error || "Không thể cập nhật tất cả task";
+          Alert.alert("Lỗi", translateUpdateNursingError(errText));
         }
         return;
       }
@@ -1114,7 +1468,10 @@ export default function BookingHistoryScreen() {
           } cho lịch hẹn #${bookingID}`
         );
       } else {
-        Alert.alert("Lỗi", "Không thể cập nhật tất cả task");
+        const firstFailed = updateResults.find((r) => !r.success);
+        const errText =
+          firstFailed?.error || "Không thể cập nhật tất cả task";
+        Alert.alert("Lỗi", translateUpdateNursingError(errText));
       }
     } catch (error) {
       console.error("Error selecting nurse for booking:", error);
@@ -1171,6 +1528,29 @@ export default function BookingHistoryScreen() {
     }
   };
 
+  // Dịch thông báo UpdateNursing sang tiếng Việt và thay ID bằng tên
+  const translateUpdateNursingError = (message) => {
+    if (!message) return "";
+    let text = String(message);
+    // Bản đồ ID -> tên từ danh sách nurses hiện có
+    const idToName = (nurses || []).reduce((acc, n) => {
+      acc[n.nursingID] =
+        n.fullName || n.nursingFullName || `ID ${n.nursingID}`;
+      return acc;
+    }, {});
+
+    text = text.replace(/Nursing\s+with\s+ID\s+(\d+)/i, (_, id) => {
+      const name = idToName[parseInt(id, 10)] || `ID ${id}`;
+      return `Chuyên viên ${name}`;
+    });
+    text = text.replace(/conflict\s+schedule/gi, "bị trùng lịch");
+    text = text.replace(/not\s+found/gi, "không tồn tại");
+    text = text.replace(/unauthorized/gi, "không có quyền");
+    text = text.replace(/nursing/gi, "chuyên viên");
+
+    return text;
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "";
     try {
@@ -1221,10 +1601,13 @@ export default function BookingHistoryScreen() {
   };
 
   const getFilteredBookings = () => {
-    // Always hide cancelled bookings
+    // Hide manually cancelled bookings but show auto-cancelled ones
     let filteredBookings = bookings.filter(
       (b) => b.status !== "cancelled"
     );
+
+    // Với nurse: hiển thị tất cả lịch hẹn (không filter theo work schedule status)
+    // Logic filter sẽ được xử lý ở phần status booking
 
     // Áp dụng filter theo status
     switch (selectedFilter) {
@@ -1276,7 +1659,23 @@ export default function BookingHistoryScreen() {
     }
 
     const details = bookingDetailsMap[booking.bookingID];
-    const bookingStatus = booking.status; // Use booking.status directly
+
+    // Determine the actual status - completed has highest priority
+    const invoice = invoiceMap[booking.bookingID];
+    let bookingStatus = booking.status;
+
+    // Keep "completed" if booking is finished
+    if (bookingStatus !== "completed") {
+      // Otherwise, if invoice is paid, show "paid"
+      if (
+        invoice &&
+        (invoice.status === "paid" ||
+          invoice.status === "completed" ||
+          invoice.status === "success")
+      ) {
+        bookingStatus = "paid";
+      }
+    }
 
     // Nếu details chưa load xong, hiển thị loading
     if (!details) {
@@ -1429,6 +1828,72 @@ export default function BookingHistoryScreen() {
           </View>
         </View>
 
+        {/* Actions: pay and cancel - always visible for pending/paid (not completed) */}
+        {(() => {
+          const inv = invoiceMap[booking.bookingID];
+          const invoiceStatus = inv?.status;
+
+          // Use the same logic as above for consistency
+          let actualBookingStatus = booking.status;
+          if (
+            invoice &&
+            (invoice.status === "paid" ||
+              invoice.status === "completed" ||
+              invoice.status === "success")
+          ) {
+            actualBookingStatus = "paid";
+          }
+
+          const canCancelByInvoice =
+            invoiceStatus === "pending" || invoiceStatus === "paid";
+          const canCancelByBooking =
+            actualBookingStatus === "pending" ||
+            actualBookingStatus === "paid";
+
+          // Disallow cancel if booking is paid and within 2 hours to start time
+          const nowForActions = new Date();
+          const workForActions = new Date(booking.workdate);
+          const twoHoursMsForActions = 2 * 60 * 60 * 1000;
+          const withinTwoHoursPaid =
+            actualBookingStatus === "paid" &&
+            workForActions.getTime() - nowForActions.getTime() <=
+              twoHoursMsForActions;
+
+          const showActions =
+            (canCancelByBooking || canCancelByInvoice) &&
+            actualBookingStatus !== "completed" &&
+            !withinTwoHoursPaid;
+          if (!showActions) return null;
+          return (
+            <View style={styles.paymentSection}>
+              {actualBookingStatus === "pending" && (
+                <TouchableOpacity
+                  style={styles.paymentButton}
+                  onPress={() => handlePayment(booking.bookingID)}>
+                  <Ionicons
+                    name="card-outline"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.paymentButtonText}>
+                    Thanh toán ngay
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => handleCancelBooking(booking)}>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
+
         {/* Tóm tắt dịch vụ đã hoàn thành - hiển thị ngay cho booking completed */}
         {booking.status === "completed" && (
           <View style={styles.completedServicesSummary}>
@@ -1497,7 +1962,7 @@ export default function BookingHistoryScreen() {
                                 style={
                                   styles.completedServiceNurseLabel
                                 }>
-                                Điều dưỡng thực hiện:
+                                Chuyên viên thực hiện:
                               </Text>
                               <Text
                                 style={
@@ -1695,6 +2160,87 @@ export default function BookingHistoryScreen() {
                                         </Text>
                                       </View>
 
+                                      {/* Người nhận và thời gian thực hiện */}
+                                      <View style={{ marginTop: 4 }}>
+                                        {task.relativeID ? (
+                                          <Text
+                                            style={{
+                                              fontSize: 13,
+                                              color: "#333",
+                                              fontWeight: "600",
+                                            }}>
+                                            Người nhận:{" "}
+                                            {(() => {
+                                              const relativeName =
+                                                relativeNameMap[
+                                                  task.relativeID
+                                                ];
+                                              console.log(
+                                                `Task ${task.customizeTaskID} relativeID: ${task.relativeID}, relativeName: ${relativeName}`
+                                              );
+
+                                              if (
+                                                relativeName &&
+                                                relativeName !==
+                                                  `Người thân #${task.relativeID}`
+                                              ) {
+                                                return relativeName;
+                                              }
+
+                                              // Nếu không có tên, thử tìm trong care profile
+                                              const careProfile =
+                                                detailsMap[
+                                                  booking.bookingID
+                                                ]?.careProfile;
+                                              console.log(
+                                                `Care profile for booking ${booking.bookingID}:`,
+                                                careProfile
+                                              );
+
+                                              if (
+                                                careProfile?.relatives
+                                              ) {
+                                                const relative =
+                                                  careProfile.relatives.find(
+                                                    (r) =>
+                                                      r.relativeID ===
+                                                      task.relativeID
+                                                  );
+                                                console.log(
+                                                  `Found relative in care profile:`,
+                                                  relative
+                                                );
+                                                if (relative) {
+                                                  return (
+                                                    relative.fullName ||
+                                                    relative.name ||
+                                                    relative.nickname ||
+                                                    `Người thân #${task.relativeID}`
+                                                  );
+                                                }
+                                              }
+
+                                              return `Người thân #${task.relativeID}`;
+                                            })()}
+                                          </Text>
+                                        ) : null}
+                                        {(task.startTime ||
+                                          task.endTime) && (
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: "#666",
+                                              marginTop: 2,
+                                            }}>
+                                            Thời gian:{" "}
+                                            {formatTimeRange(
+                                              task.startTime,
+                                              task.endTime
+                                            )}
+                                          </Text>
+                                        )}
+                                      </View>
+
                                       {/* Hiển thị tên điều dưỡng đã được chọn (nếu có) */}
                                       {assignedNurse && (
                                         <View
@@ -1705,7 +2251,7 @@ export default function BookingHistoryScreen() {
                                             style={
                                               styles.assignedNurseLabel
                                             }>
-                                            Điều dưỡng đã chọn:
+                                            Chuyên viên đã chọn:
                                           </Text>
                                           <Text
                                             style={
@@ -1839,54 +2385,7 @@ export default function BookingHistoryScreen() {
                   return null;
                 })()}
 
-                {/* Actions: pay and cancel */}
-                {(() => {
-                  const inv = invoiceMap[booking.bookingID];
-                  const invoiceStatus = inv?.status;
-                  const canCancelByInvoice =
-                    invoiceStatus === "pending" ||
-                    invoiceStatus === "paid";
-                  const canCancelByBooking =
-                    bookingStatus === "pending" ||
-                    bookingStatus === "paid";
-                  // Không hiển thị actions cho booking đã hoàn thành
-                  const showActions =
-                    (canCancelByBooking || canCancelByInvoice) &&
-                    bookingStatus !== "completed";
-                  if (!showActions) return null;
-                  return (
-                    <View style={styles.paymentSection}>
-                      {bookingStatus === "pending" && (
-                        <TouchableOpacity
-                          style={styles.paymentButton}
-                          onPress={() =>
-                            handlePayment(booking.bookingID)
-                          }>
-                          <Ionicons
-                            name="card-outline"
-                            size={20}
-                            color="#FFFFFF"
-                          />
-                          <Text style={styles.paymentButtonText}>
-                            Thanh toán ngay
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={styles.cancelButton}
-                        onPress={() => handleCancelBooking(booking)}>
-                        <Ionicons
-                          name="close-circle-outline"
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                        <Text style={styles.cancelButtonText}>
-                          Hủy booking
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })()}
+                {/* Actions were moved to render outside details to always show on card */}
               </View>
             )}
           </View>
@@ -1902,6 +2401,19 @@ export default function BookingHistoryScreen() {
         Alert.alert(
           "Không thể hủy",
           "Lịch hẹn đã hoàn thành không thể hủy."
+        );
+        return;
+      }
+
+      // Không cho phép hủy nếu đã thanh toán và còn <= 2 giờ đến giờ làm
+      const now = new Date();
+      const workTime = new Date(booking.workdate);
+      const diffMs = workTime.getTime() - now.getTime();
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      if (booking.status === "paid" && diffMs <= twoHoursMs) {
+        Alert.alert(
+          "Không thể hủy",
+          "Lịch hẹn đã thanh toán và sắp đến giờ (≤ 2 giờ) nên không thể hủy."
         );
         return;
       }
@@ -2238,6 +2750,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 5,
+    fontStyle: "italic",
   },
   content: {
     flex: 1,

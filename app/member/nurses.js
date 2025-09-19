@@ -12,18 +12,66 @@ import {
   View,
 } from "react-native";
 import Avatar from "../../components/Avatar";
+import AuthService from "../../services/authService";
+import FeedbackService from "../../services/feedbackService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
+import WishlistService from "../../services/wishlistService";
 
 export default function NursesScreen() {
   const router = useRouter();
   const [nurses, setNurses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNurse, setSelectedNurse] = useState(null);
+  const [ratingsMap, setRatingsMap] = useState({}); // nursingID -> avg rating
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [wishlistMap, setWishlistMap] = useState({}); // nursingID -> {isFavorite: boolean, wishlistID: number}
+  const [customerID, setCustomerID] = useState(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (customerID) {
+      loadWishlistData();
+    }
+  }, [customerID]);
+
+  useEffect(() => {
+    loadUserData();
+    checkUnreadNotifications();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userResult = await AuthService.getUser();
+      if (userResult.success && userResult.data) {
+        setCustomerID(userResult.data.accountID);
+        console.log(
+          "🔍 Loaded customer ID:",
+          userResult.data.accountID
+        );
+      } else {
+        console.error("Error loading user data:", userResult.error);
+        // Fallback to default customer ID for testing
+        setCustomerID(2);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      // Fallback to default customer ID for testing
+      setCustomerID(2);
+    }
+  };
+
+  const checkUnreadNotifications = async () => {
+    try {
+      // For now, we'll skip notification checking in this screen to avoid the useInsertionEffect error
+      // This can be re-enabled later when the React 19 compatibility issue is resolved
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -33,7 +81,20 @@ export default function NursesScreen() {
         await NursingSpecialistService.getAllDetailedNurses();
 
       if (result.success) {
-        setNurses(result.data);
+        const nursesData = result.data || [];
+        setNurses(nursesData);
+
+        // Load average ratings in parallel
+        const pairs = await Promise.all(
+          nursesData.map(async (n) => {
+            const r = await FeedbackService.getAverageRatingByNursing(
+              n.nursingID
+            );
+            return [n.nursingID, r.success ? r.data : 0];
+          })
+        );
+        const map = Object.fromEntries(pairs);
+        setRatingsMap(map);
       } else {
         Alert.alert("Lỗi", "Không thể tải danh sách điều dưỡng viên");
       }
@@ -44,9 +105,70 @@ export default function NursesScreen() {
     }
   };
 
+  const loadWishlistData = async () => {
+    if (!customerID) {
+      console.log(
+        "🔍 Customer ID not available yet, skipping wishlist load"
+      );
+      return;
+    }
+
+    try {
+      console.log("🔍 Loading wishlist for customer ID:", customerID);
+
+      // Test basic connectivity first
+      console.log("🔍 Testing basic connectivity...");
+      try {
+        const testResponse = await fetch(
+          "https://phamlequyanh.name.vn/api/servicetypes/getall"
+        );
+        console.log(
+          "🔍 Health check response status:",
+          testResponse.status
+        );
+      } catch (testError) {
+        console.error("🔍 Health check failed:", testError);
+      }
+
+      const result = await WishlistService.getWishlistByCustomer(
+        customerID
+      );
+      console.log("🔍 Wishlist result:", result);
+
+      if (result.success && result.data) {
+        const wishlistData = result.data;
+        const wishlistMapData = {};
+
+        wishlistData.forEach((item) => {
+          wishlistMapData[item.nursingID] = {
+            isFavorite: true,
+            wishlistID: item.wishlistID,
+          };
+        });
+
+        setWishlistMap(wishlistMapData);
+        console.log("🔍 Wishlist map updated:", wishlistMapData);
+      } else {
+        console.error("🔍 Error loading wishlist:", result.error);
+        // Show user-friendly error message
+        Alert.alert(
+          "Lỗi kết nối",
+          `Không thể tải danh sách yêu thích: ${result.error}. Vui lòng kiểm tra kết nối mạng và thử lại.`
+        );
+      }
+    } catch (error) {
+      console.error("Error loading wishlist:", error);
+      Alert.alert(
+        "Lỗi kết nối",
+        `Có lỗi xảy ra khi tải danh sách yêu thích: ${error.message}. Vui lòng kiểm tra kết nối mạng và thử lại.`
+      );
+    }
+  };
+
   const getGenderText = (gender) => {
-    if (gender === "nam") return "Nam";
-    if (gender === "nữ") return "Nữ";
+    const g = (gender || "").toString().trim().toLowerCase();
+    if (["male", "nam", "man", "m"].includes(g)) return "Nam";
+    if (["female", "nữ", "nu", "woman", "f"].includes(g)) return "Nữ";
     return gender || "N/A";
   };
 
@@ -68,6 +190,95 @@ export default function NursesScreen() {
   const closeDetailModal = () => {
     setShowDetailModal(false);
     setSelectedNurse(null);
+  };
+
+  const handleHeartPress = async (nurse) => {
+    if (!customerID) {
+      Alert.alert(
+        "Lỗi",
+        "Chưa đăng nhập. Vui lòng đăng nhập để sử dụng tính năng này."
+      );
+      return;
+    }
+
+    try {
+      const nursingID = nurse.nursingID;
+      const currentWishlistItem = wishlistMap[nursingID];
+
+      console.log(
+        "🔍 Heart press - nursingID:",
+        nursingID,
+        "customerID:",
+        customerID
+      );
+      console.log("🔍 Current wishlist item:", currentWishlistItem);
+
+      if (currentWishlistItem && currentWishlistItem.isFavorite) {
+        // Remove from wishlist
+        console.log(
+          "🔍 Removing from wishlist, wishlistID:",
+          currentWishlistItem.wishlistID
+        );
+        const result = await WishlistService.removeFromWishlist(
+          currentWishlistItem.wishlistID
+        );
+        console.log("🔍 Remove result:", result);
+
+        if (result.success) {
+          setWishlistMap((prev) => ({
+            ...prev,
+            [nursingID]: { isFavorite: false, wishlistID: null },
+          }));
+          Alert.alert(
+            "Thành công",
+            "Đã xóa khỏi danh sách yêu thích"
+          );
+        } else {
+          Alert.alert(
+            "Lỗi",
+            `Không thể xóa khỏi danh sách yêu thích: ${result.error}`
+          );
+        }
+      } else {
+        // Add to wishlist
+        console.log(
+          "🔍 Adding to wishlist - nursingID:",
+          nursingID,
+          "customerID:",
+          customerID
+        );
+        const result = await WishlistService.addToWishlist(
+          nursingID,
+          customerID
+        );
+        console.log("🔍 Add result:", result);
+
+        if (result.success) {
+          setWishlistMap((prev) => ({
+            ...prev,
+            [nursingID]: {
+              isFavorite: true,
+              wishlistID: result.data.wishlistID,
+            },
+          }));
+          Alert.alert(
+            "Thành công",
+            "Đã thêm vào danh sách yêu thích"
+          );
+        } else {
+          Alert.alert(
+            "Lỗi",
+            `Không thể thêm vào danh sách yêu thích: ${result.error}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling wishlist:", error);
+      Alert.alert(
+        "Lỗi",
+        `Có lỗi xảy ra khi cập nhật danh sách yêu thích: ${error.message}`
+      );
+    }
   };
 
   const renderDetailModal = () => {
@@ -181,7 +392,7 @@ export default function NursesScreen() {
                     Chuyên môn:
                   </Text>
                   <Text style={styles.modalInfoValue}>
-                    Điều dưỡng viên
+                    Chuyên viên chăm sóc
                   </Text>
                 </View>
 
@@ -246,6 +457,39 @@ export default function NursesScreen() {
                 </View>
               )}
 
+              {/* Đánh giá trung bình */}
+              <View style={styles.modalInfoSection}>
+                <Text style={styles.modalSectionTitle}>Đánh giá</Text>
+                <View style={styles.modalRatingRow}>
+                  {Array.from({ length: 5 }).map((_, idx) => {
+                    const val =
+                      ratingsMap[selectedNurse.nursingID] || 0;
+                    const filled = val >= idx + 1;
+                    const half = !filled && val >= idx + 0.5;
+                    return (
+                      <Ionicons
+                        key={idx}
+                        name={
+                          filled
+                            ? "star"
+                            : half
+                            ? "star-half"
+                            : "star-outline"
+                        }
+                        size={18}
+                        color="#FFC107"
+                        style={{ marginRight: 3 }}
+                      />
+                    );
+                  })}
+                  <Text style={styles.modalRatingText}>
+                    {(
+                      ratingsMap[selectedNurse.nursingID] || 0
+                    ).toFixed(1)}
+                  </Text>
+                </View>
+              </View>
+
               <View style={styles.modalInfoSection}>
                 <Text style={styles.modalSectionTitle}>
                   Trạng thái
@@ -307,7 +551,7 @@ export default function NursesScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerBox}>
-          <Text style={styles.headerText}>Điều Dưỡng Viên</Text>
+          <Text style={styles.headerText}>Chuyên Viên Chăm Sóc</Text>
         </LinearGradient>
       </View>
 
@@ -316,14 +560,14 @@ export default function NursesScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}>
         <Text style={styles.sectionTitle}>
-          Danh sách điều dưỡng viên ({nurses.length})
+          Danh sách chuyên viên chăm sóc ({nurses.length})
         </Text>
 
         {nurses.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="medical-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>
-              Chưa có điều dưỡng viên nào
+              Chưa có chuyên viên chăm sóc nào
             </Text>
             <Text style={styles.emptySubtext}>
               Vui lòng thử lại sau hoặc liên hệ admin
@@ -354,6 +598,26 @@ export default function NursesScreen() {
                       {getGenderText(nurse.gender)}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    style={styles.heartButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleHeartPress(nurse);
+                    }}>
+                    <Ionicons
+                      name={
+                        wishlistMap[nurse.nursingID]?.isFavorite
+                          ? "heart"
+                          : "heart-outline"
+                      }
+                      size={24}
+                      color={
+                        wishlistMap[nurse.nursingID]?.isFavorite
+                          ? "#FF6B6B"
+                          : "#999"
+                      }
+                    />
+                  </TouchableOpacity>
                 </View>
 
                 {/* Hiển thị thông tin khu vực */}
@@ -394,6 +658,35 @@ export default function NursesScreen() {
                     </Text>
                   </View>
                 )}
+
+                {/* Rating stars */}
+                <View style={styles.ratingRow}>
+                  {Array.from({ length: 5 }).map((_, idx) => {
+                    const filled =
+                      (ratingsMap[nurse.nursingID] || 0) >= idx + 1;
+                    const half =
+                      !filled &&
+                      (ratingsMap[nurse.nursingID] || 0) >= idx + 0.5;
+                    return (
+                      <Ionicons
+                        key={idx}
+                        name={
+                          filled
+                            ? "star"
+                            : half
+                            ? "star-half"
+                            : "star-outline"
+                        }
+                        size={16}
+                        color="#FFC107"
+                        style={{ marginRight: 2 }}
+                      />
+                    );
+                  })}
+                  <Text style={styles.ratingText}>
+                    {(ratingsMap[nurse.nursingID] || 0).toFixed(1)}
+                  </Text>
+                </View>
 
                 <View style={styles.statusContainer}>
                   <View
@@ -530,6 +823,10 @@ const styles = StyleSheet.create({
     color: "#333",
     flex: 1,
   },
+  heartButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
   genderBadge: {
     backgroundColor: "#FF8AB3",
     paddingHorizontal: 8,
@@ -577,6 +874,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "white",
     fontWeight: "500",
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  ratingText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: "#666",
   },
   modalOverlay: {
     flex: 1,
@@ -680,5 +987,14 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "500",
+  },
+  modalRatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modalRatingText: {
+    marginLeft: 6,
+    fontSize: 14,
+    color: "#666",
   },
 });

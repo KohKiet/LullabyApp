@@ -237,6 +237,34 @@ class CustomizeTaskService {
     }
   }
 
+  // Update relative assignment for a customize task
+  async updateRelative(customizeTaskID, relativeID) {
+    try {
+      const url = `${API_CONFIG.BASE_URL}/api/CustomizeTask/UpdateRelative/${customizeTaskID}/${relativeID}`;
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: { accept: "*/*" },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data };
+      }
+      let errorPayload = null;
+      try {
+        errorPayload = await response.json();
+      } catch (_) {
+        errorPayload = await response.text();
+      }
+      const message =
+        (errorPayload &&
+          (errorPayload.message || JSON.stringify(errorPayload))) ||
+        `HTTP ${response.status}`;
+      return { success: false, error: message };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Format status for display
   formatStatus(status) {
     switch (status) {

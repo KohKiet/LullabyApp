@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -32,11 +32,9 @@ export default function NotificationsScreen() {
     return () => unsubscribe();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-    }, [])
-  );
+  useEffect(() => {
+    loadUserData();
+  }, []);
 
   const loadUserData = async () => {
     try {
@@ -69,6 +67,18 @@ export default function NotificationsScreen() {
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
         setNotifications(sortedNotifications);
+
+        // Show notification for new unread notifications
+        const unreadNotifications = sortedNotifications.filter(
+          (n) => !n.isRead
+        );
+        if (unreadNotifications.length > 0) {
+          const latest = unreadNotifications[0];
+          global.__notify?.({
+            title: "Thông báo chưa đọc",
+            message: latest.message,
+          });
+        }
       } else {
         console.error("Failed to load notifications:", result.error);
         // Show error but don't clear existing notifications
@@ -151,6 +161,76 @@ export default function NotificationsScreen() {
             : notif
         )
       );
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      // Check if there are any unread notifications
+      const unreadNotifications = notifications.filter(
+        (n) => !n.isRead
+      );
+      if (unreadNotifications.length === 0) {
+        Alert.alert("Thông báo", "Tất cả thông báo đã được đọc rồi!");
+        return;
+      }
+
+      // Optimistically update UI first
+      setNotifications((prev) =>
+        prev.map((notif) => ({ ...notif, isRead: true }))
+      );
+
+      // Trigger global notification update immediately
+      if (global.notificationUpdate) {
+        global.notificationUpdate();
+      }
+
+      // Update all notifications as read on server
+      const unreadIds = unreadNotifications.map(
+        (n) => n.notificationID
+      );
+      const results = await Promise.all(
+        unreadIds.map((id) => NotificationService.markAsRead(id))
+      );
+
+      // Check if all updates were successful
+      const failedUpdates = results.filter(
+        (result) => !result.success
+      );
+      if (failedUpdates.length > 0) {
+        console.error(
+          "Some notifications failed to mark as read:",
+          failedUpdates
+        );
+        Alert.alert(
+          "Cảnh báo",
+          "Một số thông báo không thể đánh dấu đã đọc. Vui lòng thử lại."
+        );
+
+        // Reload notifications to get accurate state
+        if (userData) {
+          await loadNotifications(userData.accountID || userData.id);
+        }
+      } else {
+        Alert.alert(
+          "Thành công",
+          "Đã đánh dấu tất cả thông báo là đã đọc!"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Error marking all notifications as read:",
+        error
+      );
+      Alert.alert(
+        "Lỗi",
+        "Không thể đánh dấu tất cả thông báo. Vui lòng thử lại."
+      );
+
+      // Reload notifications to get accurate state
+      if (userData) {
+        await loadNotifications(userData.accountID || userData.id);
+      }
     }
   };
 
@@ -243,6 +323,16 @@ export default function NotificationsScreen() {
         <TouchableOpacity onPress={onRefresh}>
           <Ionicons name="refresh" size={24} color="#333" />
         </TouchableOpacity>
+        <View style={{ marginLeft: 16, alignItems: "center" }}>
+          <TouchableOpacity onPress={markAllAsRead}>
+            <Ionicons
+              name="checkmark-done"
+              size={24}
+              color="#4CAF50"
+            />
+          </TouchableOpacity>
+          <Text style={styles.markAllText}>Đã đọc</Text>
+        </View>
       </View>
 
       {/* Notifications List */}
@@ -302,6 +392,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 5,
   },
+  markAllText: {
+    fontSize: 10,
+    color: "#4CAF50",
+    fontWeight: "600",
+    marginTop: 2,
+    textAlign: "center",
+  },
   notificationsList: {
     paddingHorizontal: 0,
     paddingBottom: 20,
@@ -310,6 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 10,
+
     marginBottom: 8,
     marginHorizontal: 16,
     borderWidth: 1,

@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -20,6 +19,7 @@ import CustomizePackageService from "../services/customizePackageService";
 import CustomizeTaskService from "../services/customizeTaskService";
 import FeedbackService from "../services/feedbackService";
 import MedicalNoteService from "../services/medicalNoteService";
+import NotificationService from "../services/notificationService";
 import NursingSpecialistService from "../services/nursingSpecialistService";
 import ServiceTaskService from "../services/serviceTaskService";
 import ServiceTypeService from "../services/serviceTypeService";
@@ -60,6 +60,9 @@ export default function AppointmentScreen() {
   });
   const [feedbackMap, setFeedbackMap] = useState({});
 
+  // Notification state
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
   useEffect(() => {
     const loadAllFeedbacks = async () => {
       const res = await FeedbackService.getAllFeedbacks();
@@ -77,14 +80,9 @@ export default function AppointmentScreen() {
   }, []);
 
   // Reload user data khi screen được focus
-  useFocusEffect(
-    React.useCallback(() => {
-      loadUserData();
-    }, [])
-  );
-
   useEffect(() => {
     loadUserData();
+    checkUnreadNotifications();
   }, []);
 
   const loadUserData = async () => {
@@ -97,13 +95,15 @@ export default function AppointmentScreen() {
         // Load cached data from booking history first
         await loadCachedData();
 
-        // Then load fresh data if needed
-        await loadBookings(user);
-        await loadHolidays();
-        await loadServices();
-        await loadServiceTasks();
-        await loadNurses();
-        await loadCareProfiles(user);
+        // Then load fresh data in parallel for faster UI
+        await Promise.all([
+          loadBookings(user),
+          loadHolidays(),
+          loadServices(),
+          loadServiceTasks(),
+          loadNurses(),
+          loadCareProfiles(user),
+        ]);
       } else {
         setUserData(null);
         setIsLoggedIn(false);
@@ -243,17 +243,7 @@ export default function AppointmentScreen() {
           (booking) => booking.status !== "cancelled"
         );
 
-        // Load customize packages và tasks cho tất cả active bookings trước
-        for (const booking of activeBookings) {
-          await loadCustomizePackages(booking.bookingID);
-          await loadCustomizeTasks(booking.bookingID);
-        }
-
-        // Sau khi đã load đầy đủ customize tasks, mới load medical notes
-        for (const booking of activeBookings) {
-          await loadMedicalNotes(booking.bookingID);
-        }
-
+        // Lazy-load: chỉ lưu danh sách booking, chi tiết tải khi expand
         setBookings(activeBookings);
         await AsyncStorage.setItem(
           "cachedBookings",
@@ -514,11 +504,33 @@ export default function AppointmentScreen() {
     }
   };
 
-  const toggleExpanded = (bookingID) => {
+  const ensureBookingDetails = async (bookingID) => {
+    try {
+      // If already loaded from cache/state, skip
+      const hasPackages = !!customizePackagesMap[bookingID];
+      const hasTasks = !!customizeTasksMap[bookingID];
+      if (!hasPackages) {
+        await loadCustomizePackages(bookingID);
+      }
+      if (!hasTasks) {
+        await loadCustomizeTasks(bookingID);
+      }
+      // Load medical notes once tasks available
+      await loadMedicalNotes(bookingID);
+    } catch (e) {
+      // swallow
+    }
+  };
+
+  const toggleExpanded = async (bookingID) => {
     setExpandedBookings((prev) => ({
       ...prev,
       [bookingID]: !prev[bookingID],
     }));
+    const willExpand = !expandedBookings[bookingID];
+    if (willExpand) {
+      ensureBookingDetails(bookingID);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -841,6 +853,32 @@ export default function AppointmentScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
+  };
+
+  const checkUnreadNotifications = async () => {
+    try {
+      if (userData?.accountID) {
+        const result =
+          await NotificationService.getNotificationsByAccount(
+            userData.accountID
+          );
+        if (result.success) {
+          const unread = result.data.filter((n) => !n.isRead);
+          setUnreadNotifications(unread.length);
+
+          // Show notification for the latest unread message
+          if (unread.length > 0) {
+            const latest = unread[0];
+            global.__notify?.({
+              title: "Thông báo mới",
+              message: latest.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking notifications:", error);
+    }
   };
 
   // Nếu chưa đăng nhập, hiển thị màn hình đăng nhập

@@ -8,7 +8,7 @@ const isAndroid = Platform.OS === "android";
 const isIOS = Platform.OS === "ios";
 
 // Base URL configuration
-const BASE_URL = "https://phamlequyanh.name.vn";
+export const BASE_URL = "https://phamlequyanh.name.vn";
 
 console.log("API Config: Using production URL:", BASE_URL);
 console.log(
