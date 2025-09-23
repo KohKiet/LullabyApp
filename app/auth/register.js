@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Google from "expo-auth-session/providers/google";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   Alert,
@@ -15,8 +13,6 @@ import {
 } from "react-native";
 import AuthService from "../../services/authService";
 
-WebBrowser.maybeCompleteAuthSession();
-
 export default function RegisterScreen() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
@@ -28,74 +24,6 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    iosClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    androidClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    webClientId: "AIzaSyBF04RPcTio-Dkw3sto4VMb_k1207zRHmI",
-    scopes: ["profile", "email"],
-  });
-
-  React.useEffect(() => {
-    if (response?.type === "success") {
-      const { authentication } = response;
-      fetchUserInfo(authentication.accessToken);
-    } else if (response?.type === "error") {
-      Alert.alert(
-        "Lỗi đăng ký Google",
-        response.error?.message || "Có lỗi xảy ra"
-      );
-    }
-  }, [response]);
-
-  const fetchUserInfo = async (accessToken) => {
-    try {
-      const res = await fetch(
-        "https://www.googleapis.com/userinfo/v2/me",
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const user = await res.json();
-      const userData = {
-        id: Date.now(),
-        email: user.email,
-        full_name: user.name,
-        name: user.name,
-        avatar_url: user.picture,
-        role_id: 4, // Mặc định là customer
-        phone_number: "",
-        create_at: new Date().toISOString(),
-        status: "active",
-      };
-
-      // Sử dụng AuthService để lưu user
-      await AuthService.saveUser(userData);
-      await AuthService.saveToken(accessToken);
-
-      // Chuyển thẳng đến trang chủ, không hiển thị alert
-      router.replace("/");
-    } catch (e) {
-      Alert.alert(
-        "Lỗi",
-        "Không thể lấy thông tin từ Google: " + e.message
-      );
-    }
-  };
-
-  const handleGoogleRegister = async () => {
-    try {
-      await promptAsync();
-    } catch (error) {
-      Alert.alert("Lỗi", "Không thể khởi tạo đăng ký Google");
-    }
-  };
 
   const validateForm = () => {
     if (!fullName.trim()) {
@@ -166,23 +94,6 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.registerCard}>
-          {/* Google Register */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            disabled={!request || isLoading}
-            onPress={handleGoogleRegister}>
-            <Ionicons name="logo-google" size={20} color="#DB4437" />
-            <Text style={styles.googleButtonText}>
-              Đăng ký với Google
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>hoặc</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
           {/* Full Name Input */}
           <View style={styles.inputContainer}>
             <Ionicons
@@ -356,38 +267,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-  },
-  googleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    marginBottom: 20,
-  },
-  googleButtonText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
-    marginLeft: 10,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#ddd",
-  },
-  dividerText: {
-    marginHorizontal: 15,
-    color: "#666",
-    fontSize: 14,
   },
   inputContainer: {
     flexDirection: "row",

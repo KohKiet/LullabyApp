@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -34,6 +33,38 @@ export default function ServiceListModal({
   // Chỉ cho phép chọn giờ từ 8:00 đến 19:50, phút: 00, 10, 20, 30, 40, 50
   const hours = Array.from({ length: 12 }, (_, i) => i + 8);
   const minutes = [0, 10, 20, 30, 40, 50];
+
+  // Refs for scroll navigation
+  const scrollViewRef = useRef(null);
+  const momSectionRef = useRef(null);
+  const babySectionRef = useRef(null);
+
+  // Navigation functions
+  const scrollToMomSection = () => {
+    momSectionRef.current?.measureLayout(
+      scrollViewRef.current,
+      (x, y) => {
+        scrollViewRef.current?.scrollTo({
+          y: y - 20,
+          animated: true,
+        });
+      },
+      () => {}
+    );
+  };
+
+  const scrollToBabySection = () => {
+    babySectionRef.current?.measureLayout(
+      scrollViewRef.current,
+      (x, y) => {
+        scrollViewRef.current?.scrollTo({
+          y: y - 20,
+          animated: true,
+        });
+      },
+      () => {}
+    );
+  };
 
   // Load relative count when modal opens
   useEffect(() => {
@@ -237,7 +268,7 @@ export default function ServiceListModal({
     }
   };
 
-  const renderServiceItem = ({ item }) => {
+  const renderServiceItem = ({ item, isMomService }) => {
     const isSelected = selectedServices[item.serviceID];
     const quantity = isSelected ? isSelected.quantity : 0;
 
@@ -245,14 +276,26 @@ export default function ServiceListModal({
       <View
         style={[
           styles.serviceItem,
-          isSelected && styles.selectedServiceItem,
+          isMomService
+            ? styles.momServiceItem
+            : styles.babyServiceItem,
+          isSelected &&
+            (isMomService
+              ? styles.selectedMomServiceItem
+              : styles.selectedBabyServiceItem),
         ]}>
         <TouchableOpacity
           style={styles.serviceHeader}
           onPress={() => toggleServiceSelection(item.serviceID)}>
           <View style={styles.serviceInfo}>
             <Text style={styles.serviceName}>{item.serviceName}</Text>
-            <View style={styles.servicePriceContainer}>
+            <View
+              style={[
+                styles.servicePriceContainer,
+                isMomService
+                  ? styles.momPriceContainer
+                  : styles.babyPriceContainer,
+              ]}>
               <Text style={styles.servicePrice}>
                 {ServiceTypeService.formatPrice(item.price)}
               </Text>
@@ -444,21 +487,96 @@ export default function ServiceListModal({
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              {/* Navigation buttons */}
+              <View style={styles.navigationButtons}>
+                {services.filter((service) => service.forMom === true)
+                  .length > 0 && (
+                  <TouchableOpacity
+                    onPress={scrollToMomSection}
+                    style={styles.navButton}>
+                    <Ionicons
+                      name="woman"
+                      size={16}
+                      color="#E91E63"
+                    />
+                    <Text style={styles.navButtonText}>Mẹ</Text>
+                  </TouchableOpacity>
+                )}
+                {services.filter(
+                  (service) => service.forMom === false
+                ).length > 0 && (
+                  <TouchableOpacity
+                    onPress={scrollToBabySection}
+                    style={styles.navButton}>
+                    <Ionicons
+                      name="people"
+                      size={16}
+                      color="#2196F3"
+                    />
+                    <Text style={styles.navButtonText}>Con</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <FlatList
-            data={services}
-            renderItem={renderServiceItem}
-            keyExtractor={(item) => item.serviceID.toString()}
+          <ScrollView
+            ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={renderEmptyState}
-          />
+            contentContainerStyle={styles.listContainer}>
+            {/* Dịch vụ mẹ */}
+            {services.filter((service) => service.forMom === true)
+              .length > 0 && (
+              <>
+                <Text
+                  ref={momSectionRef}
+                  style={styles.sectionTitleMom}>
+                  Dịch vụ mẹ
+                </Text>
+                {services
+                  .filter((service) => service.forMom === true)
+                  .map((service) => (
+                    <View key={service.serviceID}>
+                      {renderServiceItem({
+                        item: service,
+                        isMomService: true,
+                      })}
+                    </View>
+                  ))}
+              </>
+            )}
+
+            {/* Dịch vụ con */}
+            {services.filter((service) => service.forMom === false)
+              .length > 0 && (
+              <>
+                <Text
+                  ref={babySectionRef}
+                  style={styles.sectionTitleBaby}>
+                  Dịch vụ con
+                </Text>
+                {services
+                  .filter((service) => service.forMom === false)
+                  .map((service) => (
+                    <View key={service.serviceID}>
+                      {renderServiceItem({
+                        item: service,
+                        isMomService: false,
+                      })}
+                    </View>
+                  ))}
+              </>
+            )}
+
+            {/* Show empty state if no services */}
+            {services.length === 0 && renderEmptyState()}
+          </ScrollView>
 
           {/* Booking Summary */}
           {selectedCount > 0 && (
@@ -656,10 +774,59 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
   },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  navigationButtons: {
+    flexDirection: "row",
+    marginRight: 15,
+  },
+  navButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  navButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+    color: "#333",
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#4CAF50",
+    marginTop: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitleMom: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#E91E63",
+    marginTop: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitleBaby: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#2196F3",
+    marginTop: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   closeButton: {
     padding: 5,
@@ -676,10 +843,26 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#4CAF50",
   },
+  momServiceItem: {
+    backgroundColor: "#FDF2F8",
+    borderLeftColor: "#E91E63",
+  },
+  babyServiceItem: {
+    backgroundColor: "#F0F8FF",
+    borderLeftColor: "#2196F3",
+  },
   selectedServiceItem: {
     borderLeftColor: "#4CAF50",
     borderLeftWidth: 4,
     backgroundColor: "#E8F5E9", // Lighter green background for selected items
+  },
+  selectedMomServiceItem: {
+    backgroundColor: "#FCE4EC", // Light pink background for selected mom services
+    borderLeftColor: "#E91E63",
+  },
+  selectedBabyServiceItem: {
+    backgroundColor: "#E3F2FD", // Light blue background for selected baby services
+    borderLeftColor: "#2196F3",
   },
   serviceHeader: {
     flexDirection: "row",
@@ -701,6 +884,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+  },
+  momPriceContainer: {
+    backgroundColor: "#E91E63",
+  },
+  babyPriceContainer: {
+    backgroundColor: "#2196F3",
   },
   servicePrice: {
     color: "#FFFFFF",
