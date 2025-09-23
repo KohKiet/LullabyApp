@@ -27,6 +27,8 @@ export default function SpecialistsScreen() {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [wishlistMap, setWishlistMap] = useState({}); // nursingID -> {isFavorite: boolean, wishlistID: number}
   const [customerID, setCustomerID] = useState(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [selectedZone, setSelectedZone] = useState("ALL");
 
   useEffect(() => {
     loadData();
@@ -535,6 +537,22 @@ export default function SpecialistsScreen() {
     );
   }
 
+  const zoneNameOf = (s) =>
+    s.zoneName || (s.zoneID != null ? `Khu vực ${s.zoneID}` : "Khác");
+  const zoneOptions = Array.from(
+    new Set((specialists || []).map((s) => zoneNameOf(s)))
+  );
+
+  const visibleSpecialists = (
+    showFavoritesOnly
+      ? specialists.filter(
+          (s) => wishlistMap[s.nursingID]?.isFavorite
+        )
+      : specialists
+  ).filter(
+    (s) => selectedZone === "ALL" || zoneNameOf(s) === selectedZone
+  );
+
   return (
     <LinearGradient
       colors={["#C2F5E9", "#B3E5FC", "#FFD9E6"]}
@@ -552,7 +570,9 @@ export default function SpecialistsScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerBox}>
-          <Text style={styles.headerText}>Chuyên Viên Tư Vấn</Text>
+          <Text style={styles.headerText}>
+            Chuyên Viên Tư Vấn ({visibleSpecialists.length})
+          </Text>
         </LinearGradient>
       </View>
 
@@ -560,9 +580,68 @@ export default function SpecialistsScreen() {
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>
-          Danh sách chuyên viên tư vấn ({specialists.length})
-        </Text>
+        {/* Section title removed per request; count is shown in header */}
+
+        {/* Filter Bar */}
+        <View style={styles.filterBar}>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              showFavoritesOnly && styles.filterChipActive,
+            ]}
+            onPress={() => setShowFavoritesOnly((v) => !v)}>
+            <Ionicons
+              name={showFavoritesOnly ? "heart" : "heart-outline"}
+              size={16}
+              color={showFavoritesOnly ? "#FF6B6B" : "#666"}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                showFavoritesOnly && styles.filterChipTextActive,
+              ]}>
+              Yêu thích
+            </Text>
+          </TouchableOpacity>
+
+          {/* Zone filter chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.zoneChipsContainer}>
+            <TouchableOpacity
+              style={[
+                styles.zoneChip,
+                selectedZone === "ALL" && styles.zoneChipActive,
+              ]}
+              onPress={() => setSelectedZone("ALL")}>
+              <Text
+                style={[
+                  styles.zoneChipText,
+                  selectedZone === "ALL" && styles.zoneChipTextActive,
+                ]}>
+                Tất cả
+              </Text>
+            </TouchableOpacity>
+            {zoneOptions.map((z) => (
+              <TouchableOpacity
+                key={z}
+                style={[
+                  styles.zoneChip,
+                  selectedZone === z && styles.zoneChipActive,
+                ]}
+                onPress={() => setSelectedZone(z)}>
+                <Text
+                  style={[
+                    styles.zoneChipText,
+                    selectedZone === z && styles.zoneChipTextActive,
+                  ]}>
+                  {z}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {specialists.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -575,7 +654,7 @@ export default function SpecialistsScreen() {
             </Text>
           </View>
         ) : (
-          specialists.map((specialist) => (
+          visibleSpecialists.map((specialist) => (
             <TouchableOpacity
               key={specialist.nursingID}
               style={styles.specialistCard}
@@ -794,6 +873,54 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 20,
     textAlign: "center",
+  },
+  filterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  zoneChipsContainer: {
+    paddingLeft: 10,
+    marginLeft: 10,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: "#F1F5F9",
+  },
+  filterChipActive: {
+    backgroundColor: "#FFE5E5",
+  },
+  filterChipText: {
+    marginLeft: 6,
+    color: "#666",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  filterChipTextActive: {
+    color: "#FF6B6B",
+  },
+  zoneChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: "#F1F5F9",
+    marginRight: 8,
+  },
+  zoneChipActive: {
+    backgroundColor: "#E3F2FD",
+  },
+  zoneChipText: {
+    color: "#666",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  zoneChipTextActive: {
+    color: "#1976D2",
   },
   specialistCard: {
     backgroundColor: "white",

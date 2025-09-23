@@ -69,11 +69,11 @@ export default function AsyncStorageDebugger() {
     try {
       await AsyncStorage.clear();
       console.log("🔍 AsyncStorage cleared");
-      Alert.alert("Debug", "AsyncStorage đã được xóa");
+      Alert.alert("Thông báo", "AsyncStorage đã được xóa");
       loadStorageData();
     } catch (error) {
       console.error("🔍 Error clearing AsyncStorage:", error);
-      Alert.alert("Error", "Không thể xóa AsyncStorage");
+      Alert.alert("Lỗi", "Không thể xóa AsyncStorage");
     }
   };
 
@@ -84,11 +84,11 @@ export default function AsyncStorageDebugger() {
         TOKEN_STORAGE_KEY,
       ]);
       console.log("🔍 User data and token cleared");
-      Alert.alert("Debug", "User data và token đã được xóa");
+      Alert.alert("Thông báo", "User data và token đã được xóa");
       loadStorageData();
     } catch (error) {
       console.error("🔍 Error clearing user data:", error);
-      Alert.alert("Error", "Không thể xóa user data");
+      Alert.alert("Lỗi", "Không thể xóa user data");
     }
   };
 

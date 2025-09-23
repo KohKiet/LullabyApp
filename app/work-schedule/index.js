@@ -107,12 +107,13 @@ export default function WorkScheduleScreen() {
 
     const now = new Date();
     const workDate = new Date(schedule.workDate);
-    const thirtyMinutesBefore = new Date(
-      workDate.getTime() - 30 * 60 * 1000
+    const endTime = new Date(schedule.endTime);
+    const fifteenMinutesBefore = new Date(
+      workDate.getTime() - 15 * 60 * 1000
     );
 
-    // Có thể điểm danh "đã đến" trước giờ làm 30 phút hoặc trong giờ làm
-    return now >= thirtyMinutesBefore;
+    // Chỉ cho phép trước 15 phút đến hết giờ làm
+    return now >= fifteenMinutesBefore && now <= endTime;
   };
 
   // Kiểm tra xem có thể điểm danh hay không
@@ -162,6 +163,13 @@ export default function WorkScheduleScreen() {
               : s
           )
         );
+
+        // Cập nhật selectedSchedule trong modal nếu đang mở
+        setSelectedSchedule((prev) =>
+          prev && prev.workScheduleID === schedule.workScheduleID
+            ? { ...prev, status: "arrived" }
+            : prev
+        );
       } else {
         Alert.alert(
           "Lỗi",
@@ -174,7 +182,7 @@ export default function WorkScheduleScreen() {
     }
   };
 
-  // Xử lý điểm danh
+  // Xử lý điểm danh (hoàn thành)
   const handleMarkAttendance = async (schedule) => {
     if (!canMarkAttendance(schedule)) {
       Alert.alert(
@@ -185,8 +193,9 @@ export default function WorkScheduleScreen() {
     }
 
     try {
-      const result = await WorkScheduleService.updateIsAttended(
-        schedule.workScheduleID
+      const result = await WorkScheduleService.updateStatus(
+        schedule.workScheduleID,
+        "completed"
       );
 
       if (result.success) {
@@ -196,7 +205,7 @@ export default function WorkScheduleScreen() {
         setWorkSchedules((prevSchedules) =>
           prevSchedules.map((s) =>
             s.workScheduleID === schedule.workScheduleID
-              ? { ...s, isAttended: true }
+              ? { ...s, isAttended: true, status: "completed" }
               : s
           )
         );
@@ -205,9 +214,16 @@ export default function WorkScheduleScreen() {
         setTodaySchedules((prevTodaySchedules) =>
           prevTodaySchedules.map((s) =>
             s.workScheduleID === schedule.workScheduleID
-              ? { ...s, isAttended: true }
+              ? { ...s, isAttended: true, status: "completed" }
               : s
           )
+        );
+
+        // Cập nhật selectedSchedule trong modal nếu đang mở
+        setSelectedSchedule((prev) =>
+          prev && prev.workScheduleID === schedule.workScheduleID
+            ? { ...prev, isAttended: true, status: "completed" }
+            : prev
         );
       } else {
         Alert.alert("Lỗi", result.error || "Không thể điểm danh");
@@ -302,6 +318,8 @@ export default function WorkScheduleScreen() {
       const noteData = {
         customizeTaskID: customizeTaskID,
         note: newNote.note.trim(),
+        advice: newNote.advice?.trim?.() || "",
+        image: "",
       };
 
       const result = await MedicalNoteService.createMedicalNote(
@@ -685,8 +703,15 @@ export default function WorkScheduleScreen() {
   const resetMedicalNoteForm = () => {
     setNewNote({
       note: "",
+      advice: "",
     });
     setShowAddNoteModal(false);
+  };
+
+  // Open Add Note modal immediately (avoid stacking lag with detail modal)
+  const openAddNoteModal = () => {
+    setShowDetailModal(false);
+    setShowAddNoteModal(true);
   };
 
   // Medical notes functions
@@ -842,14 +867,21 @@ export default function WorkScheduleScreen() {
 
         setMedicalNotes(enhancedNotes);
       } else {
-        console.error(
-          "Failed to load medical notes:",
-          response.status
-        );
+        // Gracefully handle not found or error responses without spamming errors
+        if (response.status !== 404) {
+          console.log(
+            "Medical notes request returned status:",
+            response.status
+          );
+        }
         setMedicalNotes([]);
       }
     } catch (error) {
-      console.error("Error loading medical notes:", error);
+      // Avoid noisy redbox; log minimally in dev and continue with empty list
+      console.log(
+        "Medical notes request failed:",
+        error?.message || error
+      );
       setMedicalNotes([]);
     } finally {
       setIsLoadingMedicalNotes(false);
@@ -913,7 +945,7 @@ export default function WorkScheduleScreen() {
               </Text>
             </View>
 
-            {/* Nút điểm danh "đã đến" - hiện khi chưa điểm danh "đã đến" và trong khoảng thời gian cho phép */}
+            {/* Nút "Đã đến" - hiện khi chưa điểm danh "đã đến" và trong khoảng thời gian cho phép */}
             {schedule.status !== "arrived" && isToday && (
               <View style={styles.attendanceRow}>
                 <TouchableOpacity
@@ -936,13 +968,13 @@ export default function WorkScheduleScreen() {
                           : "#999",
                       },
                     ]}>
-                    Điểm danh
+                    Đã đến
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* Nút điểm danh - chỉ hiện khi đã điểm danh "đã đến" và chưa điểm danh tham gia */}
+            {/* Nút "Điểm danh" - chỉ hiện khi đã "Đã đến" và chưa điểm danh tham gia */}
             {schedule.status === "arrived" &&
               !schedule.isAttended &&
               isToday && (
@@ -1088,19 +1120,71 @@ export default function WorkScheduleScreen() {
                       )}
                     </View>
 
-                    {/* Xem ghi chú button */}
-                    <TouchableOpacity
-                      style={styles.viewNotesButton}
-                      onPress={openMedicalNotesModal}>
-                      <Ionicons
-                        name="document-text"
-                        size={20}
-                        color="#2196F3"
-                      />
-                      <Text style={styles.viewNotesButtonText}>
-                        Xem ghi chú
-                      </Text>
-                    </TouchableOpacity>
+                    {/* Nút Điểm danh trong modal - chỉ bật khi đã 'Đã đến' */}
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <TouchableOpacity
+                        style={styles.modalActionButton}
+                        onPress={() =>
+                          handleMarkAttendance(selectedSchedule)
+                        }
+                        disabled={
+                          !canMarkAttendance(selectedSchedule)
+                        }>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={
+                            canMarkAttendance(selectedSchedule)
+                              ? "#4CAF50"
+                              : "#999"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.modalActionButtonText,
+                            {
+                              color: canMarkAttendance(
+                                selectedSchedule
+                              )
+                                ? "#4CAF50"
+                                : "#999",
+                            },
+                          ]}>
+                          Điểm danh
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Xem ghi chú: chỉ mở khi đã completed */}
+                      <TouchableOpacity
+                        style={styles.viewNotesButton}
+                        onPress={openMedicalNotesModal}
+                        disabled={
+                          selectedSchedule.status !== "completed"
+                        }>
+                        <Ionicons
+                          name="document-text"
+                          size={20}
+                          color={
+                            selectedSchedule.status === "completed"
+                              ? "#2196F3"
+                              : "#999"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.viewNotesButtonText,
+                            {
+                              color:
+                                selectedSchedule.status ===
+                                "completed"
+                                  ? "#2196F3"
+                                  : "#999",
+                            },
+                          ]}>
+                          Xem ghi chú
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
 
@@ -1334,10 +1418,10 @@ export default function WorkScheduleScreen() {
                     </Text>
                     {scheduleDetails.customizeTask &&
                       medicalNotes.length === 0 &&
-                      selectedSchedule?.status === "arrived" && (
+                      selectedSchedule?.status === "completed" && (
                         <TouchableOpacity
                           style={styles.addNoteButton}
-                          onPress={() => setShowAddNoteModal(true)}>
+                          onPress={openAddNoteModal}>
                           <Ionicons
                             name="add-circle"
                             size={20}
@@ -1406,7 +1490,7 @@ export default function WorkScheduleScreen() {
                           ? "Chưa có ghi chú nào cho lịch hẹn này."
                           : "Không thể thêm ghi chú vì chưa có thông tin công việc"}
                       </Text>
-                      {selectedSchedule?.status !== "arrived" &&
+                      {selectedSchedule?.status !== "completed" &&
                         scheduleDetails.customizeTask && (
                           <Text style={styles.attendanceRequiredText}>
                             Cần điểm danh để thêm ghi chú.
@@ -1572,9 +1656,9 @@ export default function WorkScheduleScreen() {
 
       {/* Add Medical Note Modal */}
       <Modal
-        visible={showAddNoteModal}
+        visible={Boolean(showAddNoteModal)}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={resetMedicalNoteForm}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -1602,6 +1686,22 @@ export default function WorkScheduleScreen() {
                         setNewNote({ ...newNote, note: text })
                       }
                       placeholder="Nhập nội dung ghi chú..."
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>
+                      Lời khuyên:
+                    </Text>
+                    <TextInput
+                      style={styles.feedbackInput}
+                      multiline
+                      numberOfLines={3}
+                      value={newNote.advice}
+                      onChangeText={(text) =>
+                        setNewNote({ ...newNote, advice: text })
+                      }
+                      placeholder="Nhập lời khuyên (tuỳ chọn)"
                       placeholderTextColor="#999"
                     />
                   </View>
@@ -2148,6 +2248,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     fontStyle: "italic",
+  },
+  modalActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginTop: 10,
+  },
+  modalActionButtonText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: "600",
   },
   sectionHeader: {
     flexDirection: "row",

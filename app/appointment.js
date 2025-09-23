@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -59,6 +60,7 @@ export default function AppointmentScreen() {
     customizeTaskID: null,
   });
   const [feedbackMap, setFeedbackMap] = useState({});
+  const [ratedByNursingId, setRatedByNursingId] = useState({});
 
   // Notification state
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -68,12 +70,17 @@ export default function AppointmentScreen() {
       const res = await FeedbackService.getAllFeedbacks();
       if (res.success && Array.isArray(res.data)) {
         const map = {};
+        const ratedMap = {};
         res.data.forEach((fb) => {
           if (fb.customizeTaskID != null) {
             map[fb.customizeTaskID] = fb;
           }
+          if (fb.nursingID != null) {
+            ratedMap[fb.nursingID] = true;
+          }
         });
         setFeedbackMap(map);
+        setRatedByNursingId(ratedMap);
       }
     };
     loadAllFeedbacks();
@@ -755,7 +762,7 @@ export default function AppointmentScreen() {
       return;
     }
     if (feedbackRate <= 0) {
-      alert("Vui lòng chọn số sao (1-5)");
+      Alert.alert("Thông báo", "Vui lòng chọn số sao (1-5)");
       return;
     }
 
@@ -768,7 +775,7 @@ export default function AppointmentScreen() {
     });
 
     if (result.success) {
-      alert("Cảm ơn bạn đã đánh giá!");
+      Alert.alert("Thông báo", "Cảm ơn bạn đã đánh giá!");
       setShowFeedbackModal(false);
       setFeedbackRate(0);
       setFeedbackContent("");
@@ -777,8 +784,27 @@ export default function AppointmentScreen() {
         serviceID: null,
         customizeTaskID: null,
       });
+      // Cập nhật local state để ẩn nút ngay
+      if (feedbackContext.nursingID) {
+        setRatedByNursingId((prev) => ({
+          ...prev,
+          [feedbackContext.nursingID]: true,
+        }));
+      }
+      // Reload screen to reflect new feedback state
+      try {
+        router.replace("/appointment");
+      } catch (_) {}
     } else {
-      alert(result.error || "Không thể gửi đánh giá");
+      const errText = String(result.error || "");
+      const isDuplicate =
+        /duplicate|already|exists|đã\s*đánh\s*giá/i.test(errText);
+      Alert.alert(
+        "Thông báo",
+        isDuplicate
+          ? "Bạn đã đánh giá người này không thể đánh giá lại nữa."
+          : errText || "Không thể gửi đánh giá"
+      );
     }
   };
 
@@ -830,7 +856,8 @@ export default function AppointmentScreen() {
       );
     }
 
-    if (!canFeedback) return null;
+    // Ẩn nút nếu đã đánh giá người này ở bất kỳ dịch vụ/lịch nào
+    if (!canFeedback || ratedByNursingId[task.nursingID]) return null;
 
     return (
       <TouchableOpacity
@@ -1310,23 +1337,18 @@ export default function AppointmentScreen() {
                     );
 
                     if (assignedTasks.length > 0) {
-                      // Tạo danh sách điều dưỡng với tên dịch vụ
+                      // Tạo danh sách điều dưỡng (không lặp lại tên dịch vụ)
                       const nurseServices = assignedTasks.map(
                         (task) => {
                           const nurse = nurses.find(
                             (n) => n.nursingID === task.nursingID
                           );
-                          const serviceInfo = services.find(
-                            (s) => s.serviceID === task.serviceID
-                          );
-                          const serviceName =
-                            serviceInfo?.serviceName ||
-                            `Dịch vụ ${task.serviceID}`;
                           const nurseName =
                             nurse?.fullName ||
                             "Điều dưỡng đã được gán";
                           return {
-                            label: `${serviceName}: ${nurseName}`,
+                            label:
+                              "Người làm:" + " " + `${nurseName}`,
                             task,
                           };
                         }
@@ -1536,7 +1558,26 @@ export default function AppointmentScreen() {
                                               now >= apptTime
                                             );
                                           })();
-                                          return canFeedback ? (
+
+                                          // Ẩn nếu đã có feedback cho task này hoặc đã từng đánh giá điều dưỡng này
+                                          const hasTaskFeedback =
+                                            !!feedbackMap[
+                                              task.customizeTaskID
+                                            ];
+                                          const nurseAlreadyRated =
+                                            !!ratedByNursingId[
+                                              assignedNurse.nursingID
+                                            ];
+
+                                          if (
+                                            !canFeedback ||
+                                            hasTaskFeedback ||
+                                            nurseAlreadyRated
+                                          ) {
+                                            return null;
+                                          }
+
+                                          return (
                                             <TouchableOpacity
                                               style={
                                                 styles.feedbackButton
@@ -1575,7 +1616,7 @@ export default function AppointmentScreen() {
                                                 </Text>
                                               </LinearGradient>
                                             </TouchableOpacity>
-                                          ) : null;
+                                          );
                                         })()}
                                       </View>
                                     ) : (
@@ -1615,22 +1656,25 @@ export default function AppointmentScreen() {
                               <View
                                 key={note.medicalNoteID}
                                 style={styles.medicalNoteItem}>
-                                <Text style={styles.noteContent}>
-                                  {note.note}
-                                </Text>
-                                <View style={styles.noteFooter}>
-                                  {nurseInfo && (
-                                    <Text
-                                      style={styles.noteFooterText}>
-                                      Điều dưỡng: {nurseInfo.fullName}
-                                    </Text>
-                                  )}
-                                  <Text style={styles.noteFooterText}>
-                                    Tạo lúc:{" "}
-                                    {MedicalNoteService.formatDateTime(
-                                      note.createdAt
-                                    )}
+                                <View style={styles.noteCard}>
+                                  <Text style={styles.noteContent}>
+                                    {note.note}
                                   </Text>
+                                  <View style={styles.noteMetaRow}>
+                                    {nurseInfo && (
+                                      <Text
+                                        style={styles.noteMetaText}>
+                                        Điều dưỡng:{" "}
+                                        {nurseInfo.fullName}
+                                      </Text>
+                                    )}
+                                    <Text style={styles.noteMetaText}>
+                                      Tạo lúc:{" "}
+                                      {MedicalNoteService.formatDateTime(
+                                        note.createdAt
+                                      )}
+                                    </Text>
+                                  </View>
                                 </View>
                               </View>
                             );
@@ -2203,6 +2247,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
     borderRadius: 10,
   },
+  noteCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e6e6e6",
+    marginBottom: 10,
+    width: "100%",
+    overflow: "hidden",
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
@@ -2229,15 +2283,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 8,
   },
-  noteFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 5,
+  noteMetaRow: {
+    flexDirection: "column",
+    alignItems: "flex-start",
   },
-  noteFooterText: {
+  noteMetaText: {
     fontSize: 12,
     color: "#666",
+    marginTop: 2,
+    flexWrap: "wrap",
+    alignSelf: "flex-start",
+    maxWidth: "100%",
   },
   noMedicalNotesContainer: {
     padding: 20,

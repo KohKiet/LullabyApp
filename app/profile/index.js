@@ -2461,14 +2461,11 @@ export default function ProfileScreen() {
                       //   enrichedUser
                       // );
                       setUserData(enrichedUser);
-                      Alert.alert(
-                        "Debug",
-                        "Data enriched successfully!"
-                      );
+                      Alert.alert("Thông báo", "Làm giàu dữ liệu thành công!");
                     }
                   } catch (error) {
                     // console.error("🔍 Error force enriching:", error);
-                    Alert.alert("Error", "Failed to enrich data");
+                    Alert.alert("Lỗi", "Không thể làm giàu dữ liệu");
                   }
                 }}>
                 <Text style={styles.debugButtonText}>
