@@ -47,6 +47,18 @@ export default function HomeScreen() {
   const [pendingBookingType, setPendingBookingType] = useState(null); // 'service' hoặc 'package'
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
+  // Redirect to login if not authenticated on app start
+  useEffect(() => {
+    (async () => {
+      try {
+        const status = await AuthService.isLoggedIn();
+        if (!status?.isLoggedIn) {
+          router.replace("/auth/login");
+        }
+      } catch (_) {}
+    })();
+  }, []);
+
   useEffect(() => {
     loadUserData();
   }, []);

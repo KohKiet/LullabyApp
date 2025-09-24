@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -85,10 +86,13 @@ export default function LoginScreen() {
       style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Đăng nhập</Text>
-          <Text style={styles.subtitle}>
-            Chào mừng bạn quay trở lại!
-          </Text>
+          <Image
+            source={require("../../assets/images/Logo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>Welcome to Lullaby</Text>
+          <Text style={styles.subtitle}>Đăng nhập để tiếp tục</Text>
         </View>
 
         <View style={styles.loginCard}>
@@ -187,15 +191,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 30,
   },
+  logoImage: {
+    width: 190,
+    height: 190,
+    marginBottom: 12,
+    tintColor: "#FFFFFF",
+  },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#333",
+    color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: "#FFFFFF",
   },
   loginCard: {
     backgroundColor: "white",

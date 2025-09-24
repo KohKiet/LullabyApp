@@ -98,6 +98,7 @@ export default function WorkScheduleScreen() {
   // View medical notes states
   const [showMedicalNotesModal, setShowMedicalNotesModal] =
     useState(false);
+  const [showTestModal, setShowTestModal] = useState(false);
   const [isLoadingMedicalNotes, setIsLoadingMedicalNotes] =
     useState(false);
 
@@ -120,8 +121,15 @@ export default function WorkScheduleScreen() {
   const canMarkAttendance = (schedule) => {
     if (!schedule || !schedule.workDate) return false;
 
-    // Chỉ cho phép điểm danh sau khi đã điểm danh "đã đến"
-    return schedule.status === "arrived";
+    const now = new Date();
+    const endTime = new Date(schedule.endTime);
+
+    // Chỉ cho phép điểm danh sau khi đã điểm danh "đã đến" và sau thời gian kết thúc
+    // Hoặc khi status đã completed nhưng chưa điểm danh
+    return (
+      (schedule.status === "arrived" && now >= endTime) ||
+      (schedule.status === "completed" && !schedule.isAttended)
+    );
   };
 
   // Xử lý điểm danh "đã đến"
@@ -187,18 +195,33 @@ export default function WorkScheduleScreen() {
     if (!canMarkAttendance(schedule)) {
       Alert.alert(
         "Không thể điểm danh",
-        "Chỉ có thể điểm danh sau khi đã điểm danh 'đã đến'."
+        "Chỉ có thể điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc."
       );
       return;
     }
 
     try {
-      const result = await WorkScheduleService.updateStatus(
+      // Gọi API cập nhật status thành completed
+      const statusResult = await WorkScheduleService.updateStatus(
         schedule.workScheduleID,
         "completed"
       );
 
-      if (result.success) {
+      if (!statusResult.success) {
+        Alert.alert(
+          "Lỗi",
+          statusResult.error || "Không thể cập nhật trạng thái"
+        );
+        return;
+      }
+
+      // Gọi API cập nhật isAttended
+      const attendedResult =
+        await WorkScheduleService.updateIsAttended(
+          schedule.workScheduleID
+        );
+
+      if (attendedResult.success) {
         Alert.alert("Thành công", "Đã điểm danh thành công!");
 
         // Cập nhật local state
@@ -226,7 +249,10 @@ export default function WorkScheduleScreen() {
             : prev
         );
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể điểm danh");
+        Alert.alert(
+          "Lỗi",
+          attendedResult.error || "Không thể điểm danh"
+        );
       }
     } catch (error) {
       console.error("Error marking attendance:", error);
@@ -237,6 +263,11 @@ export default function WorkScheduleScreen() {
   // Load medical notes cho schedule
   const loadMedicalNotes = async (schedule, customizeTask) => {
     try {
+      console.log("loadMedicalNotes called with:", {
+        schedule,
+        customizeTask,
+      });
+
       // Sử dụng customizeTaskID từ schedule parameter trước, nếu không có thì dùng từ scheduleDetails
       let customizeTaskID = schedule?.customizeTaskID;
 
@@ -244,34 +275,46 @@ export default function WorkScheduleScreen() {
         customizeTaskID = customizeTask.customizeTaskID;
       }
 
+      console.log("Using customizeTaskID:", customizeTaskID);
+
       if (!customizeTaskID) {
+        console.log("No customizeTaskID found, setting empty notes");
         setMedicalNotes([]);
         return;
       }
 
       // Thử dùng endpoint riêng trước
+      console.log("Trying getMedicalNotesByCustomizeTaskId...");
       let result =
         await MedicalNoteService.getMedicalNotesByCustomizeTaskId(
           customizeTaskID
         );
 
+      console.log("getMedicalNotesByCustomizeTaskId result:", result);
+
       // Nếu endpoint riêng không hoạt động, thử dùng getAll và filter
       if (!result.success || !result.data) {
+        console.log("Trying getAllMedicalNotes as fallback...");
         const allNotesResult =
           await MedicalNoteService.getAllMedicalNotes();
+
+        console.log("getAllMedicalNotes result:", allNotesResult);
 
         if (allNotesResult.success && allNotesResult.data) {
           // Filter theo customizeTaskID
           const filteredNotes = allNotesResult.data.filter(
             (note) => note.customizeTaskID === customizeTaskID
           );
+          console.log("Filtered notes:", filteredNotes);
           result = { success: true, data: filteredNotes };
         }
       }
 
       if (result.success) {
+        console.log("Setting medical notes:", result.data);
         setMedicalNotes(result.data);
       } else {
+        console.log("No success, setting empty notes");
         setMedicalNotes([]);
       }
     } catch (error) {
@@ -347,6 +390,18 @@ export default function WorkScheduleScreen() {
     loadUserData();
     checkUnreadNotifications();
   }, []);
+
+  // Debug modal state changes
+  useEffect(() => {
+    console.log(
+      "showMedicalNotesModal changed to:",
+      showMedicalNotesModal
+    );
+  }, [showMedicalNotesModal]);
+
+  useEffect(() => {
+    console.log("showTestModal changed to:", showTestModal);
+  }, [showTestModal]);
 
   const checkUnreadNotifications = async () => {
     try {
@@ -714,15 +769,40 @@ export default function WorkScheduleScreen() {
     setShowAddNoteModal(true);
   };
 
-  // Medical notes functions
+  // Medical notes functions (open inline on top of detail modal)
   const openMedicalNotesModal = async () => {
+    console.log(
+      "Opening medical notes modal inline over detail modal"
+    );
     setShowMedicalNotesModal(true);
-    await loadMedicalNotesForService();
+    setIsLoadingMedicalNotes(true);
+    try {
+      if (
+        scheduleDetails.careProfile &&
+        scheduleDetails.customizeTask
+      ) {
+        // Load all notes for the same careProfile and same service
+        await loadMedicalNotesForService();
+      } else {
+        console.log("Missing careProfile or customizeTask");
+        setMedicalNotes([]);
+      }
+    } catch (error) {
+      console.error("Error loading medical notes:", error);
+      setMedicalNotes([]);
+    } finally {
+      setIsLoadingMedicalNotes(false);
+    }
   };
 
   const closeMedicalNotesModal = () => {
+    console.log("Closing medical notes modal...");
     setShowMedicalNotesModal(false);
-    setMedicalNotes([]);
+    // Clear data after modal closes
+    setTimeout(() => {
+      setMedicalNotes([]);
+      setIsLoadingMedicalNotes(false);
+    }, 200);
   };
 
   const loadMedicalNotesForService = async () => {
@@ -939,43 +1019,47 @@ export default function WorkScheduleScreen() {
 
             <View style={styles.detailRow}>
               <Text style={styles.detailText}>
-                {schedule.isAttended
+                {schedule.isAttended ||
+                schedule.status === "completed"
                   ? "Đã tham gia"
                   : "Chưa tham gia"}
               </Text>
             </View>
 
             {/* Nút "Đã đến" - hiện khi chưa điểm danh "đã đến" và trong khoảng thời gian cho phép */}
-            {schedule.status !== "arrived" && isToday && (
-              <View style={styles.attendanceRow}>
-                <TouchableOpacity
-                  style={styles.attendanceButton}
-                  onPress={() => handleMarkArrived(schedule)}
-                  disabled={!canMarkArrived(schedule)}>
-                  <Ionicons
-                    name="location"
-                    size={18}
-                    color={
-                      canMarkArrived(schedule) ? "#2196F3" : "#999"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.attendanceButtonText,
-                      {
-                        color: canMarkArrived(schedule)
-                          ? "#2196F3"
-                          : "#999",
-                      },
-                    ]}>
-                    Đã đến
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {schedule.status !== "arrived" &&
+              schedule.status !== "completed" &&
+              isToday && (
+                <View style={styles.attendanceRow}>
+                  <TouchableOpacity
+                    style={styles.attendanceButton}
+                    onPress={() => handleMarkArrived(schedule)}
+                    disabled={!canMarkArrived(schedule)}>
+                    <Ionicons
+                      name="location"
+                      size={18}
+                      color={
+                        canMarkArrived(schedule) ? "#2196F3" : "#999"
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.attendanceButtonText,
+                        {
+                          color: canMarkArrived(schedule)
+                            ? "#2196F3"
+                            : "#999",
+                        },
+                      ]}>
+                      Đã đến
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
             {/* Nút "Điểm danh" - chỉ hiện khi đã "Đã đến" và chưa điểm danh tham gia */}
-            {schedule.status === "arrived" &&
+            {(schedule.status === "arrived" ||
+              schedule.status === "completed") &&
               !schedule.isAttended &&
               isToday && (
                 <View style={styles.attendanceRow}>
@@ -1006,7 +1090,9 @@ export default function WorkScheduleScreen() {
                   </TouchableOpacity>
                   {!canMarkAttendance(schedule) && (
                     <Text style={styles.attendanceNote}>
-                      Chỉ điểm danh sau khi đã điểm danh "đã đến"
+                      {schedule.status === "completed"
+                        ? "Đã hoàn thành, có thể điểm danh"
+                        : "Chỉ điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc"}
                     </Text>
                   )}
                 </View>
@@ -1048,6 +1134,101 @@ export default function WorkScheduleScreen() {
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
+
+            {/* Inline Medical Notes Overlay (works reliably on iOS) */}
+            {showMedicalNotesModal && (
+              <View
+                pointerEvents="auto"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000,
+                }}>
+                <View
+                  style={{
+                    backgroundColor: "white",
+                    width: "90%",
+                    maxHeight: "80%",
+                    borderRadius: 16,
+                    overflow: "hidden",
+                  }}>
+                  <View
+                    style={{
+                      padding: 16,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#eee",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}>
+                    <Text
+                      style={{ fontSize: 18, fontWeight: "bold" }}>
+                      Ghi chú y tế ({medicalNotes.length})
+                    </Text>
+                    <TouchableOpacity
+                      onPress={closeMedicalNotesModal}>
+                      <Ionicons name="close" size={24} color="#333" />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView style={{ padding: 16 }}>
+                    {isLoadingMedicalNotes ? (
+                      <Text style={{ textAlign: "center" }}>
+                        Đang tải ghi chú...
+                      </Text>
+                    ) : medicalNotes.length > 0 ? (
+                      medicalNotes.map((note) => (
+                        <View
+                          key={note.medicalNoteID}
+                          style={{
+                            backgroundColor: "#F8F9FA",
+                            borderRadius: 10,
+                            padding: 12,
+                            marginBottom: 12,
+                            borderWidth: 1,
+                            borderColor: "#E0E0E0",
+                          }}>
+                          <Text
+                            style={{
+                              fontWeight: "bold",
+                              marginBottom: 6,
+                            }}>
+                            {note.nursingName ||
+                              `Chuyên viên #${note.nursingID}`}{" "}
+                            •{" "}
+                            {new Date(
+                              note.createdAt
+                            ).toLocaleDateString("vi-VN")}
+                          </Text>
+                          <Text style={{ color: "#333" }}>
+                            {note.note}
+                          </Text>
+                          {note.advice ? (
+                            <Text
+                              style={{ color: "#666", marginTop: 6 }}>
+                              Lời khuyên: {note.advice}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ))
+                    ) : (
+                      <Text
+                        style={{
+                          textAlign: "center",
+                          color: "#666",
+                        }}>
+                        Chưa có ghi chú nào
+                      </Text>
+                    )}
+                  </ScrollView>
+                </View>
+              </View>
+            )}
 
             {isLoadingDetails ? (
               <View style={styles.loadingContainer}>
@@ -1733,12 +1914,79 @@ export default function WorkScheduleScreen() {
         </View>
       </Modal>
 
-      {/* View Medical Notes Modal */}
+      {/* Simple Test Modal */}
       <Modal
         visible={showMedicalNotesModal}
         transparent={true}
         animationType="slide"
         onRequestClose={closeMedicalNotesModal}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}>
+          <View
+            style={{
+              backgroundColor: "white",
+              padding: 20,
+              borderRadius: 10,
+              width: "80%",
+              maxHeight: "80%",
+            }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                marginBottom: 10,
+              }}>
+              Test Modal - Medical Notes
+            </Text>
+            <Text style={{ marginBottom: 20 }}>
+              This is a test modal. If you can see this, the modal
+              system is working!
+            </Text>
+            <Text style={{ marginBottom: 20 }}>
+              Medical Notes Count: {medicalNotes.length}
+            </Text>
+            {medicalNotes.length > 0 && (
+              <View style={{ marginBottom: 20 }}>
+                <Text style={{ fontWeight: "bold" }}>Notes:</Text>
+                {medicalNotes.map((note, index) => (
+                  <Text key={index} style={{ marginLeft: 10 }}>
+                    {note.note}
+                  </Text>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#4FC3F7",
+                padding: 10,
+                borderRadius: 5,
+                alignItems: "center",
+              }}
+              onPress={closeMedicalNotesModal}>
+              <Text style={{ color: "white", fontWeight: "bold" }}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* View Medical Notes Modal - Original */}
+      {console.log(
+        "Rendering modal, showMedicalNotesModal:",
+        showMedicalNotesModal
+      )}
+      <Modal
+        visible={false}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeMedicalNotesModal}>
+        {console.log("Modal is visible, rendering content")}
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1757,6 +2005,15 @@ export default function WorkScheduleScreen() {
               showsVerticalScrollIndicator={true}
               bounces={true}
               contentContainerStyle={styles.scrollContentContainer}>
+              <Text
+                style={[
+                  styles.loadingText,
+                  { fontSize: 14, color: "#666", marginBottom: 10 },
+                ]}>
+                Debug: Modal is open, Loading:{" "}
+                {isLoadingMedicalNotes ? "Yes" : "No"}, Notes:{" "}
+                {medicalNotes.length}
+              </Text>
               {isLoadingMedicalNotes ? (
                 <View style={styles.loadingContainer}>
                   <Text style={styles.loadingText}>
@@ -1852,6 +2109,19 @@ export default function WorkScheduleScreen() {
                   <Text style={styles.emptyStateText}>
                     Chưa có ghi chú y tế nào cho dịch vụ này
                   </Text>
+                  <Text
+                    style={[
+                      styles.emptyStateText,
+                      { fontSize: 12, marginTop: 10 },
+                    ]}>
+                    CustomizeTaskID:{" "}
+                    {scheduleDetails.customizeTask?.customizeTaskID ||
+                      "N/A"}
+                  </Text>
+                  <Text
+                    style={[styles.emptyStateText, { fontSize: 12 }]}>
+                    Medical Notes Count: {medicalNotes.length}
+                  </Text>
                 </View>
               )}
             </ScrollView>
@@ -1866,6 +2136,109 @@ export default function WorkScheduleScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Simple Test Modal - Completely Separate */}
+      {showTestModal && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.8)",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}>
+          <View
+            style={{
+              backgroundColor: "white",
+              padding: 30,
+              borderRadius: 15,
+              width: "90%",
+              maxHeight: "80%",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 3.84,
+              elevation: 5,
+            }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "bold",
+                marginBottom: 15,
+                textAlign: "center",
+                color: "#333",
+              }}>
+              🎉 Test Modal Working!
+            </Text>
+            <Text
+              style={{
+                fontSize: 16,
+                marginBottom: 20,
+                textAlign: "center",
+                color: "#666",
+              }}>
+              If you can see this modal, the modal system is working
+              correctly!
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                marginBottom: 20,
+                textAlign: "center",
+                color: "#888",
+              }}>
+              Medical Notes Count: {medicalNotes.length}
+            </Text>
+            {medicalNotes.length > 0 && (
+              <View style={{ marginBottom: 20 }}>
+                <Text
+                  style={{ fontWeight: "bold", marginBottom: 10 }}>
+                  Available Notes:
+                </Text>
+                {medicalNotes.map((note, index) => (
+                  <View
+                    key={index}
+                    style={{
+                      backgroundColor: "#f0f0f0",
+                      padding: 10,
+                      borderRadius: 5,
+                      marginBottom: 5,
+                    }}>
+                    <Text style={{ fontSize: 14 }}>
+                      {note.note || "No note content"}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#4FC3F7",
+                padding: 15,
+                borderRadius: 8,
+                alignItems: "center",
+                marginTop: 10,
+              }}
+              onPress={() => {
+                console.log("Closing test modal");
+                setShowTestModal(false);
+              }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontWeight: "bold",
+                  fontSize: 16,
+                }}>
+                Close Modal
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
