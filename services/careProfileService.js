@@ -4,6 +4,27 @@ import { CARE_PROFILE_ENDPOINTS } from "./apiConfig";
 const NETWORK_TIMEOUT = 10000;
 
 class CareProfileService {
+  // Map backend English errors to Vietnamese for display
+  translateErrorMessage(message) {
+    if (!message) return message;
+
+    // Match: CareProfile name must match the first CareProfile name: '...'
+    const matchName = message.match(
+      /CareProfile name must match the first CareProfile name:?\s*'([^']+)'/i
+    );
+    if (matchName) {
+      const firstName = matchName[1];
+      return `Tên hồ sơ chăm sóc phải trùng với tên hồ sơ đầu tiên: '${firstName}'.`;
+    }
+
+    // Generic fallbacks
+    if (/Create failed/i.test(message)) return "Tạo hồ sơ thất bại";
+    if (/Update failed/i.test(message))
+      return "Cập nhật hồ sơ thất bại";
+    if (/Delete failed/i.test(message)) return "Xóa hồ sơ thất bại";
+
+    return message;
+  }
   // Helper function to create fetch with timeout
   async fetchWithTimeout(url, options, timeout = NETWORK_TIMEOUT) {
     const controller = new AbortController();
@@ -108,15 +129,22 @@ class CareProfileService {
         let errorMessage = "Create failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message || errorData.error || errorMessage;
+          errorMessage = this.translateErrorMessage(
+            errorData.message || errorData.error || errorMessage
+          );
         } catch (parseError) {
           // Ignore parse error, use default message
         }
-        return { success: false, error: errorMessage };
+        return {
+          success: false,
+          error: this.translateErrorMessage(errorMessage),
+        };
       }
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: this.translateErrorMessage(error.message),
+      };
     }
   }
 
@@ -141,15 +169,22 @@ class CareProfileService {
         let errorMessage = "Update failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message || errorData.error || errorMessage;
+          errorMessage = this.translateErrorMessage(
+            errorData.message || errorData.error || errorMessage
+          );
         } catch (parseError) {
           // Ignore parse error, use default message
         }
-        return { success: false, error: errorMessage };
+        return {
+          success: false,
+          error: this.translateErrorMessage(errorMessage),
+        };
       }
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: this.translateErrorMessage(error.message),
+      };
     }
   }
 
@@ -172,15 +207,22 @@ class CareProfileService {
         let errorMessage = "Delete failed";
         try {
           const errorData = await response.json();
-          errorMessage =
-            errorData.message || errorData.error || errorMessage;
+          errorMessage = this.translateErrorMessage(
+            errorData.message || errorData.error || errorMessage
+          );
         } catch (parseError) {
           // Ignore parse error, use default message
         }
-        return { success: false, error: errorMessage };
+        return {
+          success: false,
+          error: this.translateErrorMessage(errorMessage),
+        };
       }
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: this.translateErrorMessage(error.message),
+      };
     }
   }
 

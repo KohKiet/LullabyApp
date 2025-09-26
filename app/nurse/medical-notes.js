@@ -42,11 +42,14 @@ export default function NurseMedicalNotesScreen() {
         setMedicalNotes(result.data);
       } else {
         console.error("Error loading medical notes:", result.error);
-        Alert.alert("Lỗi", "Không thể tải danh sách ghi chú y tế");
+        Alert.alert(
+          "Thông báo",
+          "Không thể tải danh sách ghi chú y tế"
+        );
       }
     } catch (error) {
       console.error("Error loading medical notes:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải dữ liệu");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi tải dữ liệu");
     } finally {
       setIsLoading(false);
     }
@@ -55,12 +58,12 @@ export default function NurseMedicalNotesScreen() {
   const handleCreateNote = async () => {
     try {
       if (!formData.customizeTaskID.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập ID task");
+        Alert.alert("Thông báo", "Vui lòng nhập ID task");
         return;
       }
 
       if (!formData.note.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập nội dung ghi chú");
+        Alert.alert("Thông báo", "Vui lòng nhập nội dung ghi chú");
         return;
       }
 
@@ -74,13 +77,13 @@ export default function NurseMedicalNotesScreen() {
         loadMedicalNotes();
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể tạo ghi chú y tế"
         );
       }
     } catch (error) {
       console.error("Error creating medical note:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo ghi chú y tế");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi tạo ghi chú y tế");
     }
   };
 
@@ -89,7 +92,7 @@ export default function NurseMedicalNotesScreen() {
       if (!selectedNote) return;
 
       if (!formData.note.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập nội dung ghi chú");
+        Alert.alert("Thông báo", "Vui lòng nhập nội dung ghi chú");
         return;
       }
 
@@ -105,13 +108,16 @@ export default function NurseMedicalNotesScreen() {
         loadMedicalNotes();
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể cập nhật ghi chú y tế"
         );
       }
     } catch (error) {
       console.error("Error updating medical note:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi cập nhật ghi chú y tế");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi cập nhật ghi chú y tế"
+      );
     }
   };
 

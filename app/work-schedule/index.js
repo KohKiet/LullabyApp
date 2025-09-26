@@ -185,7 +185,7 @@ export default function WorkScheduleScreen() {
         );
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể điểm danh 'đã đến'"
         );
       }
@@ -227,7 +227,7 @@ export default function WorkScheduleScreen() {
 
       if (!statusResult.success) {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           statusResult.error || "Không thể cập nhật trạng thái"
         );
         return;
@@ -268,7 +268,7 @@ export default function WorkScheduleScreen() {
         );
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           attendedResult.error || "Không thể điểm danh"
         );
       }

@@ -798,7 +798,7 @@ export default function ProfileScreen() {
         closeEditForm();
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể cập nhật hồ sơ chăm sóc"
         );
       }
@@ -1172,7 +1172,7 @@ export default function ProfileScreen() {
         setSelectedZone(null);
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể tạo hồ sơ chăm sóc"
         );
       }

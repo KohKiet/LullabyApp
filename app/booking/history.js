@@ -93,12 +93,15 @@ export default function BookingHistoryScreen() {
         await loadWorkSchedules();
         // await loadAllFeedbacks(); // ĐÃ XÓA - không còn chức năng feedback
       } else {
-        Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không thể tải thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
       console.error("Error loading user data:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       router.replace("/auth/login");
     }
   };
@@ -361,7 +364,7 @@ export default function BookingHistoryScreen() {
       }
     } catch (error) {
       console.error("Error loading booking history:", error);
-      Alert.alert("Lỗi", "Không thể tải lịch sử đặt lịch");
+      Alert.alert("Thông báo", "Không thể tải lịch sử đặt lịch");
       setBookings([]);
     } finally {
       setIsLoading(false);
@@ -479,7 +482,7 @@ export default function BookingHistoryScreen() {
       });
     } catch (error) {
       console.error("Error loading booking details:", error);
-      Alert.alert("Lỗi", "Không thể tải chi tiết lịch hẹn");
+      Alert.alert("Thông báo", "Không thể tải chi tiết lịch hẹn");
     }
   };
 
@@ -836,7 +839,7 @@ export default function BookingHistoryScreen() {
       const userResult = await AuthService.getUserData();
       if (!userResult) {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           "Không thể kiểm tra tài khoản. Vui lòng thử lại.",
           [{ text: "OK", style: "default" }]
         );
@@ -853,7 +856,7 @@ export default function BookingHistoryScreen() {
 
       if (!accountID && !walletID) {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           "Không tìm thấy ID tài khoản hoặc wallet.",
           [{ text: "OK", style: "default" }]
         );
@@ -993,9 +996,11 @@ export default function BookingHistoryScreen() {
       const booking = bookings.find((b) => b.bookingID === bookingID);
 
       if (!booking) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin đặt lịch.", [
-          { text: "OK", style: "default" },
-        ]);
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin đặt lịch.",
+          [{ text: "OK", style: "default" }]
+        );
         return;
       }
 
@@ -1140,7 +1145,10 @@ export default function BookingHistoryScreen() {
       const careProfile =
         bookingDetailsMap[task.bookingID]?.careProfile;
       if (!careProfile) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin hồ sơ chăm sóc");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin hồ sơ chăm sóc"
+        );
         return;
       }
 
@@ -1149,7 +1157,7 @@ export default function BookingHistoryScreen() {
         (zd) => zd.zoneDetailID === careProfile.zoneDetailID
       );
       if (!zoneDetail) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin khu vực");
+        Alert.alert("Thông báo", "Không tìm thấy thông tin khu vực");
         return;
       }
 
@@ -1161,7 +1169,10 @@ export default function BookingHistoryScreen() {
       );
 
       if (!packageForTask) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin gói dịch vụ");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin gói dịch vụ"
+        );
         return;
       }
 
@@ -1244,7 +1255,7 @@ export default function BookingHistoryScreen() {
       setShowNurseModal(true);
     } catch (error) {
       console.error("Error selecting nurse:", error);
-      Alert.alert("Lỗi", "Không thể chọn điều dưỡng viên");
+      Alert.alert("Thông báo", "Không thể chọn điều dưỡng viên");
     }
   };
 
@@ -1279,13 +1290,13 @@ export default function BookingHistoryScreen() {
         console.error("Error response:", errorData);
 
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           errorData.message || "Không thể cập nhật điều dưỡng viên"
         );
       }
     } catch (error) {
       console.error("Error updating nurse:", error);
-      Alert.alert("Lỗi", "Không thể cập nhật điều dưỡng viên");
+      Alert.alert("Thông báo", "Không thể cập nhật điều dưỡng viên");
     }
   };
 
@@ -1294,7 +1305,10 @@ export default function BookingHistoryScreen() {
       // Lấy care profile để biết zoneDetailID
       const careProfile = bookingDetailsMap[bookingID]?.careProfile;
       if (!careProfile) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin hồ sơ chăm sóc");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin hồ sơ chăm sóc"
+        );
         return;
       }
 
@@ -1303,14 +1317,17 @@ export default function BookingHistoryScreen() {
         (zd) => zd.zoneDetailID === careProfile.zoneDetailID
       );
       if (!zoneDetail) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin khu vực");
+        Alert.alert("Thông báo", "Không tìm thấy thông tin khu vực");
         return;
       }
 
       // Lấy thông tin service từ customize packages
       const customizePackages = customizePackagesMap[bookingID] || [];
       if (customizePackages.length === 0) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin gói dịch vụ");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin gói dịch vụ"
+        );
         return;
       }
 
@@ -1383,7 +1400,10 @@ export default function BookingHistoryScreen() {
           const firstFailed = updateResults.find((r) => !r.success);
           const errText =
             firstFailed?.error || "Không thể cập nhật tất cả task";
-          Alert.alert("Lỗi", translateUpdateNursingError(errText));
+          Alert.alert(
+            "Thông báo",
+            translateUpdateNursingError(errText)
+          );
         }
         return;
       }
@@ -1471,12 +1491,15 @@ export default function BookingHistoryScreen() {
         const firstFailed = updateResults.find((r) => !r.success);
         const errText =
           firstFailed?.error || "Không thể cập nhật tất cả task";
-        Alert.alert("Lỗi", translateUpdateNursingError(errText));
+        Alert.alert(
+          "Thông báo",
+          translateUpdateNursingError(errText)
+        );
       }
     } catch (error) {
       console.error("Error selecting nurse for booking:", error);
       Alert.alert(
-        "Lỗi",
+        "Thông báo",
         "Không thể chọn điều dưỡng viên cho lịch hẹn"
       );
     }
@@ -2477,7 +2500,7 @@ export default function BookingHistoryScreen() {
                   "Error cancelling booking (inner):",
                   innerError
                 );
-                Alert.alert("Lỗi", "Không thể hủy lịch hẹn");
+                Alert.alert("Thông báo", "Không thể hủy lịch hẹn");
               }
             },
           },
@@ -2485,7 +2508,7 @@ export default function BookingHistoryScreen() {
       );
     } catch (error) {
       console.error("Error cancelling booking:", error);
-      Alert.alert("Lỗi", "Không thể hủy lịch hẹn");
+      Alert.alert("Thông báo", "Không thể hủy lịch hẹn");
     }
   };
 
