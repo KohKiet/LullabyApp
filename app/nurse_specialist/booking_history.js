@@ -73,7 +73,10 @@ export default function BookingHistoryScreen() {
           loadWorkSchedules(1); // Try with ID 1 for testing
         }
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
@@ -81,7 +84,7 @@ export default function BookingHistoryScreen() {
         "BookingHistoryScreen: Error loading user data:",
         error
       );
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       setIsLoading(false);
     }
   };
@@ -117,7 +120,7 @@ export default function BookingHistoryScreen() {
           "BookingHistoryScreen: Failed to load work schedules:",
           result.error
         );
-        Alert.alert("Lỗi", "Không thể tải lịch sử đặt lịch");
+        Alert.alert("Thông báo", "Không thể tải lịch sử đặt lịch");
         setWorkSchedules([]);
       }
     } catch (error) {
@@ -125,7 +128,10 @@ export default function BookingHistoryScreen() {
         "BookingHistoryScreen: Error loading work schedules:",
         error
       );
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải lịch sử đặt lịch");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi tải lịch sử đặt lịch"
+      );
       setWorkSchedules([]);
     } finally {
       setIsLoading(false);
@@ -302,7 +308,10 @@ export default function BookingHistoryScreen() {
         "BookingHistoryScreen: Error loading schedule details:",
         error
       );
-      Alert.alert("Lỗi", "Không thể tải chi tiết lịch sử đặt lịch");
+      Alert.alert(
+        "Thông báo",
+        "Không thể tải chi tiết lịch sử đặt lịch"
+      );
     } finally {
       setIsLoadingDetails(false);
     }

@@ -155,18 +155,24 @@ export default function PackageListModal({
 
   const handleBooking = async () => {
     if (!selectedPackage) {
-      Alert.alert("Lỗi", "Vui lòng chọn một gói dịch vụ");
+      Alert.alert("Thông báo", "Vui lòng chọn một gói dịch vụ");
       return;
     }
     if (!isValidDateTime()) {
-      Alert.alert("Lỗi", "Vui lòng chọn thời gian đặt lịch hợp lệ");
+      Alert.alert(
+        "Thông báo",
+        "Vui lòng chọn thời gian đặt lịch hợp lệ"
+      );
       return;
     }
     const packageData = packages.find(
       (p) => p.serviceID === selectedPackage
     );
     if (!packageData) {
-      Alert.alert("Lỗi", "Không tìm thấy thông tin gói dịch vụ");
+      Alert.alert(
+        "Thông báo",
+        "Không tìm thấy thông tin gói dịch vụ"
+      );
       return;
     }
     if (onBooking) {

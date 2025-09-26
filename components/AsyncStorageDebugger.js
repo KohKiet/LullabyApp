@@ -73,7 +73,7 @@ export default function AsyncStorageDebugger() {
       loadStorageData();
     } catch (error) {
       console.error("🔍 Error clearing AsyncStorage:", error);
-      Alert.alert("Lỗi", "Không thể xóa AsyncStorage");
+      Alert.alert("Thông báo", "Không thể xóa AsyncStorage");
     }
   };
 
@@ -88,7 +88,7 @@ export default function AsyncStorageDebugger() {
       loadStorageData();
     } catch (error) {
       console.error("🔍 Error clearing user data:", error);
-      Alert.alert("Lỗi", "Không thể xóa user data");
+      Alert.alert("Thông báo", "Không thể xóa user data");
     }
   };
 

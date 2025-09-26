@@ -76,22 +76,19 @@ export default function WalletCard({ userData }) {
 
   const handleTopUp = async () => {
     if (!topUpAmount.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập số tiền");
+      Alert.alert("Thông báo", "Vui lòng nhập số tiền");
       return;
     }
 
     const amount = WalletService.parseAmount(topUpAmount);
     if (amount <= 0) {
-      Alert.alert("Lỗi", "Số tiền phải lớn hơn 0");
+      Alert.alert("Thông báo", "Số tiền phải lớn hơn 0");
       return;
     }
 
-    // Kiểm tra số tiền phải chia hết cho 1000 (3 số cuối là 0)
-    if (amount % 1000 !== 0) {
-      Alert.alert(
-        "Lỗi",
-        "Số tiền phải có 3 số cuối là 0 (ví dụ: 1,000, 2,000, 24,000)"
-      );
+    // Yêu cầu số tiền nạp phải lớn hơn 1,000 VNĐ
+    if (amount <= 1000) {
+      Alert.alert("Thông báo", "Số tiền phải lớn hơn 1,000 VNĐ");
       return;
     }
 
@@ -99,7 +96,7 @@ export default function WalletCard({ userData }) {
       // Kiểm tra wallet có tồn tại không
       if (!walletData?.walletID) {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           "Ví chưa được tạo. Vui lòng liên hệ admin."
         );
         return;
@@ -185,7 +182,7 @@ export default function WalletCard({ userData }) {
   // Validate amount format
   const validateAmountFormat = (amount) => {
     const cleanAmount = WalletService.parseAmount(amount);
-    return cleanAmount % 1000 === 0;
+    return cleanAmount > 1000;
   };
 
   const formatAmount = (amount) => {
@@ -323,7 +320,7 @@ export default function WalletCard({ userData }) {
 
             <View style={styles.modalBody}>
               <Text style={styles.modalLabel}>
-                Nhập số tiền (VNĐ) - Phải có 3 số cuối là 0
+                Nhập số tiền (VNĐ) - Tối thiểu > 1,000 VNĐ
               </Text>
               <TextInput
                 style={[
@@ -334,13 +331,13 @@ export default function WalletCard({ userData }) {
                 ]}
                 value={topUpAmount}
                 onChangeText={handleAmountInputChange}
-                placeholder="Ví dụ: 1,000, 2,000, 24,000"
+                placeholder="Ví dụ: 1,500; 2,345; 10,000"
                 keyboardType="numeric"
                 autoFocus
               />
               {topUpAmount && !validateAmountFormat(topUpAmount) && (
                 <Text style={styles.errorText}>
-                  Số tiền phải có 3 số cuối là 0
+                  Số tiền phải lớn hơn 1,000 VNĐ
                 </Text>
               )}
             </View>

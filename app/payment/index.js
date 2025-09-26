@@ -24,6 +24,7 @@ import ServiceTypeService from "../../services/serviceTypeService";
 import TransactionHistoryService from "../../services/transactionHistoryService";
 import WalletService from "../../services/walletService";
 import WishlistService from "../../services/wishlistService";
+import ZoneDetailService from "../../services/zoneDetailService";
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -618,9 +619,65 @@ export default function PaymentScreen() {
     setPickerSlotIndex(null);
   };
 
+  // Determine if changing relative is allowed for a given task
+  const canChangeRelativeForTask = (task) => {
+    try {
+      if (!task) return false;
+      // Disallow if booking is cancelled or completed
+      const status = (bookingData?.status || "").toLowerCase();
+      if (status === "cancelled" || status === "completed")
+        return false;
+
+      // Time-based restriction: allow only before startTime and not within 30 minutes window
+      const now = new Date();
+      const start = task.startTime ? new Date(task.startTime) : null;
+      if (!start || Number.isNaN(start.getTime())) return true; // if no start time, allow
+
+      // Do not allow after start
+      if (now >= start) return false;
+
+      // Do not allow within 30 minutes before start
+      const THIRTY_MIN_MS = 30 * 60 * 1000;
+      if (start.getTime() - now.getTime() <= THIRTY_MIN_MS)
+        return false;
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
   const openRelativePicker = (task) => {
+    // Guard by status/time window
+    if (!canChangeRelativeForTask(task)) {
+      Alert.alert(
+        "Không thể đổi người",
+        "Bạn chỉ có thể đổi người nhận dịch vụ trước giờ bắt đầu và cách ít nhất 30 phút."
+      );
+      return;
+    }
     setRelativePickerTask(task);
     setShowRelativePicker(true);
+  };
+
+  const chooseRelative = async (relativeID) => {
+    if (!relativePickerTask) return;
+    // Guard again right before commit
+    if (!canChangeRelativeForTask(relativePickerTask)) {
+      Alert.alert(
+        "Không thể đổi người",
+        "Đã quá thời gian cho phép để đổi người nhận dịch vụ."
+      );
+      setShowRelativePicker(false);
+      setRelativePickerTask(null);
+      return;
+    }
+    await assignRelative(
+      relativePickerTask.customizeTaskID,
+      relativeID
+    );
+    setShowRelativePicker(false);
+    setRelativePickerTask(null);
   };
 
   // Handle nurse selection change - clear previous selection and update tracking
@@ -644,16 +701,6 @@ export default function PaymentScreen() {
       ":",
       newNurseId
     );
-  };
-
-  const chooseRelative = async (relativeID) => {
-    if (!relativePickerTask) return;
-    await assignRelative(
-      relativePickerTask.customizeTaskID,
-      relativeID
-    );
-    setShowRelativePicker(false);
-    setRelativePickerTask(null);
   };
 
   const loadBookingData = async () => {
@@ -757,12 +804,15 @@ export default function PaymentScreen() {
           await loadPackageTasks(parsedData.packageData.serviceID);
         }
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin booking");
+        Alert.alert("Thông báo", "Không tìm thấy thông tin booking");
         router.back();
       }
     } catch (error) {
       console.error("Error loading from AsyncStorage:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải thông tin booking");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi tải thông tin booking"
+      );
       router.back();
     } finally {
       setIsLoading(false);
@@ -962,6 +1012,65 @@ export default function PaymentScreen() {
     }
 
     try {
+      // If system-selected mode, notify the zone manager to arrange staff
+      if (selectionMode === "system") {
+        try {
+          // Try to infer zoneID from care profile -> zoneDetail -> zone
+          let zoneID = null;
+          try {
+            // Load all zone details and find by care profile's zoneDetailID if present
+            const zoneDetailsResult =
+              await ZoneDetailService.getAllZoneDetails();
+            if (zoneDetailsResult.success) {
+              const zoneDetailId =
+                careProfileData?.zoneDetailID ||
+                careProfileData?.zoneDetailId;
+              const zd = (zoneDetailsResult.data || []).find(
+                (z) => z.zoneDetailID === zoneDetailId
+              );
+              if (zd) zoneID = zd.zoneID;
+            }
+          } catch (_) {}
+
+          // Fallback: try get all zones and match by city/zone name heuristics if needed (no-op if not available)
+          if (!zoneID) {
+            try {
+              const zonesResult =
+                await ZoneDetailService.getAllZones();
+              if (zonesResult.success) {
+                // Heuristic is skipped here; keep null zone if we cannot infer
+              }
+            } catch (_) {}
+          }
+
+          // If we have zoneID, attempt to find manager via zones list
+          if (zoneID) {
+            try {
+              const zonesResult =
+                await ZoneDetailService.getAllZones();
+              if (zonesResult.success) {
+                const zone = (zonesResult.data || []).find(
+                  (z) => z.zoneID === zoneID
+                );
+                const managerAccountID = zone?.managerID;
+                if (managerAccountID) {
+                  await NotificationService.createNotification({
+                    accountID: managerAccountID,
+                    message: "Bạn có yêu cầu điều phối nhân viên mới",
+                  });
+                }
+              }
+            } catch (_) {}
+          }
+        } catch (notifyErr) {
+          // Silent fail: payment flow should continue
+          console.warn(
+            "PaymentScreen: Could not notify manager:",
+            notifyErr
+          );
+        }
+      }
+
       // If user selected nurses manually, assign them to customize tasks before payment
       if (selectionMode === "user") {
         const tasksResult =
@@ -1069,7 +1178,7 @@ export default function PaymentScreen() {
         "PaymentScreen: Error when assigning nurses:",
         assignError
       );
-      Alert.alert("Lỗi", "Không thể lưu lựa chọn điều dưỡng.");
+      Alert.alert("Thông báo", "Không thể lưu lựa chọn điều dưỡng.");
       return;
     }
 
@@ -1081,7 +1190,10 @@ export default function PaymentScreen() {
       const accountID = careProfileData?.accountID;
 
       if (!accountID) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin tài khoản");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin tài khoản"
+        );
         setIsProcessingPayment(false);
         return;
       }
@@ -1150,11 +1262,14 @@ export default function PaymentScreen() {
           },
         ]);
       } else {
-        Alert.alert("Lỗi", data.message || "Thanh toán thất bại");
+        Alert.alert(
+          "Thông báo",
+          data.message || "Thanh toán thất bại"
+        );
       }
     } catch (error) {
       console.error("PaymentScreen: handlePayment error:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi thanh toán");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi thanh toán");
     } finally {
       setIsProcessingPayment(false);
     }
@@ -1173,11 +1288,14 @@ export default function PaymentScreen() {
         // Reload invoice data để cập nhật status
         loadInvoiceData(bookingId);
       } else {
-        Alert.alert("Lỗi", `Thanh toán thất bại: ${result.error}`);
+        Alert.alert(
+          "Thông báo",
+          `Thanh toán thất bại: ${result.error}`
+        );
       }
     } catch (error) {
       console.error("PaymentScreen: Error in processPayment:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi thanh toán");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi thanh toán");
     } finally {
       setIsProcessingPayment(false);
     }

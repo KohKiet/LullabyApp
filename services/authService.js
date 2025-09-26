@@ -336,6 +336,46 @@ class AuthService {
     }
   }
 
+  // Đổi mật khẩu bằng mật khẩu cũ (customer)
+  async resetPasswordByOldPassword(
+    identifier,
+    oldPassword,
+    newPassword
+  ) {
+    try {
+      const response = await this.fetchWithTimeout(
+        `${API_CONFIG.BASE_URL}/api/accounts/reset-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            accept: "*/*",
+          },
+          body: JSON.stringify({
+            emailOrPhoneNumber: identifier,
+            oldPassword,
+            newPassword,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response
+          .json()
+          .catch(() => ({ message: "OK" }));
+        return { success: true, data };
+      }
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const err = await response.json();
+        errorMessage = err.message || err.error || errorMessage;
+      } catch (_) {}
+      return { success: false, error: errorMessage };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Lấy thông tin chi tiết nursing specialist
   async fetchNursingSpecialistDetails(accountID) {
     try {

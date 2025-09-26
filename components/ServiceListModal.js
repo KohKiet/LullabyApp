@@ -213,11 +213,14 @@ export default function ServiceListModal({
 
   const handleBooking = async () => {
     if (Object.keys(selectedServices).length === 0) {
-      Alert.alert("Lỗi", "Vui lòng chọn ít nhất một dịch vụ");
+      Alert.alert("Thông báo", "Vui lòng chọn ít nhất một dịch vụ");
       return;
     }
     if (!isValidDateTime()) {
-      Alert.alert("Lỗi", "Vui lòng chọn thời gian đặt lịch hợp lệ");
+      Alert.alert(
+        "Thông báo",
+        "Vui lòng chọn thời gian đặt lịch hợp lệ"
+      );
       return;
     }
     const selectedServicesList = Object.entries(selectedServices).map(

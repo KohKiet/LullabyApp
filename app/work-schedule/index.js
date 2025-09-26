@@ -123,12 +123,17 @@ export default function WorkScheduleScreen() {
 
     const now = new Date();
     const endTime = new Date(schedule.endTime);
+    const cutoff = new Date(endTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours after endTime
 
     // Chỉ cho phép điểm danh sau khi đã điểm danh "đã đến" và sau thời gian kết thúc
     // Hoặc khi status đã completed nhưng chưa điểm danh
+    // Và không được trễ quá 2 giờ sau endTime
+    const withinCutoff = now <= cutoff;
+
     return (
-      (schedule.status === "arrived" && now >= endTime) ||
-      (schedule.status === "completed" && !schedule.isAttended)
+      withinCutoff &&
+      ((schedule.status === "arrived" && now >= endTime) ||
+        (schedule.status === "completed" && !schedule.isAttended))
     );
   };
 
@@ -186,13 +191,26 @@ export default function WorkScheduleScreen() {
       }
     } catch (error) {
       console.error("Error marking arrived:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi điểm danh 'đã đến'");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi điểm danh 'đã đến'"
+      );
     }
   };
 
   // Xử lý điểm danh (hoàn thành)
   const handleMarkAttendance = async (schedule) => {
     if (!canMarkAttendance(schedule)) {
+      const now = new Date();
+      const endTime = new Date(schedule.endTime);
+      const cutoff = new Date(endTime.getTime() + 2 * 60 * 60 * 1000);
+      if (now > cutoff) {
+        Alert.alert(
+          "Không thể điểm danh",
+          "Đã quá hạn 2 giờ sau thời gian kết thúc. Không thể điểm danh."
+        );
+        return;
+      }
       Alert.alert(
         "Không thể điểm danh",
         "Chỉ có thể điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc."
@@ -256,7 +274,7 @@ export default function WorkScheduleScreen() {
       }
     } catch (error) {
       console.error("Error marking attendance:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi điểm danh");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi điểm danh");
     }
   };
 
@@ -336,12 +354,15 @@ export default function WorkScheduleScreen() {
   // Thêm medical note mới
   const handleAddMedicalNote = async () => {
     if (!selectedSchedule) {
-      Alert.alert("Lỗi", "Không tìm thấy thông tin lịch làm việc");
+      Alert.alert(
+        "Thông báo",
+        "Không tìm thấy thông tin lịch làm việc"
+      );
       return;
     }
 
     if (!newNote.note.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập nội dung ghi chú");
+      Alert.alert("Thông báo", "Vui lòng nhập nội dung ghi chú");
       return;
     }
 
@@ -378,11 +399,14 @@ export default function WorkScheduleScreen() {
         // Reload medical notes
         await reloadMedicalNotes();
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể thêm ghi chú");
+        Alert.alert(
+          "Thông báo",
+          result.error || "Không thể thêm ghi chú"
+        );
       }
     } catch (error) {
       console.error("Error adding medical note:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi thêm ghi chú");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi thêm ghi chú");
     }
   };
 
@@ -467,7 +491,10 @@ export default function WorkScheduleScreen() {
           }
         }
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
@@ -475,7 +502,7 @@ export default function WorkScheduleScreen() {
         "WorkScheduleScreen: Error loading user data:",
         error
       );
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       setIsLoading(false);
     }
   };
@@ -511,7 +538,7 @@ export default function WorkScheduleScreen() {
           "WorkScheduleScreen: Failed to load work schedules:",
           result.error
         );
-        Alert.alert("Lỗi", "Không thể tải lịch làm việc");
+        Alert.alert("Thông báo", "Không thể tải lịch làm việc");
         setWorkSchedules([]);
       }
     } catch (error) {
@@ -519,7 +546,7 @@ export default function WorkScheduleScreen() {
         "WorkScheduleScreen: Error loading work schedules:",
         error
       );
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải lịch làm việc");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi tải lịch làm việc");
       setWorkSchedules([]);
     } finally {
       setIsLoading(false);
@@ -736,7 +763,10 @@ export default function WorkScheduleScreen() {
         "WorkScheduleScreen: Error loading schedule details:",
         error
       );
-      Alert.alert("Lỗi", "Không thể tải chi tiết lịch làm việc");
+      Alert.alert(
+        "Thông báo",
+        "Không thể tải chi tiết lịch làm việc"
+      );
     } finally {
       setIsLoadingDetails(false);
     }

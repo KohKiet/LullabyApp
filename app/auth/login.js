@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import AuthService from "../../services/authService";
 
+const PRIMARY_COLOR = "rgb(120, 179, 252)";
+
 export default function LoginScreen() {
   const router = useRouter();
   const [emailOrPhone, setEmailOrPhone] = useState("");
@@ -67,8 +69,7 @@ export default function LoginScreen() {
       } else {
         Alert.alert(
           "Lỗi",
-          result.error ||
-            "Email/Số điện thoại hoặc mật khẩu không đúng!"
+          "Email/Số điện thoại hoặc mật khẩu không đúng!"
         );
       }
     } catch (error) {
@@ -195,17 +196,20 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     marginBottom: 12,
-    tintColor: "#FFFFFF",
+    tintColor: PRIMARY_COLOR,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#FFFFFF",
+    color: PRIMARY_COLOR,
     marginBottom: 8,
+    textShadowColor: "rgb(254, 72, 209)",
+    textShadowOffset: { width: 0, height: 0.3 },
+    textShadowRadius: 1,
   },
   subtitle: {
     fontSize: 16,
-    color: "#FFFFFF",
+    color: "black",
   },
   loginCard: {
     backgroundColor: "white",

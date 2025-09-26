@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import AuthService from "../../services/authService";
+import BookingService from "../../services/bookingService";
 import CareProfileService from "../../services/careProfileService";
 import NotificationService from "../../services/notificationService";
 import NursingSpecialistService from "../../services/nursingSpecialistService";
@@ -61,6 +62,15 @@ export default function ProfileScreen() {
     useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
+  // Change password states (customer only)
+  const [showChangePasswordModal, setShowChangePasswordModal] =
+    useState(false);
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
   // Zone selection states
   const [zones, setZones] = useState([]);
   const [showZoneModal, setShowZoneModal] = useState(false);
@@ -74,6 +84,30 @@ export default function ProfileScreen() {
     setSelectedCareProfileForNotes,
   ] = useState(null);
   const [medicalNotes, setMedicalNotes] = useState([]);
+  // Helper: translate common server messages to Vietnamese
+  const translateToVietnamese = (message, context = {}) => {
+    try {
+      let text = String(message || "");
+      // Replace well-known delete-relative error
+      text = text.replace(
+        /Cannot\s+delete\s+Relative\s+with\s+ID\s+\d+\s+because\s+there\s+are\s+incomplete\s+bookings\s+associated\s+with\s+it\.?/i,
+        "Không thể xóa người liên quan vì đang gắn với lịch hẹn chưa hoàn tất."
+      );
+      // Generic terms
+      text = text.replace(/Relative/gi, "người liên quan");
+      text = text.replace(/cannot\s+delete/gi, "không thể xóa");
+      text = text.replace(
+        /incomplete\s+bookings/gi,
+        "lịch hẹn chưa hoàn tất"
+      );
+      text = text.replace(/associated\s+with\s+it/gi, "liên quan");
+      text = text.replace(/because/gi, "vì");
+      return text || "Có lỗi xảy ra";
+    } catch (_) {
+      return message || "Có lỗi xảy ra";
+    }
+  };
+
   const [isLoadingMedicalNotes, setIsLoadingMedicalNotes] =
     useState(false);
 
@@ -112,25 +146,31 @@ export default function ProfileScreen() {
           setUserData(user);
         }
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
     } finally {
       setIsLoading(false);
     }
   };
 
   const loadCareProfiles = async (accountID) => {
-    if (!userData) return;
+    if (!userData && !accountID) return;
 
     try {
       setIsLoadingCareProfiles(true);
 
+      const targetAccountID =
+        accountID || userData?.accountID || userData?.id;
+
       const result =
         await CareProfileService.getCareProfilesByAccountId(
-          accountID
+          targetAccountID
         );
 
       if (result.success) {
@@ -168,11 +208,14 @@ export default function ProfileScreen() {
           "ProfileScreen: Failed to load zones:",
           result.error
         );
-        Alert.alert("Lỗi", "Không thể tải danh sách khu vực");
+        Alert.alert("Thông báo", "Không thể tải danh sách khu vực");
       }
     } catch (error) {
       console.error("ProfileScreen: Error loading zones:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tải danh sách khu vực");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi tải danh sách khu vực"
+      );
     }
   };
 
@@ -284,7 +327,7 @@ export default function ProfileScreen() {
           // Không hiển thị thông báo thành công
         } else {
           Alert.alert(
-            "Lỗi",
+            "Thông báo",
             result.error || "Không thể cập nhật thông tin"
           );
         }
@@ -307,7 +350,7 @@ export default function ProfileScreen() {
         }
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể lưu thông tin");
+      Alert.alert("Thông báo", "Không thể lưu thông tin");
     }
   };
 
@@ -316,7 +359,7 @@ export default function ProfileScreen() {
       await AuthService.logout();
       router.replace("/auth/login");
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể đăng xuất");
+      Alert.alert("Thông báo", "Không thể đăng xuất");
     }
   };
 
@@ -340,17 +383,18 @@ export default function ProfileScreen() {
       );
 
       if (result.success) {
-        // Không hiển thị thông báo thành công
-        // Reload care profiles sau khi tạo thành công
-        await loadCareProfiles();
+        // Reload danh sách và refresh màn hình sau khi tạo thành công
+        await loadCareProfiles(userData.accountID || userData.id);
+        // Force a light refresh of user data and related lists
+        await loadUserData();
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           result.error || "Không thể tạo hồ sơ chăm sóc"
         );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể tạo hồ sơ chăm sóc");
+      Alert.alert("Thông báo", "Không thể tạo hồ sơ chăm sóc");
     }
   };
 
@@ -419,7 +463,26 @@ export default function ProfileScreen() {
     }
   };
 
-  const openZoneModal = () => {
+  const openZoneModal = async () => {
+    // If editing an existing profile, block zone change when there are bookings
+    try {
+      if (editingProfile && editingProfile.careProfileID) {
+        const bookingsResult =
+          await BookingService.getBookingsByCareProfileId(
+            editingProfile.careProfileID
+          );
+        if (bookingsResult.success) {
+          const hasAny = (bookingsResult.data || []).length > 0;
+          if (hasAny) {
+            Alert.alert(
+              "Không thể đổi khu vực",
+              "Hồ sơ này đã có lịch hẹn sắp tới nên không đổi được khu vực."
+            );
+            return;
+          }
+        }
+      }
+    } catch (_) {}
     if (zones.length === 0) {
       loadZones();
     }
@@ -582,7 +645,27 @@ export default function ProfileScreen() {
     }
   };
 
-  const selectZone = (zone) => {
+  const selectZone = async (zone) => {
+    // Block selecting a new zone if editing an existing profile that has bookings
+    try {
+      if (editingProfile && editingProfile.careProfileID) {
+        const bookingsResult =
+          await BookingService.getBookingsByCareProfileId(
+            editingProfile.careProfileID
+          );
+        if (bookingsResult.success) {
+          const hasAny = (bookingsResult.data || []).length > 0;
+          if (hasAny) {
+            Alert.alert(
+              "Không thể đổi khu vực",
+              "Hồ sơ này đã có lịch hẹn sắp tới nên không đổi được khu vực."
+            );
+            closeZoneModal();
+            return;
+          }
+        }
+      }
+    } catch (_) {}
     setSelectedZone(zone);
     handleCareProfileFormChange("zoneDetailID", zone.zoneDetailID);
     closeZoneModal();
@@ -633,17 +716,17 @@ export default function ProfileScreen() {
     try {
       // Validate form
       if (!careProfileForm.profileName.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập tên hồ sơ");
+        Alert.alert("Thông báo", "Vui lòng nhập tên hồ sơ");
         return;
       }
 
       if (!careProfileForm.dateOfBirth) {
-        Alert.alert("Lỗi", "Vui lòng chọn ngày sinh");
+        Alert.alert("Thông báo", "Vui lòng chọn ngày sinh");
         return;
       }
 
       if (!careProfileForm.phoneNumber.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập số điện thoại");
+        Alert.alert("Thông báo", "Vui lòng nhập số điện thoại");
         return;
       }
 
@@ -661,6 +744,43 @@ export default function ProfileScreen() {
         status: editingProfile.status || "Active",
       };
 
+      // If address changed and profile has upcoming booking, block the edit
+      try {
+        if (
+          editingProfile &&
+          updateData.address &&
+          updateData.address !== (editingProfile.address || "")
+        ) {
+          const bookingsResult =
+            await BookingService.getBookingsByCareProfileId(
+              editingProfile.careProfileID
+            );
+          if (bookingsResult.success) {
+            const hasUpcoming = (bookingsResult.data || []).some(
+              (b) => {
+                try {
+                  if (!b.workdate) return false;
+                  const start = new Date(b.workdate);
+                  return (
+                    start.getTime() > Date.now() &&
+                    b.status !== "cancelled"
+                  );
+                } catch (_) {
+                  return false;
+                }
+              }
+            );
+            if (hasUpcoming) {
+              Alert.alert(
+                "Không thể cập nhật",
+                "Hồ sơ này đã có lịch hẹn sắp tới nên không sửa được."
+              );
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+
       const result = await CareProfileService.updateCareProfile(
         editingProfile.careProfileID,
         updateData
@@ -671,8 +791,9 @@ export default function ProfileScreen() {
           "Thành công",
           `Đã cập nhật hồ sơ chăm sóc: ${result.data.careProfile.profileName}`
         );
-        // Reload care profiles sau khi update thành công
-        await loadCareProfiles();
+        // Reload danh sách và refresh màn hình sau khi cập nhật thành công
+        await loadCareProfiles(userData.accountID || userData.id);
+        await loadUserData();
         // Đóng form
         closeEditForm();
       } else {
@@ -682,11 +803,38 @@ export default function ProfileScreen() {
         );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể cập nhật hồ sơ chăm sóc");
+      Alert.alert("Thông báo", "Không thể cập nhật hồ sơ chăm sóc");
     }
   };
 
   const deleteCareProfile = async (profile) => {
+    // Guard: prevent deletion if this care profile has any upcoming bookings
+    try {
+      const bookingsResult =
+        await BookingService.getBookingsByCareProfileId(
+          profile.careProfileID
+        );
+      if (bookingsResult.success) {
+        const hasUpcoming = (bookingsResult.data || []).some((b) => {
+          try {
+            if (!b.workdate) return false;
+            const start = new Date(b.workdate);
+            return (
+              start.getTime() > Date.now() && b.status !== "cancelled"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+        if (hasUpcoming) {
+          Alert.alert(
+            "Không thể xóa",
+            "Hồ sơ này đã có lịch hẹn sắp tới nên không xóa được."
+          );
+          return;
+        }
+      }
+    } catch (_) {}
     Alert.alert(
       "Xác nhận xóa",
       `Bạn có chắc chắn muốn xóa hồ sơ "${profile.profileName}"?`,
@@ -711,7 +859,9 @@ export default function ProfileScreen() {
                   `Đã xóa hồ sơ chăm sóc: ${profile.profileName}`
                 );
                 // Reload care profiles sau khi xóa thành công
-                await loadCareProfiles();
+                await loadCareProfiles(
+                  userData.accountID || userData.id
+                );
               } else {
                 Alert.alert(
                   "Lỗi",
@@ -719,7 +869,10 @@ export default function ProfileScreen() {
                 );
               }
             } catch (error) {
-              Alert.alert("Lỗi", "Không thể xóa hồ sơ chăm sóc");
+              Alert.alert(
+                "Thông báo",
+                "Không thể xóa hồ sơ chăm sóc"
+              );
             }
           },
         },
@@ -762,12 +915,12 @@ export default function ProfileScreen() {
     try {
       // Validate form
       if (!relativeForm.relativeName.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập tên con");
+        Alert.alert("Thông báo", "Vui lòng nhập tên con");
         return;
       }
 
       if (!relativeForm.dateOfBirth) {
-        Alert.alert("Lỗi", "Vui lòng chọn ngày sinh");
+        Alert.alert("Thông báo", "Vui lòng chọn ngày sinh");
         return;
       }
 
@@ -794,10 +947,13 @@ export default function ProfileScreen() {
         // Close form
         closeRelativeForm();
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể thêm con");
+        Alert.alert(
+          "Thông báo",
+          result.error || "Không thể thêm con"
+        );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể thêm con");
+      Alert.alert("Thông báo", "Không thể thêm con");
     }
   };
 
@@ -834,12 +990,12 @@ export default function ProfileScreen() {
     try {
       // Validate form
       if (!relativeForm.relativeName.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập tên con");
+        Alert.alert("Thông báo", "Vui lòng nhập tên con");
         return;
       }
 
       if (!relativeForm.dateOfBirth) {
-        Alert.alert("Lỗi", "Vui lòng chọn ngày sinh");
+        Alert.alert("Thông báo", "Vui lòng chọn ngày sinh");
         return;
       }
 
@@ -885,12 +1041,14 @@ export default function ProfileScreen() {
         closeEditRelativeForm();
       } else {
         Alert.alert(
-          "Lỗi",
-          result.error || "Không thể cập nhật thông tin con"
+          "Thông báo",
+          translateToVietnamese(
+            result.error || "Không thể cập nhật thông tin con"
+          )
         );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể cập nhật thông tin con");
+      Alert.alert("Thông báo", "Không thể cập nhật thông tin con");
     }
   };
 
@@ -908,6 +1066,29 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              // Check if this relative is linked to any upcoming booking tasks
+              try {
+                const tasksRes =
+                  await CustomizeTaskService.getAllCustomizeTasks();
+                if (tasksRes.success) {
+                  const hasLinked = (tasksRes.data || []).some(
+                    (t) => {
+                      return (
+                        t.relativeID === relative.relativeID &&
+                        t.status !== "completed" &&
+                        t.status !== "cancelled"
+                      );
+                    }
+                  );
+                  if (hasLinked) {
+                    Alert.alert(
+                      "Không thể xóa",
+                      "Không thể xóa người liên quan tới lịch hẹn."
+                    );
+                    return;
+                  }
+                }
+              } catch (_) {}
               const result = await RelativeService.deleteRelative(
                 relative.relativeID
               );
@@ -921,12 +1102,14 @@ export default function ProfileScreen() {
                 await loadRelatives(relative.careProfileID);
               } else {
                 Alert.alert(
-                  "Lỗi",
-                  result.error || "Không thể xóa thông tin con"
+                  "Thông báo",
+                  translateToVietnamese(
+                    result.error || "Không thể xóa thông tin con"
+                  )
                 );
               }
             } catch (error) {
-              Alert.alert("Lỗi", "Không thể xóa thông tin con");
+              Alert.alert("Thông báo", "Không thể xóa thông tin con");
             }
           },
         },
@@ -938,22 +1121,22 @@ export default function ProfileScreen() {
     try {
       // Validate form
       if (!careProfileForm.profileName.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập tên hồ sơ");
+        Alert.alert("Thông báo", "Vui lòng nhập tên hồ sơ");
         return;
       }
 
       if (!careProfileForm.dateOfBirth) {
-        Alert.alert("Lỗi", "Vui lòng chọn ngày sinh");
+        Alert.alert("Thông báo", "Vui lòng chọn ngày sinh");
         return;
       }
 
       if (!careProfileForm.phoneNumber.trim()) {
-        Alert.alert("Lỗi", "Vui lòng nhập số điện thoại");
+        Alert.alert("Thông báo", "Vui lòng nhập số điện thoại");
         return;
       }
 
       if (!careProfileForm.zoneDetailID) {
-        Alert.alert("Lỗi", "Vui lòng chọn khu vực");
+        Alert.alert("Thông báo", "Vui lòng chọn khu vực");
         return;
       }
 
@@ -981,9 +1164,9 @@ export default function ProfileScreen() {
       );
 
       if (result.success) {
-        // Không hiển thị alert thành công
-        // Reload care profiles sau khi tạo thành công
-        await loadCareProfiles();
+        // Reload and refresh to ensure UI updates immediately
+        await loadCareProfiles(userData.accountID || userData.id);
+        await loadUserData();
         // Đóng form và reset
         closeCareProfileForm();
         setSelectedZone(null);
@@ -994,7 +1177,7 @@ export default function ProfileScreen() {
         );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể tạo hồ sơ chăm sóc");
+      Alert.alert("Thông báo", "Không thể tạo hồ sơ chăm sóc");
     }
   };
 
@@ -1307,6 +1490,21 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
 
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Khu vực:</Text>
+                    <Text style={styles.detailValue}>
+                      {(() => {
+                        const z = (zones || []).find(
+                          (item) =>
+                            item.zoneDetailID === profile.zoneDetailID
+                        );
+                        return (
+                          z?.displayName || `#${profile.zoneDetailID}`
+                        );
+                      })()}
+                    </Text>
+                  </View>
+
                   {profile.note && (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Ghi chú:</Text>
@@ -1563,7 +1761,7 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Địa chỉ</Text>
+              <Text style={styles.formLabel}>Địa chỉ *</Text>
               <TextInput
                 style={styles.formInput}
                 value={careProfileForm.address}
@@ -1575,14 +1773,14 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ghi chú</Text>
+              <Text style={styles.formLabel}>Ghi chú *</Text>
               <TextInput
                 style={[styles.formInput, styles.multilineInput]}
                 value={careProfileForm.note}
                 onChangeText={(text) =>
                   handleCareProfileFormChange("note", text)
                 }
-                placeholder="Nhập ghi chú (nếu có)"
+                placeholder="Nhập ghi chú"
                 multiline
                 numberOfLines={3}
               />
@@ -2231,6 +2429,25 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Customer only: Change Password button (separate button above Logout) */}
+          {!RoleService.isNursingSpecialist(
+            userData.role_id || userData.roleID
+          ) && (
+            <LinearGradient
+              colors={["#0e78ad", "#63c2f2"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logoutButton}>
+              <TouchableOpacity
+                style={styles.logoutButtonContent}
+                onPress={() => setShowChangePasswordModal(true)}>
+                <Text style={styles.logoutButtonText}>
+                  Đổi mật khẩu
+                </Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          )}
+
           <LinearGradient
             colors={["#ec1c3f", "#FFD9E6"]}
             start={{ x: 0, y: 0 }}
@@ -2276,6 +2493,154 @@ export default function ProfileScreen() {
         {renderEditRelativeForm()}
         {renderDatePicker()}
         {renderMedicalNotesModal()}
+
+        {/* Change Password Modal */}
+        <Modal
+          visible={showChangePasswordModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowChangePasswordModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Đổi mật khẩu</Text>
+                <TouchableOpacity
+                  onPress={() => setShowChangePasswordModal(false)}>
+                  <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.formContainer}>
+                <View style={styles.formField}>
+                  <Text style={styles.formLabel}>Mật khẩu cũ</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={changePasswordForm.oldPassword}
+                    onChangeText={(t) =>
+                      setChangePasswordForm((p) => ({
+                        ...p,
+                        oldPassword: t,
+                      }))
+                    }
+                    secureTextEntry
+                    placeholder="Nhập mật khẩu cũ"
+                  />
+                </View>
+                <View style={styles.formField}>
+                  <Text style={styles.formLabel}>Mật khẩu mới</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={changePasswordForm.newPassword}
+                    onChangeText={(t) =>
+                      setChangePasswordForm((p) => ({
+                        ...p,
+                        newPassword: t,
+                      }))
+                    }
+                    secureTextEntry
+                    placeholder="Nhập mật khẩu mới"
+                  />
+                </View>
+                <View style={styles.formField}>
+                  <Text style={styles.formLabel}>
+                    Xác nhận mật khẩu mới
+                  </Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={changePasswordForm.confirmPassword}
+                    onChangeText={(t) =>
+                      setChangePasswordForm((p) => ({
+                        ...p,
+                        confirmPassword: t,
+                      }))
+                    }
+                    secureTextEntry
+                    placeholder="Nhập lại mật khẩu mới"
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setShowChangePasswordModal(false)}>
+                  <Text style={styles.cancelButtonText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.submitButton}
+                  onPress={async () => {
+                    try {
+                      const iden =
+                        userData.phoneNumber ||
+                        userData.phone_number ||
+                        userData.email ||
+                        "";
+                      if (!iden) {
+                        Alert.alert(
+                          "Lỗi",
+                          "Không tìm thấy số điện thoại/email"
+                        );
+                        return;
+                      }
+                      if (
+                        !changePasswordForm.oldPassword ||
+                        !changePasswordForm.newPassword
+                      ) {
+                        Alert.alert(
+                          "Lỗi",
+                          "Vui lòng nhập đủ mật khẩu"
+                        );
+                        return;
+                      }
+                      if (
+                        changePasswordForm.newPassword !==
+                        changePasswordForm.confirmPassword
+                      ) {
+                        Alert.alert(
+                          "Lỗi",
+                          "Xác nhận mật khẩu không khớp"
+                        );
+                        return;
+                      }
+                      const res =
+                        await AuthService.resetPasswordByOldPassword(
+                          iden,
+                          changePasswordForm.oldPassword,
+                          changePasswordForm.newPassword
+                        );
+                      if (res.success) {
+                        Alert.alert(
+                          "Thông báo",
+                          res.data?.message ||
+                            "Đổi mật khẩu thành công"
+                        );
+                        setShowChangePasswordModal(false);
+                        setChangePasswordForm({
+                          oldPassword: "",
+                          newPassword: "",
+                          confirmPassword: "",
+                        });
+                      } else {
+                        Alert.alert(
+                          "Lỗi",
+                          res.error || "Không thể đổi mật khẩu"
+                        );
+                      }
+                    } catch (e) {
+                      Alert.alert(
+                        "Thông báo",
+                        "Không thể đổi mật khẩu"
+                      );
+                    }
+                  }}>
+                  <Text style={styles.submitButtonText}>
+                    Đổi mật khẩu
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Zone Selection Modal */}
         <Modal
@@ -2465,7 +2830,7 @@ export default function ProfileScreen() {
                     }
                   } catch (error) {
                     // console.error("🔍 Error force enriching:", error);
-                    Alert.alert("Lỗi", "Không thể làm giàu dữ liệu");
+                    Alert.alert("Thông báo", "Không thể làm giàu dữ liệu");
                   }
                 }}>
                 <Text style={styles.debugButtonText}>
@@ -2563,6 +2928,7 @@ const styles = StyleSheet.create({
     padding: 15,
     alignItems: "center",
     marginTop: 10,
+    marginBottom: 10,
   },
   logoutButtonText: {
     color: "white",

@@ -10,6 +10,43 @@ class NotificationService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // Create a new notification for a specific account
+  static async createNotification({ accountID, message }) {
+    try {
+      const response = await this.retryRequest(async () => {
+        const res = await fetch(
+          `${API_CONFIG.BASE_URL}/api/Notification`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ accountID, message }),
+            timeout: 10000,
+          }
+        );
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(
+            `HTTP ${res.status}: ${text || res.statusText}`
+          );
+        }
+
+        return res;
+      });
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      // Silently handle API errors to avoid noisy console overlays in production/dev
+      return {
+        success: false,
+        error: error.message || "Không thể tạo thông báo",
+      };
+    }
+  }
+
   // Helper function to retry failed requests
   static async retryRequest(requestFn, retries = this.MAX_RETRIES) {
     try {
@@ -48,10 +85,7 @@ class NotificationService {
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
-      console.error(
-        "NotificationService: getAllNotifications error:",
-        error
-      );
+      // Silent error handling
       return {
         success: false,
         error: error.message || "Không thể kết nối đến máy chủ",
@@ -84,10 +118,7 @@ class NotificationService {
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
-      console.error(
-        "NotificationService: getNotificationsByAccount error:",
-        error
-      );
+      // Silent error handling
       return {
         success: false,
         error: error.message || "Không thể tải thông báo",
@@ -124,7 +155,7 @@ class NotificationService {
       );
       return { success: true, data };
     } catch (error) {
-      console.error("NotificationService: markAsRead error:", error);
+      // Silent error handling
       return {
         success: false,
         error: error.message || "Không thể đánh dấu đã đọc",
@@ -145,10 +176,7 @@ class NotificationService {
         return { success: false, error: result.error };
       }
     } catch (error) {
-      console.error(
-        "NotificationService: getUnreadCount error:",
-        error
-      );
+      // Silent error handling
       return {
         success: false,
         error: error.message || "Không thể đếm thông báo chưa đọc",
@@ -182,7 +210,7 @@ class NotificationService {
         return date.toLocaleDateString("vi-VN");
       }
     } catch (error) {
-      console.error("NotificationService: formatDate error:", error);
+      // Silent error handling
       return "Thời gian không xác định";
     }
   }

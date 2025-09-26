@@ -177,7 +177,7 @@ export default function HomeScreen() {
     if (careProfiles.length === 0) {
       Alert.alert(
         "Thông báo",
-        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch. Vui lòng tạo hồ sơ chăm sóc trước.",
+        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch.",
         [
           { text: "Đóng", style: "cancel" },
           {
@@ -197,7 +197,7 @@ export default function HomeScreen() {
     if (careProfiles.length === 0) {
       Alert.alert(
         "Thông báo",
-        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch. Vui lòng tạo hồ sơ chăm sóc trước.",
+        "Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch.",
         [
           { text: "Đóng", style: "cancel" },
           {
@@ -235,6 +235,33 @@ export default function HomeScreen() {
 
   const handleServiceBooking = async (bookingData) => {
     try {
+      // Validate working time: start minute must be 0, and end must not go past 20:00
+      try {
+        const start = new Date(bookingData.workdate);
+        const minutes = start.getMinutes();
+        const hour = start.getHours();
+        if (Number.isNaN(start.getTime())) {
+          // skip if invalid, let backend handle
+        } else {
+          // Only allow bookings that start exactly on the hour
+          if (minutes !== 0) {
+            Alert.alert(
+              "Thông báo",
+              "Thời gian đặt lịch phải bắt đầu đúng giờ (ví dụ 19:00-20:00)."
+            );
+            return;
+          }
+          // Assume slot duration is 60 minutes; block if would pass 20:00
+          if (hour >= 20) {
+            Alert.alert(
+              "Thông báo",
+              "Đã quá giờ làm của các chuyên viên, xin hãy đặt ngày khác."
+            );
+            return;
+          }
+        }
+      } catch (_) {}
+
       // Format data for API
       const apiData = {
         careProfileID: bookingData.careProfileID,
@@ -284,11 +311,18 @@ export default function HomeScreen() {
           params: { bookingId: result.data.bookingID },
         });
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể tạo lịch hẹn");
+        Alert.alert(
+          "Thông báo",
+          result.error ||
+            "Giờ làm việc của chuyên viên kết thúc lúc 20:00. Vui lòng chọn thời gian khác."
+        );
       }
     } catch (error) {
       console.error("Error creating service booking:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo lịch hẹn");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi tạo lịch hẹn. Vui lòng thử lại."
+      );
     }
   };
 
@@ -337,11 +371,18 @@ export default function HomeScreen() {
           params: { bookingId: result.data.bookingID },
         });
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể tạo lịch hẹn");
+        Alert.alert(
+          "Thông báo",
+          result.error ||
+            "Giờ làm việc của chuyên viên kết thúc lúc 20:00. Vui lòng chọn thời gian khác."
+        );
       }
     } catch (error) {
       console.error("Error creating package booking:", error);
-      Alert.alert("Có lỗi xảy ra khi tạo lịch hẹn");
+      Alert.alert(
+        "Thông báo",
+        "Có lỗi xảy ra khi tạo lịch hẹn. Vui lòng thử lại."
+      );
     }
   };
 

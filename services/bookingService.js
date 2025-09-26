@@ -166,9 +166,21 @@ class BookingService {
           "BookingService: Error response body:",
           errorText
         );
+        // Translate common messages
+        let friendly = "";
+        try {
+          const payload = JSON.parse(errorText);
+          const msg = String(payload.message || "");
+          if (/Out of working time\.?/i.test(msg)) {
+            friendly =
+              "Đã quá giờ làm của các chuyên viên, xin hãy đặt ngày khác.";
+          }
+        } catch (_) {}
         return {
           success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
+          error:
+            friendly ||
+            `HTTP ${response.status}: ${response.statusText}`,
         };
       }
     } catch (error) {

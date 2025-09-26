@@ -83,18 +83,14 @@ export default function BottomTab() {
         if (result.success) {
           setUnreadCount(result.count);
         } else {
-          console.error(
-            "Error loading notification count:",
-            result.error
-          );
-          // Don't reset to 0 on API error, keep previous count
+          // Silently ignore API errors to avoid noisy logs in development
+          // Keep previous count on failure
         }
       } else {
         setUnreadCount(0);
       }
     } catch (error) {
-      console.error("Error loading notification count:", error);
-      // Don't reset to 0 on network error, keep previous count
+      // Silently ignore network errors; keep previous count
     }
   };
 
@@ -114,6 +110,18 @@ export default function BottomTab() {
   const handleNotificationPress = () => {
     // Chuyển đến trang notification
     router.push("/notifications");
+
+    // Reset badge to zero optimistically for instant UX
+    setUnreadCount(0);
+
+    // Trigger a recount shortly after navigating
+    setTimeout(() => {
+      if (global.notificationUpdate) {
+        global.notificationUpdate();
+      } else {
+        loadNotificationCount();
+      }
+    }, 500);
   };
 
   return (

@@ -1,0 +1,154 @@
+Application Messages List
+
+No. | Message Code | Message Type | Condition/Trigger | Vietnamese Message
+----|--------------|--------------|-------------------|------------------
+1 | MSG001 | Success | When user selects valid booking time (08:00-20:00) | Thời gian đã chọn hợp lệ.
+2 | MSG002 | Error | Booking start time too early | Tổng thời lượng dịch vụ và giờ đặt không hợp lệ. Vui lòng chọn thời gian bắt đầu từ 08:00 trở đi và đảm bảo kết thúc trước hoặc bằng 20:00 cùng ngày.
+3 | MSG003 | Error | Booking end time after 20:00 or next day | Tổng thời lượng dịch vụ và giờ đặt không hợp lệ. Vui lòng chọn thời gian bắt đầu từ 08:00 trở đi và đảm bảo kết thúc trước hoặc bằng 20:00 cùng ngày.
+4 | MSG004 | Error | User tries to book without care profile | Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch.
+5 | MSG005 | Error | User tries to book package without care profile | Bạn cần có ít nhất một hồ sơ chăm sóc để đặt lịch.
+6 | MSG006 | Error | Booking creation fails | Không thể tạo lịch hẹn
+7 | MSG007 | Error | General booking error | Có lỗi xảy ra khi tạo lịch hẹn
+8 | MSG008 | Error | Package booking creation fails | Không thể tạo lịch hẹn
+9 | MSG009 | Error | User data not found | Không tìm thấy thông tin người dùng
+10 | MSG010 | Success | When user creates care profile successfully | Tạo hồ sơ thành công
+11 | MSG011 | Success | When user updates care profile successfully | Cập nhật hồ sơ thành công!
+12 | MSG012 | Success | When user creates relative successfully | Thêm người thân thành công
+13 | MSG013 | Success | When user updates relative successfully | Cập nhật hồ sơ người thân thành công!
+14 | MSG014 | Success | When user deletes care profile successfully | Xóa hồ sơ thành công
+15 | MSG015 | Error | User data loading fails | Không thể tải thông tin người dùng
+16 | MSG016 | Error | Zone data loading fails | Không thể tải danh sách khu vực
+17 | MSG017 | Error | Zone loading general error | Có lỗi xảy ra khi tải danh sách khu vực
+18 | MSG018 | Error | Nursing profile update fails | Không thể cập nhật thông tin
+19 | MSG019 | Error | Customer profile update fails | Không thể cập nhật thông tin
+20 | MSG020 | Error | General profile save fails | Không thể lưu thông tin
+21 | MSG021 | Error | Logout fails | Không thể đăng xuất
+22 | MSG022 | Error | Care profile creation fails | Không thể tạo hồ sơ chăm sóc
+23 | MSG023 | Error | Care profile creation general error | Không thể tạo hồ sơ chăm sóc
+24 | MSG024 | Error | Care profile name validation | Vui lòng nhập tên hồ sơ
+25 | MSG025 | Error | Care profile birth date validation | Vui lòng chọn ngày sinh
+26 | MSG026 | Error | Care profile phone validation | Vui lòng nhập số điện thoại
+27 | MSG027 | Error | Care profile zone validation | Vui lòng chọn khu vực
+28 | MSG028 | Error | Care profile update fails | Không thể cập nhật hồ sơ chăm sóc
+29 | MSG029 | Confirm | Care profile deletion confirmation | Bạn có chắc chắn muốn xóa hồ sơ "${profile.profileName}"?
+30 | MSG030 | Success | Care profile deletion success | Đã xóa hồ sơ chăm sóc: ${profile.profileName}
+31 | MSG031 | Error | Care profile deletion fails | Không thể xóa hồ sơ chăm sóc
+32 | MSG032 | Error | Relative name validation | Vui lòng nhập tên con
+33 | MSG033 | Error | Relative birth date validation | Vui lòng chọn ngày sinh
+34 | MSG034 | Success | Relative creation success | Đã thêm con: ${result.data.relative.relativeName}
+35 | MSG035 | Error | Relative creation fails | Không thể thêm con
+36 | MSG036 | Error | Relative update validation name | Vui lòng nhập tên con
+37 | MSG037 | Error | Relative update validation birth date | Vui lòng chọn ngày sinh
+38 | MSG038 | Success | Relative update success | Đã cập nhật ${childName} thành công.
+39 | MSG039 | Error | Relative update fails | Không thể cập nhật thông tin con
+40 | MSG040 | Confirm | Relative deletion confirmation | Bạn có chắc chắn muốn xóa thông tin con "${relative.relativeName}"?
+41 | MSG041 | Success | Relative deletion success | Đã xóa thông tin con: ${relative.relativeName}
+42 | MSG042 | Error | Relative deletion fails | Không thể xóa thông tin con
+43 | MSG043 | Error | Password change - no email/phone | Không tìm thấy số điện thoại/email
+44 | MSG044 | Error | Password change - incomplete fields | Vui lòng nhập đủ mật khẩu
+45 | MSG045 | Error | Password change - password mismatch | Xác nhận mật khẩu không khớp
+46 | MSG046 | Success | Password change success | Đổi mật khẩu thành công
+47 | MSG047 | Error | Password change fails | Không thể đổi mật khẩu
+48 | MSG048 | Info | Debug - storage cleared | AsyncStorage cleared. Please login again.
+49 | MSG049 | Success | Data enrichment success | Làm giàu dữ liệu thành công!
+50 | MSG050 | Error | Data enrichment fails | Không thể làm giàu dữ liệu
+51 | MSG051 | Error | Login validation - incomplete info | Vui lòng nhập đầy đủ thông tin
+52 | MSG052 | Error | Login API error | (Lỗi đăng nhập từ API)
+53 | MSG053 | Error | Login general error | Có lỗi xảy ra khi đăng nhập!
+54 | MSG054 | Error | Register validation - name required | Vui lòng nhập họ tên
+55 | MSG055 | Error | Register validation - email required | Vui lòng nhập email
+56 | MSG056 | Error | Register validation - phone required | Vui lòng nhập số điện thoại
+57 | MSG057 | Error | Register validation - password length | Mật khẩu phải có ít nhất 6 ký tự
+58 | MSG058 | Error | Register validation - password mismatch | Mật khẩu xác nhận không khớp
+59 | MSG059 | Error | Register fails | Không thể đăng ký!
+60 | MSG060 | Error | Register general error | Có lỗi xảy ra khi đăng ký!
+61 | MSG061 | Error | Mark arrived - invalid time | Chỉ có thể điểm danh 'đã đến' trước giờ làm 30 phút hoặc trong giờ làm.
+62 | MSG062 | Success | Mark arrived success | Đã điểm danh 'đã đến' thành công!
+63 | MSG063 | Error | Mark arrived fails | Không thể điểm danh 'đã đến'
+64 | MSG064 | Error | Mark arrived general error | Có lỗi xảy ra khi điểm danh 'đã đến'
+65 | MSG065 | Error | Mark attendance - invalid time | Chỉ có thể điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc.
+66 | MSG066 | Success | Mark attendance success | Đã điểm danh thành công!
+67 | MSG067 | Error | Mark attendance fails | Không thể điểm danh
+68 | MSG068 | Error | Mark attendance general error | Có lỗi xảy ra khi điểm danh
+69 | MSG069 | Error | Medical note - no schedule info | Không tìm thấy thông tin lịch làm việc
+70 | MSG070 | Error | Medical note - content required | Vui lòng nhập nội dung ghi chú
+71 | MSG071 | Error | Medical note - no task info | Không tìm thấy thông tin công việc để thêm ghi chú
+72 | MSG072 | Success | Medical note creation success | Đã thêm ghi chú thành công!
+73 | MSG073 | Error | Medical note creation fails | Không thể thêm ghi chú
+74 | MSG074 | Error | Medical note general error | Có lỗi xảy ra khi thêm ghi chú
+75 | MSG075 | Error | Work schedule loading fails | Không thể tải lịch làm việc
+76 | MSG076 | Error | Work schedule general error | Có lỗi xảy ra khi tải lịch làm việc
+77 | MSG077 | Error | Schedule detail loading fails | Không thể tải chi tiết lịch làm việc
+78 | MSG078 | Info | Feedback validation - rating required | Vui lòng chọn số sao (1-5)
+79 | MSG079 | Success | Feedback submission success | Cảm ơn bạn đã đánh giá!
+80 | MSG080 | Info | AsyncStorage clear success | AsyncStorage đã được xóa
+81 | MSG081 | Error | AsyncStorage clear fails | Không thể xóa AsyncStorage
+82 | MSG082 | Info | User token clear success | User data và token đã được xóa
+83 | MSG083 | Error | User token clear fails | Không thể xóa user data
+84 | MSG084 | Error | Nurses loading fails | Không thể tải danh sách điều dưỡng viên
+85 | MSG085 | Error | Nurses connection error | Không thể kết nối đến server
+86 | MSG086 | Error | Specialists loading fails | Không thể tải danh sách tư vấn viên
+87 | MSG087 | Error | Specialists connection error | Không thể kết nối đến server
+88 | MSG088 | Error | Wallet loading fails | Không thể tải thông tin ví
+89 | MSG089 | Error | Wallet transaction fails | Không thể thực hiện giao dịch
+90 | MSG090 | Success | Wallet transaction success | Giao dịch thành công
+91 | MSG091 | Error | Payment processing fails | Không thể xử lý thanh toán
+92 | MSG092 | Success | Payment success | Thanh toán thành công
+93 | MSG093 | Error | Notification loading fails | Không thể tải thông báo
+94 | MSG094 | Error | Notification sending fails | Không thể gửi thông báo
+95 | MSG095 | Success | Notification sent | Đã gửi thông báo
+96 | MSG096 | Error | Booking history loading fails | Không thể tải lịch sử đặt lịch
+97 | MSG097 | Error | Service loading fails | Không thể tải danh sách dịch vụ
+98 | MSG098 | Error | Package loading fails | Không thể tải danh sách gói dịch vụ
+99 | MSG099 | Error | Wishlist loading fails | Không thể tải danh sách yêu thích
+100 | MSG100 | Success | Wishlist add success | Đã thêm vào danh sách yêu thích
+101 | MSG101 | Success | Wishlist remove success | Đã xóa khỏi danh sách yêu thích
+102 | MSG102 | Error | Wishlist operation fails | Không thể thực hiện thao tác yêu thích
+103 | MSG103 | Error | Medical note loading fails | Không thể tải ghi chú y tế
+104 | MSG104 | Error | Medical note update fails | Không thể cập nhật ghi chú y tế
+105 | MSG105 | Success | Medical note update success | Đã cập nhật ghi chú y tế
+106 | MSG106 | Error | Care profile loading fails | Không thể tải hồ sơ chăm sóc
+107 | MSG107 | Error | Relative loading fails | Không thể tải thông tin người thân
+108 | MSG108 | Error | Service type loading fails | Không thể tải loại dịch vụ
+109 | MSG109 | Error | Zone detail loading fails | Không thể tải chi tiết khu vực
+110 | MSG110 | Error | Role loading fails | Không thể tải thông tin vai trò
+111 | MSG111 | Error | Feedback loading fails | Không thể tải đánh giá
+112 | MSG112 | Error | Feedback submission fails | Không thể gửi đánh giá
+113 | MSG113 | Success | Feedback submission success | Đánh giá đã được gửi
+114 | MSG114 | Error | Booking cancellation fails | Không thể hủy lịch hẹn
+115 | MSG115 | Success | Booking cancellation success | Đã hủy lịch hẹn
+116 | MSG116 | Error | Booking reschedule fails | Không thể đổi lịch hẹn
+117 | MSG117 | Success | Booking reschedule success | Đã đổi lịch hẹn thành công
+118 | MSG118 | Error | Profile image upload fails | Không thể tải lên ảnh đại diện
+119 | MSG119 | Success | Profile image upload success | Đã cập nhật ảnh đại diện
+120 | MSG120 | Error | Network connection error | Không có kết nối mạng
+121 | MSG121 | Error | Server timeout error | Máy chủ không phản hồi
+122 | MSG122 | Error | Authentication expired | Phiên đăng nhập đã hết hạn
+123 | MSG123 | Error | Permission denied | Không có quyền thực hiện thao tác này
+124 | MSG124 | Error | Data validation error | Dữ liệu không hợp lệ
+125 | MSG125 | Error | File size too large | Kích thước file quá lớn
+126 | MSG126 | Error | Invalid file format | Định dạng file không được hỗ trợ
+127 | MSG127 | Error | Booking time conflict | Thời gian đặt lịch bị trùng
+128 | MSG128 | Error | Service not available | Dịch vụ không khả dụng
+129 | MSG129 | Error | Nurse not available | Chuyên viên không khả dụng
+130 | MSG130 | Error | Payment method not supported | Phương thức thanh toán không được hỗ trợ
+131 | MSG131 | Error | Insufficient wallet balance | Số dư ví không đủ
+132 | MSG132 | Error | Booking limit exceeded | Đã vượt quá giới hạn đặt lịch
+133 | MSG133 | Error | Care profile limit exceeded | Đã vượt quá giới hạn hồ sơ chăm sóc
+134 | MSG134 | Error | Relative limit exceeded | Đã vượt quá giới hạn người thân
+135 | MSG135 | Error | Medical note limit exceeded | Đã vượt quá giới hạn ghi chú y tế
+136 | MSG136 | Success | Data sync success | Đồng bộ dữ liệu thành công
+137 | MSG137 | Error | Data sync fails | Không thể đồng bộ dữ liệu
+138 | MSG138 | Info | Data loading in progress | Đang tải dữ liệu...
+139 | MSG139 | Info | Processing in progress | Đang xử lý...
+140 | MSG140 | Info | Uploading in progress | Đang tải lên...
+141 | MSG141 | Success | Settings saved | Đã lưu cài đặt
+142 | MSG142 | Error | Settings save fails | Không thể lưu cài đặt
+143 | MSG143 | Success | Profile updated | Đã cập nhật hồ sơ
+144 | MSG144 | Error | Profile update fails | Không thể cập nhật hồ sơ
+145 | MSG145 | Success | Password changed | Đã đổi mật khẩu
+146 | MSG146 | Error | Password change fails | Không thể đổi mật khẩu
+147 | MSG147 | Success | Account created | Đã tạo tài khoản
+148 | MSG148 | Error | Account creation fails | Không thể tạo tài khoản
+149 | MSG149 | Success | Login successful | Đăng nhập thành công
+150 | MSG150 | Error | Login fails | Đăng nhập thất bại

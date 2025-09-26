@@ -33,12 +33,15 @@ export default function WalletScreen() {
         setUserData(user);
         loadWalletData(user.accountID || user.id);
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
       console.error("Error loading user data:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       setIsLoading(false);
     }
   };

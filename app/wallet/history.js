@@ -52,7 +52,7 @@ export default function TransactionHistoryScreen() {
       }
     } catch (error) {
       console.error("Error loading transaction history:", error);
-      Alert.alert("Lỗi", "Không thể tải lịch sử giao dịch");
+      Alert.alert("Thông báo", "Không thể tải lịch sử giao dịch");
       setTransactions([]);
     } finally {
       setIsLoading(false);

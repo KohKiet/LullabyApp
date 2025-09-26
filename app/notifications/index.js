@@ -43,12 +43,15 @@ export default function NotificationsScreen() {
         setUserData(user);
         loadNotifications(user.accountID || user.id);
       } else {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không tìm thấy thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
       console.error("Error loading user data:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       setIsLoading(false);
     }
   };
@@ -80,24 +83,10 @@ export default function NotificationsScreen() {
           });
         }
       } else {
-        console.error("Failed to load notifications:", result.error);
-        // Show error but don't clear existing notifications
-        if (notifications.length === 0) {
-          Alert.alert(
-            "Lỗi",
-            result.error || "Không thể tải thông báo"
-          );
-        }
+        // Silent failure: keep current list and avoid console red banners
       }
     } catch (error) {
-      console.error("Error loading notifications:", error);
-      // Show error but don't clear existing notifications
-      if (notifications.length === 0) {
-        Alert.alert(
-          "Lỗi",
-          "Có lỗi xảy ra khi tải thông báo. Vui lòng thử lại."
-        );
-      }
+      // Silent catch to prevent dev overlay; optionally show a toast if needed
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +99,7 @@ export default function NotificationsScreen() {
         await loadNotifications(userData.accountID || userData.id);
       }
     } catch (error) {
-      console.error("Error during refresh:", error);
+      // Silent
     } finally {
       setRefreshing(false);
     }
@@ -138,10 +127,6 @@ export default function NotificationsScreen() {
       );
 
       if (!result.success) {
-        console.error(
-          "Failed to mark notification as read:",
-          result.error
-        );
         // Revert optimistic update if API fails
         setNotifications((prev) =>
           prev.map((notif) =>
@@ -152,7 +137,6 @@ export default function NotificationsScreen() {
         );
       }
     } catch (error) {
-      console.error("Error marking notification as read:", error);
       // Revert optimistic update if there's an error
       setNotifications((prev) =>
         prev.map((notif) =>
@@ -198,10 +182,6 @@ export default function NotificationsScreen() {
         (result) => !result.success
       );
       if (failedUpdates.length > 0) {
-        console.error(
-          "Some notifications failed to mark as read:",
-          failedUpdates
-        );
         Alert.alert(
           "Cảnh báo",
           "Một số thông báo không thể đánh dấu đã đọc. Vui lòng thử lại."
@@ -218,10 +198,6 @@ export default function NotificationsScreen() {
         );
       }
     } catch (error) {
-      console.error(
-        "Error marking all notifications as read:",
-        error
-      );
       Alert.alert(
         "Lỗi",
         "Không thể đánh dấu tất cả thông báo. Vui lòng thử lại."
