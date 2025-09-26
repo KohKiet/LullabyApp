@@ -24,29 +24,62 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+    password: "",
+    confirmPassword: "",
+  });
 
   const validateForm = () => {
+    const newErrors = {
+      fullName: "",
+      email: "",
+      phoneNumber: "",
+      password: "",
+      confirmPassword: "",
+    };
+
+    // Full name
     if (!fullName.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập họ tên");
-      return false;
+      newErrors.fullName = "Vui lòng nhập họ tên";
     }
+
+    // Email
     if (!email.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập email");
-      return false;
+      newErrors.email = "Vui lòng nhập email";
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        newErrors.email = "Email không hợp lệ";
+      }
     }
+
+    // Phone number (basic check: digits, 9-11 length)
     if (!phoneNumber.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập số điện thoại");
-      return false;
+      newErrors.phoneNumber = "Vui lòng nhập số điện thoại";
+    } else {
+      const phoneDigits = phoneNumber.replace(/\D/g, "");
+      if (phoneDigits.length < 9 || phoneDigits.length > 11) {
+        newErrors.phoneNumber = "Số điện thoại không hợp lệ";
+      }
     }
+
+    // Password
     if (password.length < 6) {
-      Alert.alert("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự");
-      return false;
+      newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
     }
-    if (password !== confirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp");
-      return false;
+
+    // Confirm password
+    if (!confirmPassword) {
+      newErrors.confirmPassword = "Vui lòng nhập xác nhận mật khẩu";
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
     }
-    return true;
+
+    setErrors(newErrors);
+    return !Object.values(newErrors).some((msg) => msg);
   };
 
   const handleEmailRegister = async () => {
@@ -70,10 +103,13 @@ export default function RegisterScreen() {
         // Chuyển thẳng đến trang đăng nhập, không hiển thị alert
         router.replace("/auth/login");
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể đăng ký!");
+        Alert.alert(
+          "Thông báo",
+          result.error || "Không thể đăng ký!"
+        );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi đăng ký!");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi đăng ký!");
     } finally {
       setIsLoading(false);
     }
@@ -103,14 +139,22 @@ export default function RegisterScreen() {
               style={styles.inputIcon}
             />
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput]}
               placeholder="Họ và tên"
               value={fullName}
-              onChangeText={setFullName}
+              onChangeText={(t) => {
+                setFullName(t);
+                if (errors.fullName) {
+                  setErrors((e) => ({ ...e, fullName: "" }));
+                }
+              }}
               autoCapitalize="words"
               editable={!isLoading}
             />
           </View>
+          {errors.fullName ? (
+            <Text style={styles.errorText}>{errors.fullName}</Text>
+          ) : null}
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
@@ -121,15 +165,23 @@ export default function RegisterScreen() {
               style={styles.inputIcon}
             />
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput]}
               placeholder="Email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (errors.email) {
+                  setErrors((e) => ({ ...e, email: "" }));
+                }
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={!isLoading}
             />
           </View>
+          {errors.email ? (
+            <Text style={styles.errorText}>{errors.email}</Text>
+          ) : null}
 
           {/* Phone Number Input */}
           <View style={styles.inputContainer}>
@@ -140,14 +192,22 @@ export default function RegisterScreen() {
               style={styles.inputIcon}
             />
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput]}
               placeholder="Số điện thoại"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(t) => {
+                setPhoneNumber(t);
+                if (errors.phoneNumber) {
+                  setErrors((e) => ({ ...e, phoneNumber: "" }));
+                }
+              }}
               keyboardType="phone-pad"
               editable={!isLoading}
             />
           </View>
+          {errors.phoneNumber ? (
+            <Text style={styles.errorText}>{errors.phoneNumber}</Text>
+          ) : null}
 
           {/* Password Input */}
           <View style={styles.inputContainer}>
@@ -158,10 +218,15 @@ export default function RegisterScreen() {
               style={styles.inputIcon}
             />
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput]}
               placeholder="Mật khẩu"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(t) => {
+                setPassword(t);
+                if (errors.password) {
+                  setErrors((e) => ({ ...e, password: "" }));
+                }
+              }}
               secureTextEntry={!showPassword}
               editable={!isLoading}
             />
@@ -186,13 +251,26 @@ export default function RegisterScreen() {
               style={styles.inputIcon}
             />
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput]}
               placeholder="Xác nhận mật khẩu"
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(t) => {
+                setConfirmPassword(t);
+                if (errors.confirmPassword) {
+                  setErrors((e) => ({ ...e, confirmPassword: "" }));
+                }
+              }}
               secureTextEntry={!showConfirmPassword}
               editable={!isLoading}
             />
+            {errors.password ? (
+              <Text style={styles.errorText}>{errors.password}</Text>
+            ) : null}
+            {errors.confirmPassword ? (
+              <Text style={styles.errorText}>
+                {errors.confirmPassword}
+              </Text>
+            ) : null}
             <TouchableOpacity
               onPress={() =>
                 setShowConfirmPassword(!showConfirmPassword)
@@ -317,5 +395,12 @@ const styles = StyleSheet.create({
     color: "#4FC3F7",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  errorText: {
+    color: "#E53935",
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 8,
+    marginLeft: 6,
   },
 });

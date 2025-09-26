@@ -42,6 +42,19 @@ export default function ProfileScreen() {
     note: "",
     zoneDetailID: null,
   });
+  const [lockProfileNameOnCreate, setLockProfileNameOnCreate] =
+    useState(false);
+  const getFirstCareProfile = (profiles) => {
+    if (!profiles || profiles.length === 0) return null;
+    return profiles.reduce(
+      (min, p) =>
+        !min ||
+        (p.careProfileID || p.id) < (min.careProfileID || min.id)
+          ? p
+          : min,
+      null
+    );
+  };
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [editingProfile, setEditingProfile] = useState(null);
@@ -405,8 +418,13 @@ export default function ProfileScreen() {
       : new Date();
     setSelectedDate(userDateOfBirth);
 
+    const first = getFirstCareProfile(careProfiles);
+    const presetName = first
+      ? first.profileName || ""
+      : userData.fullName || userData.full_name || "";
+
     setCareProfileForm({
-      profileName: userData.fullName || userData.full_name || "",
+      profileName: presetName,
       dateOfBirth: userData.dateOfBirth
         ? new Date(userData.dateOfBirth).toISOString().split("T")[0]
         : "",
@@ -417,6 +435,7 @@ export default function ProfileScreen() {
       zoneDetailID: null,
     });
     setSelectedZone(null);
+    setLockProfileNameOnCreate(!!first);
     setShowCareProfileForm(true);
   };
 
@@ -431,6 +450,7 @@ export default function ProfileScreen() {
       zoneDetailID: null,
     });
     setSelectedZone(null);
+    setLockProfileNameOnCreate(false);
   };
 
   const handleCareProfileFormChange = (field, value) => {
@@ -730,10 +750,18 @@ export default function ProfileScreen() {
         return;
       }
 
+      const first = getFirstCareProfile(careProfiles);
+      const isFirst =
+        first &&
+        editingProfile &&
+        editingProfile.careProfileID === first.careProfileID;
+
       // Chuẩn bị data cho care profile update
       const updateData = {
         zoneDetailID: editingProfile.zoneDetailID || 1,
-        profileName: careProfileForm.profileName.trim(),
+        profileName: isFirst
+          ? careProfileForm.profileName.trim()
+          : first?.profileName || editingProfile.profileName || "",
         dateOfBirth: new Date(
           careProfileForm.dateOfBirth
         ).toISOString(),
@@ -787,6 +815,29 @@ export default function ProfileScreen() {
       );
 
       if (result.success) {
+        // Nếu là hồ sơ đầu tiên và tên đổi, propagate sang các hồ sơ khác
+        if (isFirst) {
+          const newName = updateData.profileName;
+          const others = (careProfiles || []).filter(
+            (p) => p.careProfileID !== first.careProfileID
+          );
+          if (others.length > 0 && newName) {
+            try {
+              await Promise.allSettled(
+                others.map((p) =>
+                  CareProfileService.updateCareProfile(
+                    p.careProfileID,
+                    {
+                      ...p,
+                      profileName: newName,
+                    }
+                  )
+                )
+              );
+            } catch (_) {}
+          }
+        }
+
         Alert.alert(
           "Thành công",
           `Đã cập nhật hồ sơ chăm sóc: ${result.data.careProfile.profileName}`
@@ -1140,11 +1191,16 @@ export default function ProfileScreen() {
         return;
       }
 
+      const first = getFirstCareProfile(careProfiles);
+      const profileNameToUse = first
+        ? first.profileName || ""
+        : careProfileForm.profileName.trim();
+
       // Chuẩn bị data cho care profile
       const careProfileData = {
         accountID: userData.accountID || userData.id,
         zoneDetailID: careProfileForm.zoneDetailID,
-        profileName: careProfileForm.profileName.trim(),
+        profileName: profileNameToUse,
         dateOfBirth: new Date(
           careProfileForm.dateOfBirth
         ).toISOString(),
@@ -1701,6 +1757,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.formInput}
                 value={careProfileForm.profileName}
+                editable={!lockProfileNameOnCreate}
                 onChangeText={(text) =>
                   handleCareProfileFormChange("profileName", text)
                 }
@@ -1825,6 +1882,14 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.formInput}
                 value={careProfileForm.profileName}
+                editable={(() => {
+                  const first = getFirstCareProfile(careProfiles);
+                  if (!first || !editingProfile) return true;
+                  return (
+                    editingProfile.careProfileID ===
+                    first.careProfileID
+                  );
+                })()}
                 onChangeText={(text) =>
                   handleCareProfileFormChange("profileName", text)
                 }
