@@ -1686,121 +1686,129 @@ export default function ProfileScreen() {
     if (!showCareProfileForm) return null;
 
     return (
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Thêm hồ sơ chăm sóc</Text>
-            <TouchableOpacity onPress={closeCareProfileForm}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.formContainer}>
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Tên hồ sơ *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.profileName}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("profileName", text)
-                }
-                placeholder="Nhập tên hồ sơ"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ngày sinh *</Text>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={showDatePickerModal}>
-                <Text
-                  style={[
-                    styles.datePickerText,
-                    !careProfileForm.dateOfBirth &&
-                      styles.placeholderText,
-                  ]}>
-                  {careProfileForm.dateOfBirth
-                    ? formatDateForDisplay(
-                        careProfileForm.dateOfBirth
-                      )
-                    : "Chọn ngày sinh"}
-                </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+      <Modal
+        visible={showCareProfileForm}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeCareProfileForm}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Thêm hồ sơ chăm sóc
+              </Text>
+              <TouchableOpacity onPress={closeCareProfileForm}>
+                <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Số điện thoại *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.phoneNumber}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("phoneNumber", text)
-                }
-                placeholder="Nhập số điện thoại"
-                keyboardType="phone-pad"
-              />
-            </View>
+            <ScrollView style={styles.formContainer}>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Tên hồ sơ *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.profileName}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("profileName", text)
+                  }
+                  placeholder="Nhập tên hồ sơ"
+                />
+              </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Khu vực *</Text>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ngày sinh *</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={showDatePickerModal}>
+                  <Text
+                    style={[
+                      styles.datePickerText,
+                      !careProfileForm.dateOfBirth &&
+                        styles.placeholderText,
+                    ]}>
+                    {careProfileForm.dateOfBirth
+                      ? formatDateForDisplay(
+                          careProfileForm.dateOfBirth
+                        )
+                      : "Chọn ngày sinh"}
+                  </Text>
+                  <Ionicons name="calendar" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Số điện thoại *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.phoneNumber}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("phoneNumber", text)
+                  }
+                  placeholder="Nhập số điện thoại"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Khu vực *</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={openZoneModal}>
+                  <Text
+                    style={[
+                      styles.datePickerText,
+                      !selectedZone && styles.placeholderText,
+                    ]}>
+                    {selectedZone
+                      ? selectedZone.displayName
+                      : "Chọn khu vực"}
+                  </Text>
+                  <Ionicons name="location" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Địa chỉ *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.address}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("address", text)
+                  }
+                  placeholder="Nhập địa chỉ"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ghi chú *</Text>
+                <TextInput
+                  style={[styles.formInput, styles.multilineInput]}
+                  value={careProfileForm.note}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("note", text)
+                  }
+                  placeholder="Nhập ghi chú"
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={openZoneModal}>
-                <Text
-                  style={[
-                    styles.datePickerText,
-                    !selectedZone && styles.placeholderText,
-                  ]}>
-                  {selectedZone
-                    ? selectedZone.displayName
-                    : "Chọn khu vực"}
-                </Text>
-                <Ionicons name="location" size={20} color="#666" />
+                style={styles.cancelButton}
+                onPress={closeCareProfileForm}>
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={submitCareProfileForm}>
+                <Text style={styles.submitButtonText}>Tạo hồ sơ</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Địa chỉ *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.address}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("address", text)
-                }
-                placeholder="Nhập địa chỉ"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ghi chú *</Text>
-              <TextInput
-                style={[styles.formInput, styles.multilineInput]}
-                value={careProfileForm.note}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("note", text)
-                }
-                placeholder="Nhập ghi chú"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={closeCareProfileForm}>
-              <Text style={styles.cancelButtonText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.submitButton}
-              onPress={submitCareProfileForm}>
-              <Text style={styles.submitButtonText}>Tạo hồ sơ</Text>
-            </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </Modal>
     );
   };
 
@@ -1934,118 +1942,124 @@ export default function ProfileScreen() {
     if (!showRelativeForm) return null;
 
     return (
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Thêm con</Text>
-            <TouchableOpacity onPress={closeRelativeForm}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.formContainer}>
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Tên con *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={relativeForm.relativeName}
-                onChangeText={(text) =>
-                  handleRelativeFormChange("relativeName", text)
-                }
-                placeholder="Nhập tên con"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ngày sinh *</Text>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={showDatePickerModal}>
-                <Text
-                  style={[
-                    styles.datePickerText,
-                    !relativeForm.dateOfBirth &&
-                      styles.placeholderText,
-                  ]}>
-                  {relativeForm.dateOfBirth
-                    ? formatDateForDisplay(relativeForm.dateOfBirth)
-                    : "Chọn ngày sinh"}
-                </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+      <Modal
+        visible={showRelativeForm}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeRelativeForm}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm con</Text>
+              <TouchableOpacity onPress={closeRelativeForm}>
+                <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Giới tính *</Text>
-              <View style={styles.genderContainer}>
+            <ScrollView style={styles.formContainer}>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Tên con *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={relativeForm.relativeName}
+                  onChangeText={(text) =>
+                    handleRelativeFormChange("relativeName", text)
+                  }
+                  placeholder="Nhập tên con"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ngày sinh *</Text>
                 <TouchableOpacity
-                  style={[
-                    styles.genderOption,
-                    relativeForm.gender === "nam" &&
-                      styles.selectedGenderOption,
-                  ]}
-                  onPress={() =>
-                    handleRelativeFormChange("gender", "nam")
-                  }>
+                  style={styles.datePickerButton}
+                  onPress={showDatePickerModal}>
                   <Text
                     style={[
-                      styles.genderOptionText,
-                      relativeForm.gender === "nam" &&
-                        styles.selectedGenderOptionText,
+                      styles.datePickerText,
+                      !relativeForm.dateOfBirth &&
+                        styles.placeholderText,
                     ]}>
-                    Nam
+                    {relativeForm.dateOfBirth
+                      ? formatDateForDisplay(relativeForm.dateOfBirth)
+                      : "Chọn ngày sinh"}
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.genderOption,
-                    relativeForm.gender === "nữ" &&
-                      styles.selectedGenderOption,
-                  ]}
-                  onPress={() =>
-                    handleRelativeFormChange("gender", "nữ")
-                  }>
-                  <Text
-                    style={[
-                      styles.genderOptionText,
-                      relativeForm.gender === "nữ" &&
-                        styles.selectedGenderOptionText,
-                    ]}>
-                    Nữ
-                  </Text>
+                  <Ionicons name="calendar" size={20} color="#666" />
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ghi chú</Text>
-              <TextInput
-                style={[styles.formInput, styles.multilineInput]}
-                value={relativeForm.note}
-                onChangeText={(text) =>
-                  handleRelativeFormChange("note", text)
-                }
-                placeholder="Nhập ghi chú (nếu có)"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-          </ScrollView>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Giới tính *</Text>
+                <View style={styles.genderContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.genderOption,
+                      relativeForm.gender === "nam" &&
+                        styles.selectedGenderOption,
+                    ]}
+                    onPress={() =>
+                      handleRelativeFormChange("gender", "nam")
+                    }>
+                    <Text
+                      style={[
+                        styles.genderOptionText,
+                        relativeForm.gender === "nam" &&
+                          styles.selectedGenderOptionText,
+                      ]}>
+                      Nam
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.genderOption,
+                      relativeForm.gender === "nữ" &&
+                        styles.selectedGenderOption,
+                    ]}
+                    onPress={() =>
+                      handleRelativeFormChange("gender", "nữ")
+                    }>
+                    <Text
+                      style={[
+                        styles.genderOptionText,
+                        relativeForm.gender === "nữ" &&
+                          styles.selectedGenderOptionText,
+                      ]}>
+                      Nữ
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={closeRelativeForm}>
-              <Text style={styles.cancelButtonText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.submitButton}
-              onPress={submitRelativeForm}>
-              <Text style={styles.submitButtonText}>Thêm con</Text>
-            </TouchableOpacity>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ghi chú</Text>
+                <TextInput
+                  style={[styles.formInput, styles.multilineInput]}
+                  value={relativeForm.note}
+                  onChangeText={(text) =>
+                    handleRelativeFormChange("note", text)
+                  }
+                  placeholder="Nhập ghi chú (nếu có)"
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={closeRelativeForm}>
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={submitRelativeForm}>
+                <Text style={styles.submitButtonText}>Thêm con</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </Modal>
     );
   };
 

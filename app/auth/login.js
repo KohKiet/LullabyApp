@@ -25,7 +25,7 @@ export default function LoginScreen() {
 
   const handleEmailPhoneLogin = async () => {
     if (!emailOrPhone || !password) {
-      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin");
+      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
 
@@ -68,12 +68,12 @@ export default function LoginScreen() {
         router.replace(targetRoute);
       } else {
         Alert.alert(
-          "Lỗi",
+          "Thông báo",
           "Email/Số điện thoại hoặc mật khẩu không đúng!"
         );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi đăng nhập!");
+      Alert.alert("Thông báo", "Có lỗi xảy ra khi đăng nhập!");
     } finally {
       setIsLoading(false);
     }

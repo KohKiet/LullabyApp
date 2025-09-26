@@ -44,12 +44,15 @@ export default function NurseBookingHistoryScreen() {
         setUserData(user);
         await loadNurseBookings(user);
       } else {
-        Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+        Alert.alert(
+          "Thông báo",
+          "Không thể tải thông tin người dùng"
+        );
         router.replace("/auth/login");
       }
     } catch (error) {
       console.error("Error loading user data:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
+      Alert.alert("Thông báo", "Không thể tải thông tin người dùng");
       router.replace("/auth/login");
     }
   };
@@ -64,8 +67,8 @@ export default function NurseBookingHistoryScreen() {
       if (!accountID) {
         console.error("No accountID found in user data");
         Alert.alert(
-          "Lỗi",
-          "Không tìm thấy thông tin account ID. Vui lòng đăng nhập lại."
+          "Thông báo",
+          "Không tìm thấy thông tin khách hàng id. Vui lòng đăng nhập lại."
         );
         return;
       }
@@ -98,12 +101,12 @@ export default function NurseBookingHistoryScreen() {
           "Failed to load nursing data:",
           nursingResult.error
         );
-        Alert.alert("Lỗi", "Không thể tải thông tin nurse");
+        Alert.alert("Thông báo", "Không thể tải thông tin nurse");
         setBookings([]);
       }
     } catch (error) {
       console.error("Error loading nurse bookings:", error);
-      Alert.alert("Lỗi", "Không thể tải lịch sử đặt lịch");
+      Alert.alert("Thông báo", "Không thể tải lịch sử đặt lịch");
       setBookings([]);
     } finally {
       setIsLoading(false);

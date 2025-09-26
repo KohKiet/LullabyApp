@@ -98,10 +98,13 @@ export default function NursesScreen() {
         const map = Object.fromEntries(pairs);
         setRatingsMap(map);
       } else {
-        Alert.alert("Lỗi", "Không thể tải danh sách điều dưỡng viên");
+        Alert.alert(
+          "Thông báo",
+          "Không thể tải danh sách điều dưỡng viên"
+        );
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể kết nối đến server");
+      Alert.alert("Thông báo", "Không thể kết nối đến server");
     } finally {
       setIsLoading(false);
     }
