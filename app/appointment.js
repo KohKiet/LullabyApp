@@ -46,6 +46,9 @@ export default function AppointmentScreen() {
   const [serviceTasks, setServiceTasks] = useState([]);
   const [nurses, setNurses] = useState([]);
   const [careProfiles, setCareProfiles] = useState([]);
+  const [preloadedBookings, setPreloadedBookings] = useState(
+    new Set()
+  );
 
   // Medical notes state
   const [medicalNotesMap, setMedicalNotesMap] = useState({});
@@ -111,6 +114,9 @@ export default function AppointmentScreen() {
           loadNurses(),
           loadCareProfiles(user),
         ]);
+
+        // Preload nurse information for all bookings to ensure dropdown shows immediately
+        await preloadNursesForAllBookings();
       } else {
         setUserData(null);
         setIsLoggedIn(false);
@@ -177,6 +183,18 @@ export default function AppointmentScreen() {
       }
       if (cachedCareProfiles) {
         setCareProfiles(JSON.parse(cachedCareProfiles));
+      }
+
+      // Trigger preloading of nurse information for cached bookings
+      if (cachedBookings) {
+        const bookingsData = JSON.parse(cachedBookings);
+        const activeBookingsData = bookingsData.filter(
+          (booking) => booking.status !== "cancelled"
+        );
+        if (activeBookingsData.length > 0) {
+          // Preload nurse information for cached bookings
+          setTimeout(() => preloadNursesForAllBookings(), 100);
+        }
       }
     } catch (error) {
       console.error("Error loading cached data:", error);
@@ -441,10 +459,16 @@ export default function AppointmentScreen() {
 
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        setServices(result.data);
+        // Filter out removed/inactive services
+        const filteredServices = result.data.filter(
+          (service) =>
+            service.status !== "Remove" &&
+            service.status !== "inactive"
+        );
+        setServices(filteredServices);
         await AsyncStorage.setItem(
           "cachedServices",
-          JSON.stringify(result.data)
+          JSON.stringify(filteredServices)
         );
       }
     } catch (error) {
@@ -511,6 +535,68 @@ export default function AppointmentScreen() {
     }
   };
 
+  const ensureNursesForBooking = async (bookingID) => {
+    try {
+      // If nurses are already loaded globally, we don't need to reload
+      if (nurses.length > 0) {
+        return;
+      }
+
+      // Load nurses if not already loaded
+      await loadNurses();
+    } catch (error) {
+      console.error("Error ensuring nurses for booking:", error);
+    }
+  };
+
+  const preloadNursesForAllBookings = async () => {
+    try {
+      // If no bookings, return early
+      if (!bookings || bookings.length === 0) {
+        return;
+      }
+
+      // Filter out bookings that have already been preloaded
+      const bookingsToPreload = bookings.filter(
+        (booking) => !preloadedBookings.has(booking.bookingID)
+      );
+
+      if (bookingsToPreload.length === 0) {
+        return; // All bookings already preloaded
+      }
+
+      // Preload nurse information for bookings that haven't been preloaded yet
+      const preloadPromises = bookingsToPreload.map(
+        async (booking) => {
+          try {
+            // Ensure customize tasks are loaded for this booking to get nurse assignments
+            if (!customizeTasksMap[booking.bookingID]) {
+              await loadCustomizeTasks(booking.bookingID);
+            }
+
+            // Mark this booking as preloaded
+            setPreloadedBookings(
+              (prev) => new Set([...prev, booking.bookingID])
+            );
+          } catch (error) {
+            console.error(
+              `Error preloading data for booking ${booking.bookingID}:`,
+              error
+            );
+          }
+        }
+      );
+
+      // Wait for all preloading to complete
+      await Promise.all(preloadPromises);
+    } catch (error) {
+      console.error(
+        "Error preloading nurses for all bookings:",
+        error
+      );
+    }
+  };
+
   const ensureBookingDetails = async (bookingID) => {
     try {
       // If already loaded from cache/state, skip
@@ -524,6 +610,12 @@ export default function AppointmentScreen() {
       }
       // Load medical notes once tasks available
       await loadMedicalNotes(bookingID);
+
+      // Ensure nurses are loaded for this booking
+      await ensureNursesForBooking(bookingID);
+
+      // Mark this booking as preloaded
+      setPreloadedBookings((prev) => new Set([...prev, bookingID]));
     } catch (e) {
       // swallow
     }

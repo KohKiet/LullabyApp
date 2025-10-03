@@ -106,6 +106,14 @@ export default function ServiceListModal({
   };
 
   const toggleServiceSelection = (serviceId) => {
+    const svc = services.find((s) => s.serviceID === serviceId);
+    if (svc && svc.forMom === false && relativeCount === 0) {
+      Alert.alert(
+        "Thông báo",
+        "Hồ sơ này chưa có người thân. Vui lòng thêm người thân vào hồ sơ để đặt các dịch vụ cho con."
+      );
+      return;
+    }
     setSelectedServices((prev) => {
       const newSelected = { ...prev };
       if (newSelected[serviceId]) {
@@ -274,6 +282,8 @@ export default function ServiceListModal({
   const renderServiceItem = ({ item, isMomService }) => {
     const isSelected = selectedServices[item.serviceID];
     const quantity = isSelected ? isSelected.quantity : 0;
+    const isChildService = !isMomService;
+    const childDisabled = isChildService && relativeCount === 0;
 
     return (
       <View
@@ -286,10 +296,12 @@ export default function ServiceListModal({
             (isMomService
               ? styles.selectedMomServiceItem
               : styles.selectedBabyServiceItem),
+          childDisabled && styles.disabledServiceItem,
         ]}>
         <TouchableOpacity
           style={styles.serviceHeader}
-          onPress={() => toggleServiceSelection(item.serviceID)}>
+          onPress={() => toggleServiceSelection(item.serviceID)}
+          disabled={childDisabled}>
           <View style={styles.serviceInfo}>
             <Text style={styles.serviceName}>{item.serviceName}</Text>
             <View
@@ -321,7 +333,13 @@ export default function ServiceListModal({
                   isSelected ? "checkmark-circle" : "ellipse-outline"
                 }
                 size={20}
-                color={isSelected ? "#4CAF50" : "#CCC"}
+                color={
+                  childDisabled
+                    ? "#DDD"
+                    : isSelected
+                    ? "#4CAF50"
+                    : "#CCC"
+                }
               />
             </View>
           </View>
@@ -329,8 +347,14 @@ export default function ServiceListModal({
 
         <Text style={styles.description}>{item.description}</Text>
 
+        {childDisabled && (
+          <Text style={styles.relativeNoticeText}>
+            Cần thêm người thân trong hồ sơ để đặt dịch vụ cho con.
+          </Text>
+        )}
+
         {/* Quantity Controls - Only show if selected */}
-        {isSelected && (
+        {isSelected && !childDisabled && (
           <View style={styles.quantityContainer}>
             <Text style={styles.quantityLabel}>Suất:</Text>
             <View style={styles.quantityControls}>
@@ -564,6 +588,12 @@ export default function ServiceListModal({
                   style={styles.sectionTitleBaby}>
                   Dịch vụ con
                 </Text>
+                {relativeCount === 0 && (
+                  <Text style={styles.relativeSectionNotice}>
+                    Hãy thêm người thân vào hồ sơ để chọn dịch vụ cho
+                    con.
+                  </Text>
+                )}
                 {services
                   .filter((service) => service.forMom === false)
                   .map((service) => (
@@ -867,6 +897,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#E3F2FD", // Light blue background for selected baby services
     borderLeftColor: "#2196F3",
   },
+  disabledServiceItem: {
+    opacity: 0.6,
+  },
   serviceHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1057,6 +1090,18 @@ const styles = StyleSheet.create({
     color: "#FF6B6B",
     fontSize: 14,
     marginTop: 5,
+  },
+  relativeNoticeText: {
+    color: "#E53935",
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  relativeSectionNotice: {
+    color: "#E53935",
+    fontSize: 12,
+    marginBottom: 8,
+    marginLeft: 4,
   },
   overlay: {
     flex: 1,

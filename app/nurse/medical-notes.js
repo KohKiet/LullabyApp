@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 import MedicalNoteService from "../../services/medicalNoteService";
+import NursingSpecialistService from "../../services/nursingSpecialistService";
+import ServiceTypeService from "../../services/serviceTypeService";
 
 export default function NurseMedicalNotesScreen() {
   const router = useRouter();
@@ -21,6 +23,9 @@ export default function NurseMedicalNotesScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+  // Thêm state cho nurses và services
+  const [nurses, setNurses] = useState([]);
+  const [services, setServices] = useState([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -32,6 +37,7 @@ export default function NurseMedicalNotesScreen() {
 
   useEffect(() => {
     loadMedicalNotes();
+    loadNursesAndServices();
   }, []);
 
   const loadMedicalNotes = async () => {
@@ -52,6 +58,19 @@ export default function NurseMedicalNotesScreen() {
       Alert.alert("Thông báo", "Có lỗi xảy ra khi tải dữ liệu");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadNursesAndServices = async () => {
+    try {
+      const nurseRes =
+        await NursingSpecialistService.getAllNursingSpecialists();
+      if (nurseRes.success) setNurses(nurseRes.data);
+      const serviceRes =
+        await ServiceTypeService.getAllServiceTypes();
+      if (serviceRes.success) setServices(serviceRes.data);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -181,60 +200,80 @@ export default function NurseMedicalNotesScreen() {
     setShowCreateModal(true);
   };
 
-  const renderMedicalNoteCard = (note, index) => (
-    <View key={note.medicalNoteID} style={styles.noteCard}>
-      <View style={styles.noteHeader}>
-        <Text style={styles.noteTitle}>Ghi chú #{index + 1}</Text>
-        <Text style={styles.noteDate}>
-          {MedicalNoteService.formatDate(note.createdAt)}
-        </Text>
-      </View>
-
-      <View style={styles.noteContent}>
-        <View style={styles.noteRow}>
-          <Text style={styles.noteLabel}>Task ID:</Text>
-          <Text style={styles.noteValue}>{note.customizeTaskID}</Text>
+  const renderMedicalNoteCard = (note, index) => {
+    // Lấy tên chuyên viên
+    const nurse = nurses.find((n) => n.nursingID === note.nursingID);
+    const nurseName = nurse
+      ? nurse.fullName
+      : `Chuyên viên #${note.nursingID}`;
+    // Lấy tên dịch vụ
+    const service = services.find(
+      (s) => s.serviceID === note.serviceID
+    );
+    const serviceName = service
+      ? service.serviceName
+      : `Dịch vụ #${note.serviceID}`;
+    return (
+      <View key={note.medicalNoteID} style={styles.noteCard}>
+        <View style={styles.noteHeader}>
+          <Text style={styles.noteTitle}>Ghi chú #{index + 1}</Text>
+          <Text style={styles.noteDate}>
+            {MedicalNoteService.formatDate(note.createdAt)}
+          </Text>
         </View>
-
-        {note.note && (
+        <View style={styles.noteContent}>
           <View style={styles.noteRow}>
-            <Text style={styles.noteLabel}>Ghi chú:</Text>
-            <Text style={styles.noteValue}>{note.note}</Text>
+            <Text style={styles.noteLabel}>CHUYÊN VIÊN:</Text>
+            <Text style={styles.noteValue}>{nurseName}</Text>
           </View>
-        )}
-
-        {note.advice && (
           <View style={styles.noteRow}>
-            <Text style={styles.noteLabel}>Lời khuyên:</Text>
-            <Text style={styles.noteValue}>{note.advice}</Text>
+            <Text style={styles.noteLabel}>DỊCH VỤ:</Text>
+            <Text style={styles.noteValue}>{serviceName}</Text>
           </View>
-        )}
-
-        {note.image && note.image.trim() !== "" && (
-          <View style={styles.noteRow}>
-            <Text style={styles.noteLabel}>Hình ảnh:</Text>
-            <Text style={styles.noteValue}>{note.image}</Text>
-          </View>
-        )}
+          {note.note && (
+            <View style={styles.noteRow}>
+              <Text style={styles.noteLabel}>Ghi chú:</Text>
+              <Text style={styles.noteValue}>{note.note}</Text>
+            </View>
+          )}
+          {note.advice && (
+            <View style={styles.noteRow}>
+              <Text style={styles.noteLabel}>Lời khuyên:</Text>
+              <Text style={styles.noteValue}>{note.advice}</Text>
+            </View>
+          )}
+          {note.image && note.image.trim() !== "" && (
+            <View style={styles.noteRow}>
+              <Text style={styles.noteLabel}>Hình ảnh:</Text>
+              <Text style={styles.noteValue}>{note.image}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.noteActions}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => openEditModal(note)}>
+            <Ionicons
+              name="create-outline"
+              size={16}
+              color="#4CAF50"
+            />
+            <Text style={styles.editButtonText}>Sửa</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteNote(note.medicalNoteID)}>
+            <Ionicons
+              name="trash-outline"
+              size={16}
+              color="#FF6B6B"
+            />
+            <Text style={styles.deleteButtonText}>Xóa</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <View style={styles.noteActions}>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => openEditModal(note)}>
-          <Ionicons name="create-outline" size={16} color="#4CAF50" />
-          <Text style={styles.editButtonText}>Sửa</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteNote(note.medicalNoteID)}>
-          <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
-          <Text style={styles.deleteButtonText}>Xóa</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (isLoading) {
     return (

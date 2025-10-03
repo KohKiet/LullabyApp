@@ -371,6 +371,35 @@ export default function BookingHistoryScreen() {
     }
   };
 
+  const generateExtraDataFromBooking = (booking, careProfile) => {
+    // Tạo extraData từ dữ liệu booking hiện có
+    // Xác định loại dịch vụ dựa trên amount và các trường khác
+    let serviceType = "service";
+    let serviceName = "Dịch vụ chăm sóc";
+    let description = "Dịch vụ chăm sóc tại nhà";
+
+    // Nếu có amount cao, có thể là package
+    if (booking.amount && booking.amount > 500000) {
+      serviceType = "package";
+      serviceName = "Gói dịch vụ chăm sóc";
+      description = "Gói dịch vụ chăm sóc toàn diện";
+    }
+
+    return {
+      bookingID: booking.bookingID,
+      serviceType: serviceType,
+      serviceData: {
+        serviceName: serviceName,
+        description: description,
+      },
+      memberData: careProfile || null,
+      totalAmount: booking.amount || 0,
+      createdAt: booking.createdAt,
+      workdate: booking.workdate,
+      type: serviceType, // Để hiển thị nút xem chi tiết
+    };
+  };
+
   const loadAllBookingDetails = async (bookings) => {
     try {
       console.log("Loading all booking details...");
@@ -452,6 +481,12 @@ export default function BookingHistoryScreen() {
         try {
           if (extraDataResults[index]) {
             extraData = JSON.parse(extraDataResults[index]);
+          } else {
+            // Nếu không có extraData trong cache, tạo từ dữ liệu booking hiện có
+            extraData = generateExtraDataFromBooking(
+              booking,
+              careProfileMap[booking.careProfileID]
+            );
           }
         } catch (error) {
           console.error(
@@ -459,7 +494,11 @@ export default function BookingHistoryScreen() {
             booking.bookingID,
             error
           );
-          extraData = null;
+          // Nếu có lỗi parse, vẫn tạo extraData từ booking
+          extraData = generateExtraDataFromBooking(
+            booking,
+            careProfileMap[booking.careProfileID]
+          );
         }
 
         detailsMap[booking.bookingID] = {
@@ -573,9 +612,19 @@ export default function BookingHistoryScreen() {
       console.log("Loading services...");
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        console.log("Services loaded:", result.data.length, "items");
-        console.log("Sample service:", result.data[0]);
-        setServices(result.data);
+        // Filter out removed/inactive services
+        const filteredServices = result.data.filter(
+          (service) =>
+            service.status !== "Remove" &&
+            service.status !== "inactive"
+        );
+        console.log(
+          "Services loaded:",
+          filteredServices.length,
+          "items"
+        );
+        console.log("Sample service:", filteredServices[0]);
+        setServices(filteredServices);
       } else {
         console.log("Failed to load services:", result.error);
       }
@@ -1917,8 +1966,8 @@ export default function BookingHistoryScreen() {
           );
         })()}
 
-        {/* Tóm tắt dịch vụ đã hoàn thành - hiển thị ngay cho booking completed */}
-        {booking.status === "completed" && (
+        {/* Tóm tắt dịch vụ đã hoàn thành - chỉ hiển thị khi booking completed và không có extraData */}
+        {booking.status === "completed" && !details.extraData && (
           <View style={styles.completedServicesSummary}>
             <TouchableOpacity
               style={styles.completedServicesToggle}
@@ -2044,19 +2093,21 @@ export default function BookingHistoryScreen() {
 
             {expandedBookings[booking.bookingID] && (
               <View style={styles.expandedContent}>
-                {/* Chỉ hiển thị "Dịch vụ đã chọn" khi là package (isPackage = true) */}
-                {details.extraData.type === "package" && (
-                  <View style={styles.packageInfo}>
-                    <Text style={styles.serviceName}>
-                      {details.extraData.packageData?.serviceName ||
-                        "Gói dịch vụ"}
-                    </Text>
-                    <Text style={styles.serviceDescription}>
-                      {details.extraData.packageData?.description ||
-                        ""}
-                    </Text>
-                  </View>
-                )}
+                {/* Hiển thị thông tin dịch vụ cơ bản */}
+                <View style={styles.packageInfo}>
+                  <Text style={styles.serviceName}>
+                    {details.extraData?.serviceData?.serviceName ||
+                      "Dịch vụ chăm sóc"}
+                  </Text>
+                  <Text style={styles.serviceDescription}>
+                    {details.extraData?.serviceData?.description ||
+                      "Dịch vụ chăm sóc tại nhà"}
+                  </Text>
+                  <Text style={styles.serviceAmount}>
+                    Tổng tiền: {booking.amount?.toLocaleString() || 0}{" "}
+                    VNĐ
+                  </Text>
+                </View>
 
                 {/* Customize Packages - luôn hiển thị */}
                 {customizePackagesMap[booking.bookingID] && (
@@ -2915,6 +2966,12 @@ const styles = StyleSheet.create({
   serviceDescription: {
     fontSize: 14,
     color: "#666",
+  },
+  serviceAmount: {
+    fontSize: 14,
+    color: "#4CAF50",
+    fontWeight: "bold",
+    marginTop: 5,
   },
   servicesList: {
     backgroundColor: "#F8F9FA",

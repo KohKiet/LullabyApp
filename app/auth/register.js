@@ -32,6 +32,20 @@ export default function RegisterScreen() {
     confirmPassword: "",
   });
 
+  const getPasswordIssues = (value) => {
+    const issues = [];
+    if (!value || value.length < 8) {
+      issues.push("ít nhất 8 ký tự");
+    }
+    if (!/[A-Z]/.test(value)) {
+      issues.push("ít nhất 1 chữ cái in hoa");
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/`~]/.test(value)) {
+      issues.push("ít nhất 1 ký tự đặc biệt (!@#$%^&*...)");
+    }
+    return issues;
+  };
+
   const validateForm = () => {
     const newErrors = {
       fullName: "",
@@ -66,9 +80,10 @@ export default function RegisterScreen() {
       }
     }
 
-    // Password
-    if (password.length < 6) {
-      newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+    // Password strength
+    const pwIssues = getPasswordIssues(password);
+    if (pwIssues.length > 0) {
+      newErrors.password = `Mật khẩu cần: ${pwIssues.join(", ")}`;
     }
 
     // Confirm password
@@ -100,8 +115,28 @@ export default function RegisterScreen() {
       const result = await AuthService.register(userData);
 
       if (result.success) {
-        // Chuyển thẳng đến trang đăng nhập, không hiển thị alert
-        router.replace("/auth/login");
+        // Thông báo thành công và tự động đăng nhập
+        Alert.alert("Thông báo", "Tạo tài khoản thành công", [
+          {
+            text: "OK",
+            onPress: async () => {
+              const login = await AuthService.loginWithCredentials(
+                email,
+                password
+              );
+              if (login.success) {
+                router.replace("/");
+              } else {
+                Alert.alert(
+                  "Thông báo",
+                  login.error ||
+                    "Đăng nhập tự động thất bại. Vui lòng đăng nhập lại."
+                );
+                router.replace("/auth/login");
+              }
+            },
+          },
+        ]);
       } else {
         Alert.alert(
           "Thông báo",
@@ -223,9 +258,19 @@ export default function RegisterScreen() {
               value={password}
               onChangeText={(t) => {
                 setPassword(t);
-                if (errors.password) {
-                  setErrors((e) => ({ ...e, password: "" }));
-                }
+                const pwIssues = getPasswordIssues(t);
+                setErrors((e) => ({
+                  ...e,
+                  password:
+                    pwIssues.length > 0
+                      ? `Mật khẩu cần: ${pwIssues.join(", ")}`
+                      : "",
+                  // Live update confirm error when user changes password
+                  confirmPassword:
+                    confirmPassword && t !== confirmPassword
+                      ? "Mật khẩu xác nhận không khớp"
+                      : "",
+                }));
               }}
               secureTextEntry={!showPassword}
               editable={!isLoading}
@@ -256,9 +301,13 @@ export default function RegisterScreen() {
               value={confirmPassword}
               onChangeText={(t) => {
                 setConfirmPassword(t);
-                if (errors.confirmPassword) {
-                  setErrors((e) => ({ ...e, confirmPassword: "" }));
-                }
+                setErrors((e) => ({
+                  ...e,
+                  confirmPassword:
+                    t && t !== password
+                      ? "Mật khẩu xác nhận không khớp"
+                      : "",
+                }));
               }}
               secureTextEntry={!showConfirmPassword}
               editable={!isLoading}
@@ -289,10 +338,19 @@ export default function RegisterScreen() {
           <TouchableOpacity
             style={[
               styles.registerButton,
-              isLoading && styles.registerButtonDisabled,
+              (isLoading ||
+                getPasswordIssues(password).length > 0 ||
+                !confirmPassword ||
+                confirmPassword !== password) &&
+                styles.registerButtonDisabled,
             ]}
             onPress={handleEmailRegister}
-            disabled={isLoading}>
+            disabled={
+              isLoading ||
+              getPasswordIssues(password).length > 0 ||
+              !confirmPassword ||
+              confirmPassword !== password
+            }>
             <Text style={styles.registerButtonText}>
               {isLoading ? "Đang đăng ký..." : "Đăng ký"}
             </Text>

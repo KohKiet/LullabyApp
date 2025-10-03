@@ -135,9 +135,12 @@ export default function HomeScreen() {
       const result = await ServiceTypeService.getAllServiceTypes();
 
       if (result.success) {
-        // Filter only services (not packages)
+        // Filter only services (not packages) and exclude removed/inactive services
         const servicesOnly = result.data.filter(
-          (service) => !service.isPackage
+          (service) =>
+            !service.isPackage &&
+            service.status !== "Remove" &&
+            service.status !== "inactive"
         );
         setServices(servicesOnly);
       } else {
@@ -157,9 +160,12 @@ export default function HomeScreen() {
       const result = await ServiceTypeService.getAllServiceTypes();
 
       if (result.success) {
-        // Filter only packages
+        // Filter only packages and exclude removed/inactive packages
         const packagesOnly = result.data.filter(
-          (service) => service.isPackage
+          (service) =>
+            service.isPackage &&
+            service.status !== "Remove" &&
+            service.status !== "inactive"
         );
         setPackages(packagesOnly);
       } else {
@@ -173,7 +179,9 @@ export default function HomeScreen() {
     }
   };
 
-  const handleShowServices = () => {
+  const handleShowServices = async () => {
+    // Đảm bảo dữ liệu mới nhất trước khi kiểm tra
+    await loadUserData();
     if (careProfiles.length === 0) {
       Alert.alert(
         "Thông báo",
@@ -193,7 +201,9 @@ export default function HomeScreen() {
     setShowCareProfileModal(true);
   };
 
-  const handleShowPackages = () => {
+  const handleShowPackages = async () => {
+    // Đảm bảo dữ liệu mới nhất trước khi kiểm tra
+    await loadUserData();
     if (careProfiles.length === 0) {
       Alert.alert(
         "Thông báo",
@@ -243,11 +253,18 @@ export default function HomeScreen() {
         if (Number.isNaN(start.getTime())) {
           // skip if invalid, let backend handle
         } else {
-          // Only allow bookings that start exactly on the hour
-          if (minutes !== 0) {
+          // Allow bookings that start on the hour or at 10-minute intervals
+          if (
+            minutes !== 0 &&
+            minutes !== 10 &&
+            minutes !== 20 &&
+            minutes !== 30 &&
+            minutes !== 40 &&
+            minutes !== 50
+          ) {
             Alert.alert(
               "Thông báo",
-              "Thời gian đặt lịch phải bắt đầu đúng giờ (ví dụ 19:00-20:00)."
+              "Thời gian đặt lịch phải bắt đầu đúng giờ hoặc cách 10 phút (ví dụ 19:00, 19:10, 19:20...)."
             );
             return;
           }
@@ -705,7 +722,7 @@ export default function HomeScreen() {
             </MaskedView>
           </LinearGradient>
           <Text style={styles.subText}>
-            𝓔𝓿𝓸𝓴𝓮𝓼 𝓽𝓱𝓮 𝓲𝓶𝓪𝓰𝓮 𝓸𝓯 𝓪 𝓵𝓾𝓵𝓵𝓪𝓫𝔂
+            Evokes the image of a lullaby
           </Text>
         </View>
       </LinearGradient>
@@ -804,9 +821,13 @@ const styles = StyleSheet.create({
     lineHeight: 32,
   },
   subText: {
-    fontSize: 20,
+    fontSize: 18,
     color: "#66BB6A",
     marginTop: 3,
+    fontStyle: "italic",
+    fontWeight: "500",
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
   content: {
     flex: 1,

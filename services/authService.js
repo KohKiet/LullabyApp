@@ -48,7 +48,10 @@ class AuthService {
       if (userData) {
         return { success: true, data: JSON.parse(userData) };
       } else {
-        return { success: false, error: "No user data found" };
+        return {
+          success: false,
+          error: "Không tìm thấy dữ liệu người dùng",
+        };
       }
     } catch (error) {
       return { success: false, error: error.message };
@@ -172,10 +175,13 @@ class AuthService {
           return { success: true, user: userData };
         } else {
           console.log("🔍 Login failed: Invalid response format");
-          return { success: false, error: "Invalid response format" };
+          return {
+            success: false,
+            error: "Định dạng phản hồi không hợp lệ",
+          };
         }
       } else {
-        let errorMessage = "Login failed";
+        let errorMessage = "Đăng nhập thất bại";
         try {
           const errorData = await response.json();
           errorMessage =
@@ -240,19 +246,29 @@ class AuthService {
         }
       );
 
-      if (response.ok) {
+      if (response.ok || response.status === 201) {
         const data = await response.json();
 
-        if (data.success) {
-          return { success: true, data: data.data };
-        } else {
+        // API trả về 201 và object { message, account }
+        if (data && data.account) {
           return {
-            success: false,
-            error: data.message || "Registration failed",
+            success: true,
+            data: data.account,
+            message: data.message,
           };
         }
+
+        // Fallback theo format cũ
+        if (data && data.success) {
+          return { success: true, data: data.data };
+        }
+
+        return {
+          success: false,
+          error: data?.message || "Đăng ký thất bại",
+        };
       } else {
-        let errorMessage = "Registration failed";
+        let errorMessage = "Đăng ký thất bại";
         try {
           const errorData = await response.json();
           errorMessage =
@@ -272,7 +288,7 @@ class AuthService {
     try {
       const tokenResult = await this.getToken();
       if (!tokenResult.success || !tokenResult.data) {
-        return { success: false, error: "No authentication token" };
+        return { success: false, error: "Không có token xác thực" };
       }
 
       const response = await this.fetchWithTimeout(
@@ -291,7 +307,7 @@ class AuthService {
         const data = await response.json();
         return { success: true, data: data };
       } else {
-        let errorMessage = "Update failed";
+        let errorMessage = "Cập nhật thất bại";
         try {
           const errorData = await response.json();
           errorMessage =
@@ -311,7 +327,7 @@ class AuthService {
     try {
       const tokenResult = await this.getToken();
       if (!tokenResult.success || !tokenResult.data) {
-        return { success: false, error: "No authentication token" };
+        return { success: false, error: "Không có token xác thực" };
       }
 
       const response = await this.fetchWithTimeout(

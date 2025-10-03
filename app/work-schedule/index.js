@@ -415,14 +415,6 @@ export default function WorkScheduleScreen() {
     checkUnreadNotifications();
   }, []);
 
-  // Debug modal state changes
-  useEffect(() => {
-    console.log(
-      "showMedicalNotesModal changed to:",
-      showMedicalNotesModal
-    );
-  }, [showMedicalNotesModal]);
-
   useEffect(() => {
     console.log("showTestModal changed to:", showTestModal);
   }, [showTestModal]);
@@ -799,11 +791,9 @@ export default function WorkScheduleScreen() {
     setShowAddNoteModal(true);
   };
 
-  // Medical notes functions (open inline on top of detail modal)
+  // Medical notes functions
   const openMedicalNotesModal = async () => {
-    console.log(
-      "Opening medical notes modal inline over detail modal"
-    );
+    console.log("Opening medical notes modal...");
     setShowMedicalNotesModal(true);
     setIsLoadingMedicalNotes(true);
     try {
@@ -811,8 +801,19 @@ export default function WorkScheduleScreen() {
         scheduleDetails.careProfile &&
         scheduleDetails.customizeTask
       ) {
-        // Load all notes for the same careProfile and same service
-        await loadMedicalNotesForService();
+        // Load medical notes using the new API
+        const result =
+          await MedicalNoteService.getMedicalNotesByCareProfileAndService(
+            scheduleDetails.careProfile.careProfileID,
+            scheduleDetails.customizeTask.serviceID
+          );
+
+        if (result.success) {
+          setMedicalNotes(result.data || []);
+        } else {
+          console.error("Error loading medical notes:", result.error);
+          setMedicalNotes([]);
+        }
       } else {
         console.log("Missing careProfile or customizeTask");
         setMedicalNotes([]);
@@ -1165,101 +1166,6 @@ export default function WorkScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Inline Medical Notes Overlay (works reliably on iOS) */}
-            {showMedicalNotesModal && (
-              <View
-                pointerEvents="auto"
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  zIndex: 1000,
-                }}>
-                <View
-                  style={{
-                    backgroundColor: "white",
-                    width: "90%",
-                    maxHeight: "80%",
-                    borderRadius: 16,
-                    overflow: "hidden",
-                  }}>
-                  <View
-                    style={{
-                      padding: 16,
-                      borderBottomWidth: 1,
-                      borderBottomColor: "#eee",
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}>
-                    <Text
-                      style={{ fontSize: 18, fontWeight: "bold" }}>
-                      Ghi chú y tế ({medicalNotes.length})
-                    </Text>
-                    <TouchableOpacity
-                      onPress={closeMedicalNotesModal}>
-                      <Ionicons name="close" size={24} color="#333" />
-                    </TouchableOpacity>
-                  </View>
-                  <ScrollView style={{ padding: 16 }}>
-                    {isLoadingMedicalNotes ? (
-                      <Text style={{ textAlign: "center" }}>
-                        Đang tải ghi chú...
-                      </Text>
-                    ) : medicalNotes.length > 0 ? (
-                      medicalNotes.map((note) => (
-                        <View
-                          key={note.medicalNoteID}
-                          style={{
-                            backgroundColor: "#F8F9FA",
-                            borderRadius: 10,
-                            padding: 12,
-                            marginBottom: 12,
-                            borderWidth: 1,
-                            borderColor: "#E0E0E0",
-                          }}>
-                          <Text
-                            style={{
-                              fontWeight: "bold",
-                              marginBottom: 6,
-                            }}>
-                            {note.nursingName ||
-                              `Chuyên viên #${note.nursingID}`}{" "}
-                            •{" "}
-                            {new Date(
-                              note.createdAt
-                            ).toLocaleDateString("vi-VN")}
-                          </Text>
-                          <Text style={{ color: "#333" }}>
-                            {note.note}
-                          </Text>
-                          {note.advice ? (
-                            <Text
-                              style={{ color: "#666", marginTop: 6 }}>
-                              Lời khuyên: {note.advice}
-                            </Text>
-                          ) : null}
-                        </View>
-                      ))
-                    ) : (
-                      <Text
-                        style={{
-                          textAlign: "center",
-                          color: "#666",
-                        }}>
-                        Chưa có ghi chú nào
-                      </Text>
-                    )}
-                  </ScrollView>
-                </View>
-              </View>
-            )}
-
             {isLoadingDetails ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>
@@ -1367,14 +1273,14 @@ export default function WorkScheduleScreen() {
 
                       {/* Xem ghi chú: chỉ mở khi đã completed */}
                       <TouchableOpacity
-                        style={styles.viewNotesButton}
+                        style={styles.modalActionButton}
                         onPress={openMedicalNotesModal}
                         disabled={
                           selectedSchedule.status !== "completed"
                         }>
                         <Ionicons
                           name="document-text"
-                          size={20}
+                          size={18}
                           color={
                             selectedSchedule.status === "completed"
                               ? "#2196F3"
@@ -1383,7 +1289,7 @@ export default function WorkScheduleScreen() {
                         />
                         <Text
                           style={[
-                            styles.viewNotesButtonText,
+                            styles.modalActionButtonText,
                             {
                               color:
                                 selectedSchedule.status ===
@@ -1944,79 +1850,12 @@ export default function WorkScheduleScreen() {
         </View>
       </Modal>
 
-      {/* Simple Test Modal */}
+      {/* Medical Notes Modal */}
       <Modal
         visible={showMedicalNotesModal}
         transparent={true}
         animationType="slide"
         onRequestClose={closeMedicalNotesModal}>
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}>
-          <View
-            style={{
-              backgroundColor: "white",
-              padding: 20,
-              borderRadius: 10,
-              width: "80%",
-              maxHeight: "80%",
-            }}>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}>
-              Test Modal - Medical Notes
-            </Text>
-            <Text style={{ marginBottom: 20 }}>
-              This is a test modal. If you can see this, the modal
-              system is working!
-            </Text>
-            <Text style={{ marginBottom: 20 }}>
-              Medical Notes Count: {medicalNotes.length}
-            </Text>
-            {medicalNotes.length > 0 && (
-              <View style={{ marginBottom: 20 }}>
-                <Text style={{ fontWeight: "bold" }}>Notes:</Text>
-                {medicalNotes.map((note, index) => (
-                  <Text key={index} style={{ marginLeft: 10 }}>
-                    {note.note}
-                  </Text>
-                ))}
-              </View>
-            )}
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#4FC3F7",
-                padding: 10,
-                borderRadius: 5,
-                alignItems: "center",
-              }}
-              onPress={closeMedicalNotesModal}>
-              <Text style={{ color: "white", fontWeight: "bold" }}>
-                Close
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* View Medical Notes Modal - Original */}
-      {console.log(
-        "Rendering modal, showMedicalNotesModal:",
-        showMedicalNotesModal
-      )}
-      <Modal
-        visible={false}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={closeMedicalNotesModal}>
-        {console.log("Modal is visible, rendering content")}
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -2030,20 +1869,7 @@ export default function WorkScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.modalBody}
-              showsVerticalScrollIndicator={true}
-              bounces={true}
-              contentContainerStyle={styles.scrollContentContainer}>
-              <Text
-                style={[
-                  styles.loadingText,
-                  { fontSize: 14, color: "#666", marginBottom: 10 },
-                ]}>
-                Debug: Modal is open, Loading:{" "}
-                {isLoadingMedicalNotes ? "Yes" : "No"}, Notes:{" "}
-                {medicalNotes.length}
-              </Text>
+            <ScrollView style={styles.modalBody}>
               {isLoadingMedicalNotes ? (
                 <View style={styles.loadingContainer}>
                   <Text style={styles.loadingText}>
@@ -2081,19 +1907,6 @@ export default function WorkScheduleScreen() {
                           <Text style={styles.medicalNoteFieldValue}>
                             {note.nursingName ||
                               `Chuyên viên #${note.nursingID}`}
-                          </Text>
-                        </View>
-
-                        <View style={styles.medicalNoteField}>
-                          <Text style={styles.medicalNoteFieldLabel}>
-                            Họ và tên:
-                          </Text>
-                          <Text style={styles.medicalNoteFieldValue}>
-                            {note.relativeName ||
-                              (note.relativeID
-                                ? `Người nhận #${note.relativeID}`
-                                : scheduleDetails.careProfile
-                                    ?.profileName || "Mẹ")}
                           </Text>
                         </View>
 
@@ -2142,15 +1955,10 @@ export default function WorkScheduleScreen() {
                   <Text
                     style={[
                       styles.emptyStateText,
-                      { fontSize: 12, marginTop: 10 },
+                      { fontSize: 14, marginTop: 8, color: "#888" },
                     ]}>
-                    CustomizeTaskID:{" "}
-                    {scheduleDetails.customizeTask?.customizeTaskID ||
-                      "N/A"}
-                  </Text>
-                  <Text
-                    style={[styles.emptyStateText, { fontSize: 12 }]}>
-                    Medical Notes Count: {medicalNotes.length}
+                    Ghi chú sẽ được hiển thị khi có dữ liệu từ chuyên
+                    viên
                   </Text>
                 </View>
               )}

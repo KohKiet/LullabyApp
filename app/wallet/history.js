@@ -120,6 +120,10 @@ export default function TransactionHistoryScreen() {
         return "Đang xử lý";
       case "failed":
         return "Thất bại";
+      case "cancelled":
+      case "canceled":
+      case "cancel":
+        return "Đã hủy";
       default:
         return status;
     }
@@ -133,6 +137,10 @@ export default function TransactionHistoryScreen() {
         return "#FFA500";
       case "failed":
         return "#FF6B6B";
+      case "cancelled":
+      case "canceled":
+      case "cancel":
+        return "#9E9E9E";
       default:
         return "#666";
     }

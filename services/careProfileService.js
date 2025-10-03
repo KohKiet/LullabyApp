@@ -99,9 +99,13 @@ class CareProfileService {
         return allResult;
       }
 
-      const careProfiles = allResult.data.filter(
-        (profile) => profile.accountID === accountID
-      );
+      const careProfiles = allResult.data.filter((profile) => {
+        const ownerId =
+          profile.accountID ??
+          profile.accountId ??
+          profile.account_id;
+        return ownerId === accountID;
+      });
       return { success: true, data: careProfiles };
     } catch (error) {
       return { success: false, error: error.message };

@@ -329,6 +329,18 @@ export default function PackageListModal({
     }
   };
 
+  const getTaskDisplayName = (task) => {
+    return (
+      task.serviceName ||
+      task.childServiceName ||
+      task.child_ServiceName ||
+      task.taskName ||
+      task.name ||
+      task.description ||
+      "Dịch vụ"
+    );
+  };
+
   const renderPackageItem = ({ item }) => {
     const isExpanded = expandedPackages.has(item.serviceID);
     const isSelected = selectedPackage === item.serviceID;
@@ -444,8 +456,8 @@ export default function PackageListModal({
                         <Text style={styles.taskOrder}>
                           {task.taskOrder}.
                         </Text>
-                        <Text style={styles.taskDescription}>
-                          {task.description}
+                        <Text style={styles.taskName}>
+                          {getTaskDisplayName(task)}
                         </Text>
                         <View style={styles.taskPriceContainer}>
                           <Text style={styles.taskPrice}>
@@ -823,6 +835,13 @@ const styles = StyleSheet.create({
   taskDescription: {
     fontSize: 13,
     color: "#333",
+    flex: 1,
+    marginRight: 8,
+  },
+  taskName: {
+    fontSize: 13,
+    color: "#333",
+    fontWeight: "600",
     flex: 1,
     marginRight: 8,
   },

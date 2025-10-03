@@ -633,10 +633,10 @@ export default function PaymentScreen() {
       const start = task.startTime ? new Date(task.startTime) : null;
       if (!start || Number.isNaN(start.getTime())) return true; // if no start time, allow
 
-      // Do not allow after start
+      // Do not allow after start (sử dụng giờ local)
       if (now >= start) return false;
 
-      // Do not allow within 30 minutes before start
+      // Do not allow within 30 minutes before start (sử dụng giờ local)
       const THIRTY_MIN_MS = 30 * 60 * 1000;
       if (start.getTime() - now.getTime() <= THIRTY_MIN_MS)
         return false;
@@ -784,10 +784,13 @@ export default function PaymentScreen() {
         const mockBookingData = {
           bookingID: parsedData.bookingID,
           careProfileID: parsedData.memberData?.careProfileID,
-          createdAt: parsedData.createdAt || new Date().toISOString(),
+          createdAt:
+            parsedData.createdAt ||
+            new Date().toLocaleString("sv-SE"), // Sử dụng format ISO local
           status: "pending",
           amount: parsedData.totalAmount || 0,
-          workdate: parsedData.workdate || new Date().toISOString(),
+          workdate:
+            parsedData.workdate || new Date().toLocaleString("sv-SE"), // Sử dụng format ISO local
         };
         setBookingData(mockBookingData);
 
@@ -952,8 +955,13 @@ export default function PaymentScreen() {
     try {
       const result = await ServiceTypeService.getAllServiceTypes();
       if (result.success) {
-        // Load all service types (including packages) for proper display
-        setServices(result.data || []);
+        // Load all service types (including packages) for proper display, but filter out removed/inactive
+        const filteredServices = (result.data || []).filter(
+          (service) =>
+            service.status !== "Remove" &&
+            service.status !== "inactive"
+        );
+        setServices(filteredServices);
       } else {
         setServices([]);
       }
@@ -1305,12 +1313,15 @@ export default function PaymentScreen() {
     if (!dateString) return "";
     try {
       const date = new Date(dateString);
-      const day = date.getDate().toString().padStart(2, "0");
-      const month = (date.getMonth() + 1).toString().padStart(2, "0");
-      const year = date.getFullYear();
-      const hours = date.getHours().toString().padStart(2, "0");
-      const minutes = date.getMinutes().toString().padStart(2, "0");
-      return `${hours}:${minutes} - ${day}/${month}/${year}`;
+      // Sử dụng toLocaleString để hiển thị theo múi giờ local
+      return date.toLocaleString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour12: false,
+      });
     } catch (error) {
       return dateString;
     }
@@ -1320,10 +1331,12 @@ export default function PaymentScreen() {
     if (!dateString) return "";
     try {
       const date = new Date(dateString);
-      const day = date.getDate().toString().padStart(2, "0");
-      const month = (date.getMonth() + 1).toString().padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
+      // Sử dụng toLocaleDateString để hiển thị theo múi giờ local
+      return date.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
     } catch (error) {
       return dateString;
     }
@@ -1363,13 +1376,25 @@ export default function PaymentScreen() {
     try {
       const s = new Date(startString);
       const e = new Date(endString);
-      const hh = (n) => String(n).padStart(2, "0");
-      const start = `${hh(s.getHours())}:${hh(s.getMinutes())}`;
-      const end = `${hh(e.getHours())}:${hh(e.getMinutes())}`;
-      const day = hh(s.getDate());
-      const month = hh(s.getMonth() + 1);
-      const year = s.getFullYear();
-      return `${start} - ${end} ${day}/${month}/${year}`;
+
+      // Sử dụng toLocaleTimeString và toLocaleDateString để hiển thị theo múi giờ local
+      const startTime = s.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const endTime = e.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const date = s.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+
+      return `${startTime} - ${endTime} ${date}`;
     } catch (error) {
       return `${formatDateTime(startString)} - ${formatDateTime(
         endString

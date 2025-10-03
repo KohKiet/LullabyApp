@@ -19,7 +19,7 @@ console.log(
 // Authentication & Account Management Endpoints
 export const AUTH_ENDPOINTS = {
   LOGIN: `${BASE_URL}/api/accounts/login`,
-  REGISTER: `${BASE_URL}/api/accounts/register`,
+  REGISTER: `${BASE_URL}/api/accounts/register/customer`,
   GET_USER_PROFILE: (id) => `${BASE_URL}/api/accounts/get/${id}`,
   UPDATE_USER: (id) => `${BASE_URL}/api/accounts/update/${id}`,
   HEALTH_CHECK: `${BASE_URL}/api/health`,

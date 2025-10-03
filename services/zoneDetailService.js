@@ -4,7 +4,6 @@ class ZoneDetailService {
   // Lấy tất cả zone details
   async getAllZoneDetails() {
     try {
-      console.log("ZoneDetailService: Fetching all zone details...");
       const response = await fetch(
         ZONE_DETAIL_ENDPOINTS.GET_ALL_ZONE_DETAILS,
         {
@@ -17,19 +16,9 @@ class ZoneDetailService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log(
-          "ZoneDetailService: Zone details received:",
-          data.length,
-          "items"
-        );
         return { success: true, data: data };
       } else {
-        console.log(
-          "ZoneDetailService: HTTP Error:",
-          response.status
-        );
         // Fallback to mock data
-        console.log("ZoneDetailService: Using mock data");
         return {
           success: true,
           data: [
@@ -55,9 +44,7 @@ class ZoneDetailService {
         };
       }
     } catch (error) {
-      console.log("ZoneDetailService: Network error:", error.message);
       // Fallback to mock data
-      console.log("ZoneDetailService: Using mock data due to error");
       return {
         success: true,
         data: [
@@ -87,7 +74,6 @@ class ZoneDetailService {
   // Lấy tất cả zones
   async getAllZones() {
     try {
-      console.log("ZoneDetailService: Fetching all zones...");
       const response = await fetch(ZONE_ENDPOINTS.GET_ALL_ZONES, {
         method: "GET",
         headers: {
@@ -97,19 +83,9 @@ class ZoneDetailService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log(
-          "ZoneDetailService: Zones received:",
-          data.length,
-          "items"
-        );
         return { success: true, data: data };
       } else {
-        console.log(
-          "ZoneDetailService: HTTP Error:",
-          response.status
-        );
         // Fallback to mock data
-        console.log("ZoneDetailService: Using mock data");
         return {
           success: true,
           data: [
@@ -135,9 +111,7 @@ class ZoneDetailService {
         };
       }
     } catch (error) {
-      console.log("ZoneDetailService: Network error:", error.message);
       // Fallback to mock data
-      console.log("ZoneDetailService: Using mock data due to error");
       return {
         success: true,
         data: [
@@ -194,10 +168,6 @@ class ZoneDetailService {
 
       return { success: true, data: zoneDetailsWithInfo };
     } catch (error) {
-      console.log(
-        "ZoneDetailService: Error combining zone data:",
-        error.message
-      );
       return { success: false, error: error.message };
     }
   }

@@ -42,6 +42,8 @@ export default function ProfileScreen() {
     note: "",
     zoneDetailID: null,
   });
+  const [hasExistingCareProfile, setHasExistingCareProfile] =
+    useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [editingProfile, setEditingProfile] = useState(null);
@@ -198,16 +200,7 @@ export default function ProfileScreen() {
 
       if (result.success) {
         setZones(result.data);
-        console.log(
-          "ProfileScreen: Zones loaded:",
-          result.data.length,
-          "items"
-        );
       } else {
-        console.log(
-          "ProfileScreen: Failed to load zones:",
-          result.error
-        );
         Alert.alert("Thông báo", "Không thể tải danh sách khu vực");
       }
     } catch (error) {
@@ -399,29 +392,58 @@ export default function ProfileScreen() {
   };
 
   const openCareProfileForm = () => {
-    // Pre-fill form với thông tin từ user data
-    const userDateOfBirth = userData.dateOfBirth
-      ? new Date(userData.dateOfBirth)
-      : new Date();
-    setSelectedDate(userDateOfBirth);
+    // Check if there are existing care profiles
+    const hasExisting = careProfiles && careProfiles.length > 0;
+    setHasExistingCareProfile(hasExisting);
 
-    setCareProfileForm({
-      profileName: userData.fullName || userData.full_name || "",
-      dateOfBirth: userData.dateOfBirth
-        ? new Date(userData.dateOfBirth).toISOString().split("T")[0]
-        : "",
-      phoneNumber:
-        userData.phoneNumber || userData.phone_number || "",
-      address: userData.address || "",
-      note: "",
-      zoneDetailID: null,
-    });
+    if (hasExisting) {
+      // Use data from the first existing care profile
+      const existingProfile = careProfiles[0];
+      const existingDateOfBirth = existingProfile.dateOfBirth
+        ? new Date(existingProfile.dateOfBirth)
+        : new Date();
+      setSelectedDate(existingDateOfBirth);
+
+      setCareProfileForm({
+        profileName: existingProfile.profileName || "",
+        dateOfBirth: existingProfile.dateOfBirth
+          ? new Date(existingProfile.dateOfBirth)
+              .toISOString()
+              .split("T")[0]
+          : "",
+        phoneNumber:
+          userData.phoneNumber || userData.phone_number || "",
+        address: userData.address || "",
+        note: "",
+        zoneDetailID: null,
+      });
+    } else {
+      // Pre-fill form với thông tin từ user data (first time)
+      const userDateOfBirth = userData.dateOfBirth
+        ? new Date(userData.dateOfBirth)
+        : new Date();
+      setSelectedDate(userDateOfBirth);
+
+      setCareProfileForm({
+        profileName: userData.fullName || userData.full_name || "",
+        dateOfBirth: userData.dateOfBirth
+          ? new Date(userData.dateOfBirth).toISOString().split("T")[0]
+          : "",
+        phoneNumber:
+          userData.phoneNumber || userData.phone_number || "",
+        address: userData.address || "",
+        note: "",
+        zoneDetailID: null,
+      });
+    }
+
     setSelectedZone(null);
     setShowCareProfileForm(true);
   };
 
   const closeCareProfileForm = () => {
     setShowCareProfileForm(false);
+    setHasExistingCareProfile(false);
     setCareProfileForm({
       profileName: "",
       dateOfBirth: "",
@@ -434,6 +456,14 @@ export default function ProfileScreen() {
   };
 
   const handleCareProfileFormChange = (field, value) => {
+    // Don't allow changes to profileName and dateOfBirth if there's existing care profile
+    if (
+      hasExistingCareProfile &&
+      (field === "profileName" || field === "dateOfBirth")
+    ) {
+      return;
+    }
+
     setCareProfileForm((prev) => ({
       ...prev,
       [field]: value,
@@ -441,6 +471,10 @@ export default function ProfileScreen() {
   };
 
   const showDatePickerModal = () => {
+    // Don't allow date picker if there's existing care profile
+    if (hasExistingCareProfile) {
+      return;
+    }
     setShowDatePicker(true);
   };
 
@@ -521,8 +555,6 @@ export default function ProfileScreen() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Raw medical notes data:", data);
-
         // Enhance notes with additional information
         const enhancedNotes = await Promise.all(
           data.map(async (note) => {
@@ -540,19 +572,9 @@ export default function ProfileScreen() {
                   nursingData.fullName ||
                   nursingData.nursingFullName ||
                   nursingData.name;
-                console.log(
-                  "Fetched nursing name:",
-                  enhancedNote.nursingName
-                );
               } else {
-                console.log(
-                  "Failed to fetch nursing name, status:",
-                  nursingResponse.status
-                );
               }
-            } catch (error) {
-              console.log("Could not fetch nursing name:", error);
-            }
+            } catch (error) {}
 
             // Fetch relative name if relativeID exists
             if (note.relativeID) {
@@ -565,19 +587,9 @@ export default function ProfileScreen() {
                   const relativeData = await relativeResponse.json();
                   enhancedNote.relativeName =
                     relativeData.relativeName || relativeData.name;
-                  console.log(
-                    "Fetched relative name:",
-                    enhancedNote.relativeName
-                  );
                 } else {
-                  console.log(
-                    "Failed to fetch relative name, status:",
-                    relativeResponse.status
-                  );
                 }
-              } catch (error) {
-                console.log("Could not fetch relative name:", error);
-              }
+              } catch (error) {}
             }
 
             // Fetch service name via customize task
@@ -602,28 +614,13 @@ export default function ProfileScreen() {
                     const serviceData = await serviceResponse.json();
                     enhancedNote.serviceName =
                       serviceData.serviceName || serviceData.name;
-                    console.log(
-                      "Fetched service name:",
-                      enhancedNote.serviceName
-                    );
                   } else {
-                    console.log(
-                      "Failed to fetch service name, status:",
-                      serviceResponse.status
-                    );
                   }
                 } else {
-                  console.log("No serviceID found in customize task");
                 }
               } else {
-                console.log(
-                  "Failed to fetch customize task, status:",
-                  customizeTaskResponse.status
-                );
               }
-            } catch (error) {
-              console.log("Could not fetch service name:", error);
-            }
+            } catch (error) {}
 
             return enhancedNote;
           })
@@ -631,14 +628,9 @@ export default function ProfileScreen() {
 
         setMedicalNotes(enhancedNotes);
       } else {
-        console.error(
-          "Failed to load medical notes:",
-          response.status
-        );
         setMedicalNotes([]);
       }
     } catch (error) {
-      console.error("Error loading medical notes:", error);
       setMedicalNotes([]);
     } finally {
       setIsLoadingMedicalNotes(false);
@@ -1706,25 +1698,43 @@ export default function ProfileScreen() {
               <View style={styles.formField}>
                 <Text style={styles.formLabel}>Tên hồ sơ *</Text>
                 <TextInput
-                  style={styles.formInput}
+                  style={[
+                    styles.formInput,
+                    hasExistingCareProfile && styles.disabledInput,
+                  ]}
                   value={careProfileForm.profileName}
                   onChangeText={(text) =>
                     handleCareProfileFormChange("profileName", text)
                   }
                   placeholder="Nhập tên hồ sơ"
+                  editable={!hasExistingCareProfile}
                 />
+                {hasExistingCareProfile && (
+                  <Text style={styles.disabledFieldNote}>
+                    Tên hồ sơ được giữ từ hồ sơ trước đó
+                  </Text>
+                )}
               </View>
 
               <View style={styles.formField}>
                 <Text style={styles.formLabel}>Ngày sinh *</Text>
                 <TouchableOpacity
-                  style={styles.datePickerButton}
-                  onPress={showDatePickerModal}>
+                  style={[
+                    styles.datePickerButton,
+                    hasExistingCareProfile && styles.disabledInput,
+                  ]}
+                  onPress={
+                    hasExistingCareProfile
+                      ? null
+                      : showDatePickerModal
+                  }
+                  disabled={hasExistingCareProfile}>
                   <Text
                     style={[
                       styles.datePickerText,
                       !careProfileForm.dateOfBirth &&
                         styles.placeholderText,
+                      hasExistingCareProfile && styles.disabledText,
                     ]}>
                     {careProfileForm.dateOfBirth
                       ? formatDateForDisplay(
@@ -1732,8 +1742,17 @@ export default function ProfileScreen() {
                         )
                       : "Chọn ngày sinh"}
                   </Text>
-                  <Ionicons name="calendar" size={20} color="#666" />
+                  <Ionicons
+                    name="calendar"
+                    size={20}
+                    color={hasExistingCareProfile ? "#ccc" : "#666"}
+                  />
                 </TouchableOpacity>
+                {hasExistingCareProfile && (
+                  <Text style={styles.disabledFieldNote}>
+                    Ngày sinh được giữ từ hồ sơ trước đó
+                  </Text>
+                )}
               </View>
 
               <View style={styles.formField}>
@@ -1816,125 +1835,131 @@ export default function ProfileScreen() {
     if (!showEditForm) return null;
 
     return (
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              Chỉnh sửa hồ sơ chăm sóc
-            </Text>
-            <TouchableOpacity onPress={closeEditForm}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.formContainer}>
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Tên hồ sơ *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.profileName}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("profileName", text)
-                }
-                placeholder="Nhập tên hồ sơ"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ngày sinh *</Text>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={showDatePickerModal}>
-                <Text
-                  style={[
-                    styles.datePickerText,
-                    !careProfileForm.dateOfBirth &&
-                      styles.placeholderText,
-                  ]}>
-                  {careProfileForm.dateOfBirth
-                    ? formatDateForDisplay(
-                        careProfileForm.dateOfBirth
-                      )
-                    : "Chọn ngày sinh"}
-                </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Số điện thoại *</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.phoneNumber}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("phoneNumber", text)
-                }
-                placeholder="Nhập số điện thoại"
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Khu vực *</Text>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={openZoneModal}>
-                <Text
-                  style={[
-                    styles.datePickerText,
-                    !selectedZone && styles.placeholderText,
-                  ]}>
-                  {selectedZone
-                    ? selectedZone.displayName
-                    : "Chọn khu vực"}
-                </Text>
-                <Ionicons name="location" size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Địa chỉ</Text>
-              <TextInput
-                style={styles.formInput}
-                value={careProfileForm.address}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("address", text)
-                }
-                placeholder="Nhập địa chỉ"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.formLabel}>Ghi chú</Text>
-              <TextInput
-                style={[styles.formInput, styles.multilineInput]}
-                value={careProfileForm.note}
-                onChangeText={(text) =>
-                  handleCareProfileFormChange("note", text)
-                }
-                placeholder="Nhập ghi chú (nếu có)"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={closeEditForm}>
-              <Text style={styles.cancelButtonText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.submitButton}
-              onPress={submitEditForm}>
-              <Text style={styles.submitButtonText}>
-                Lưu thay đổi
+      <Modal
+        visible={showEditForm}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeEditForm}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Chỉnh sửa hồ sơ chăm sóc
               </Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={closeEditForm}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.formContainer}>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Tên hồ sơ *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.profileName}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("profileName", text)
+                  }
+                  placeholder="Nhập tên hồ sơ"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ngày sinh *</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={showDatePickerModal}>
+                  <Text
+                    style={[
+                      styles.datePickerText,
+                      !careProfileForm.dateOfBirth &&
+                        styles.placeholderText,
+                    ]}>
+                    {careProfileForm.dateOfBirth
+                      ? formatDateForDisplay(
+                          careProfileForm.dateOfBirth
+                        )
+                      : "Chọn ngày sinh"}
+                  </Text>
+                  <Ionicons name="calendar" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Số điện thoại *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.phoneNumber}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("phoneNumber", text)
+                  }
+                  placeholder="Nhập số điện thoại"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Khu vực *</Text>
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={openZoneModal}>
+                  <Text
+                    style={[
+                      styles.datePickerText,
+                      !selectedZone && styles.placeholderText,
+                    ]}>
+                    {selectedZone
+                      ? selectedZone.displayName
+                      : "Chọn khu vực"}
+                  </Text>
+                  <Ionicons name="location" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Địa chỉ</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={careProfileForm.address}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("address", text)
+                  }
+                  placeholder="Nhập địa chỉ"
+                />
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ghi chú</Text>
+                <TextInput
+                  style={[styles.formInput, styles.multilineInput]}
+                  value={careProfileForm.note}
+                  onChangeText={(text) =>
+                    handleCareProfileFormChange("note", text)
+                  }
+                  placeholder="Nhập ghi chú (nếu có)"
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={closeEditForm}>
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={submitEditForm}>
+                <Text style={styles.submitButtonText}>
+                  Lưu thay đổi
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </Modal>
     );
   };
 
@@ -3188,6 +3213,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#ddd",
+  },
+  disabledInput: {
+    backgroundColor: "#f5f5f5",
+    color: "#999",
+    borderColor: "#e0e0e0",
+  },
+  disabledText: {
+    color: "#999",
+  },
+  disabledFieldNote: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+    fontStyle: "italic",
   },
   modalFooter: {
     flexDirection: "row",

@@ -120,6 +120,34 @@ class MedicalNoteService {
     }
   }
 
+  // Lấy medical notes theo careProfileId và serviceId
+  async getMedicalNotesByCareProfileAndService(
+    careProfileId,
+    serviceId
+  ) {
+    try {
+      const url = `https://phamlequyanh.name.vn/api/MedicalNote/by-careprofile-service?careProfileId=${careProfileId}&serviceId=${serviceId}`;
+      const response = await this.fetchWithTimeout(url, {
+        method: "GET",
+        headers: {
+          accept: "*/*",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data: data };
+      } else if (response.status === 404) {
+        // 404 means no notes found, which is not an error
+        return { success: true, data: [] };
+      } else {
+        return { success: false, error: `HTTP ${response.status}` };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Tạo medical note mới (cho Nurse)
   async createMedicalNote(medicalNoteData) {
     try {

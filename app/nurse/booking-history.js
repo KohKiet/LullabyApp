@@ -184,7 +184,13 @@ export default function NurseBookingHistoryScreen() {
         await ServiceTypeService.getAllServiceTypes();
       if (servicesResult.success) {
         const servicesMap = {};
-        servicesResult.data.forEach((service) => {
+        // Filter out removed/inactive services
+        const filteredServices = servicesResult.data.filter(
+          (service) =>
+            service.status !== "Remove" &&
+            service.status !== "inactive"
+        );
+        filteredServices.forEach((service) => {
           servicesMap[service.serviceID] = service;
         });
         setServices(servicesMap);
