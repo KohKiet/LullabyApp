@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -22,6 +24,15 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [userData, setUserData] = useState(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [shownNotifications, setShownNotifications] = useState(
+    new Set()
+  );
+  const [realtimeNotification, setRealtimeNotification] =
+    useState(null);
+
+  const notificationOpacity = useRef(new Animated.Value(0)).current;
+  const pollingIntervalRef = useRef(null);
+  const lastNotificationCountRef = useRef(0);
 
   useEffect(() => {
     // Check network status
@@ -34,7 +45,149 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     loadUserData();
+    loadShownNotifications();
+
+    // Cleanup polling on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
   }, []);
+
+  // Start real-time polling when user data is loaded
+  useEffect(() => {
+    if (userData && isOnline) {
+      startRealtimePolling();
+    } else {
+      stopRealtimePolling();
+    }
+
+    return () => stopRealtimePolling();
+  }, [userData, isOnline]);
+
+  const loadShownNotifications = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("shownNotifications");
+      if (stored) {
+        setShownNotifications(new Set(JSON.parse(stored)));
+      }
+    } catch (error) {
+      console.log("Error loading shown notifications:", error);
+    }
+  };
+
+  const saveShownNotifications = async (notificationIds) => {
+    try {
+      await AsyncStorage.setItem(
+        "shownNotifications",
+        JSON.stringify(Array.from(notificationIds))
+      );
+    } catch (error) {
+      console.log("Error saving shown notifications:", error);
+    }
+  };
+
+  const startRealtimePolling = () => {
+    // Clear existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    // Poll every 10 seconds for new notifications
+    pollingIntervalRef.current = setInterval(async () => {
+      if (userData && isOnline) {
+        await checkForNewNotifications();
+      }
+    }, 10000);
+  };
+
+  const stopRealtimePolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+
+  const checkForNewNotifications = async () => {
+    try {
+      const result =
+        await NotificationService.getNotificationsByAccount(
+          userData.accountID || userData.id
+        );
+
+      if (result.success) {
+        const newNotifications = result.data.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        // Check if there are new notifications
+        if (
+          newNotifications.length > lastNotificationCountRef.current
+        ) {
+          const latestNotifications = newNotifications.slice(
+            0,
+            newNotifications.length - lastNotificationCountRef.current
+          );
+
+          // Show real-time notification for new unread notifications
+          for (const notification of latestNotifications) {
+            if (
+              !notification.isRead &&
+              !shownNotifications.has(notification.notificationID)
+            ) {
+              showRealtimeNotification(notification);
+              break; // Only show one at a time
+            }
+          }
+        }
+
+        // Update the notifications list
+        setNotifications(newNotifications);
+        lastNotificationCountRef.current = newNotifications.length;
+      }
+    } catch (error) {
+      // Silent error handling
+    }
+  };
+
+  const showRealtimeNotification = (notification) => {
+    // Mark this notification as shown
+    const newShownNotifications = new Set(shownNotifications);
+    newShownNotifications.add(notification.notificationID);
+    setShownNotifications(newShownNotifications);
+    saveShownNotifications(newShownNotifications);
+
+    // Set the notification to display
+    setRealtimeNotification(notification);
+
+    // Animate in
+    Animated.sequence([
+      Animated.timing(notificationOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(4000), // Show for 4 seconds
+      Animated.timing(notificationOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setRealtimeNotification(null);
+    });
+  };
+
+  const dismissRealtimeNotification = () => {
+    Animated.timing(notificationOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setRealtimeNotification(null);
+    });
+  };
 
   const loadUserData = async () => {
     try {
@@ -65,28 +218,14 @@ export default function NotificationsScreen() {
         );
 
       if (result.success) {
-        // Sort by createdAt (newest first)
         const sortedNotifications = result.data.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
         setNotifications(sortedNotifications);
-
-        // Show notification for new unread notifications
-        const unreadNotifications = sortedNotifications.filter(
-          (n) => !n.isRead
-        );
-        if (unreadNotifications.length > 0) {
-          const latest = unreadNotifications[0];
-          global.__notify?.({
-            title: "Thông báo chưa đọc",
-            message: latest.message,
-          });
-        }
-      } else {
-        // Silent failure: keep current list and avoid console red banners
+        lastNotificationCountRef.current = sortedNotifications.length;
       }
     } catch (error) {
-      // Silent catch to prevent dev overlay; optionally show a toast if needed
+      // Silent catch
     } finally {
       setIsLoading(false);
     }
@@ -223,7 +362,7 @@ export default function NotificationsScreen() {
             <Ionicons
               name="notifications"
               size={24}
-              color={item.isRead ? "#FFFFFF" : "#3498DB"}
+              color={item.isRead ? "#95A5A6" : "#3498DB"}
             />
           </View>
           <View style={styles.notificationInfo}>
@@ -260,6 +399,52 @@ export default function NotificationsScreen() {
     </View>
   );
 
+  const renderRealtimeNotification = () => {
+    if (!realtimeNotification) return null;
+
+    return (
+      <Animated.View
+        style={[
+          styles.realtimeNotification,
+          {
+            opacity: notificationOpacity,
+            transform: [
+              {
+                translateY: notificationOpacity.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-100, 0],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <TouchableOpacity
+          style={styles.realtimeNotificationContent}
+          onPress={dismissRealtimeNotification}
+          activeOpacity={0.9}>
+          <View style={styles.realtimeNotificationHeader}>
+            <Ionicons
+              name="notifications"
+              size={20}
+              color="#3498DB"
+            />
+            <Text style={styles.realtimeNotificationTitle}>
+              Thông báo mới
+            </Text>
+            <TouchableOpacity onPress={dismissRealtimeNotification}>
+              <Ionicons name="close" size={20} color="#7F8C8D" />
+            </TouchableOpacity>
+          </View>
+          <Text
+            style={styles.realtimeNotificationMessage}
+            numberOfLines={2}>
+            {realtimeNotification.message}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
   if (isLoading) {
     return (
       <LinearGradient
@@ -282,11 +467,17 @@ export default function NotificationsScreen() {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}>
+      {/* Real-time Notification Overlay */}
+      {renderRealtimeNotification()}
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
+
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Thông Báo</Text>
           {!isOnline && (
@@ -296,18 +487,24 @@ export default function NotificationsScreen() {
             </View>
           )}
         </View>
-        <TouchableOpacity onPress={onRefresh}>
-          <Ionicons name="refresh" size={24} color="#333" />
-        </TouchableOpacity>
-        <View style={{ marginLeft: 16, alignItems: "center" }}>
-          <TouchableOpacity onPress={markAllAsRead}>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={onRefresh}
+            style={styles.headerButton}>
+            <Ionicons name="refresh" size={24} color="#333" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={markAllAsRead}
+            style={styles.markAllButton}>
             <Ionicons
               name="checkmark-done"
               size={24}
               color="#4CAF50"
             />
+            <Text style={styles.markAllText}>Đã đọc</Text>
           </TouchableOpacity>
-          <Text style={styles.markAllText}>Đã đọc</Text>
         </View>
       </View>
 
@@ -343,6 +540,9 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 50,
   },
+  headerButton: {
+    padding: 4,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
@@ -353,20 +553,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  markAllButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 4,
+  },
   offlineIndicator: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(231, 76, 60, 0.15)",
     borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginLeft: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginTop: 4,
   },
   offlineText: {
     color: "#E74C3C",
     fontSize: 12,
     fontWeight: "600",
-    marginLeft: 5,
+    marginLeft: 4,
   },
   markAllText: {
     fontSize: 10,
@@ -374,6 +584,46 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
     textAlign: "center",
+  },
+  realtimeNotification: {
+    position: "absolute",
+    top: 100,
+    left: 16,
+    right: 16,
+    zIndex: 1000,
+    elevation: 10,
+  },
+  realtimeNotificationContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#3498DB",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  realtimeNotificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  realtimeNotificationTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2C3E50",
+    marginLeft: 8,
+  },
+  realtimeNotificationMessage: {
+    fontSize: 14,
+    color: "#34495E",
+    lineHeight: 20,
   },
   notificationsList: {
     paddingHorizontal: 0,
@@ -383,7 +633,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 10,
-
     marginBottom: 8,
     marginHorizontal: 16,
     borderWidth: 1,

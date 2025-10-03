@@ -1,4 +1,5 @@
 import { API_CONFIG } from "./apiConfig";
+import NotificationService from "./notificationService";
 
 class CustomizeTaskService {
   // Lấy tất cả customize tasks
@@ -234,6 +235,70 @@ class CustomizeTaskService {
         error
       );
       return { success: false, error: error.message };
+    }
+  }
+
+  static async updateNursing(taskData) {
+    try {
+      // Your existing update nursing logic
+      const result = await this.updateNursingAPI(taskData);
+
+      if (result.success) {
+        console.log(
+          "CustomizeTaskService.updateNursing success:",
+          result.data
+        );
+
+        // If this update is related to payment completion, notify nurse
+        if (
+          taskData.status === "isScheduled" &&
+          taskData.nurseAccountID
+        ) {
+          await this.notifyNurseOfScheduledTask(
+            result.data,
+            taskData.nurseAccountID
+          );
+        }
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error updating nursing:", error);
+      throw error;
+    }
+  }
+
+  static async notifyNurseOfScheduledTask(taskData, nurseAccountID) {
+    try {
+      const message =
+        `Bạn có lịch điều dưỡng mới! ` +
+        `Booking #${taskData.bookingID} - ` +
+        `Thời gian: ${NotificationService.formatDateTime(
+          taskData.startTime
+        )} đến ${NotificationService.formatDateTime(
+          taskData.endTime
+        )}. ` +
+        `Vui lòng chuẩn bị và có mặt đúng giờ.`;
+
+      const notificationResult =
+        await NotificationService.createNotification(
+          nurseAccountID,
+          message
+        );
+
+      if (notificationResult.success) {
+        console.log("Nurse notification sent for scheduled task");
+      } else {
+        console.error(
+          "Failed to notify nurse:",
+          notificationResult.error
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Error notifying nurse of scheduled task:",
+        error
+      );
     }
   }
 

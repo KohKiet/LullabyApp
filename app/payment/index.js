@@ -625,8 +625,7 @@ export default function PaymentScreen() {
       if (!task) return false;
       // Disallow if booking is cancelled or completed
       const status = (bookingData?.status || "").toLowerCase();
-      if (status === "cancelled" || status === "completed")
-        return false;
+      if (status === "cancelled" || "completed") return false;
 
       // Time-based restriction: allow only before startTime and not within 30 minutes window
       const now = new Date();
@@ -997,6 +996,140 @@ export default function PaymentScreen() {
     return text;
   };
 
+  const formatTimeForNotification = (dateString) => {
+    if (!dateString) return "";
+
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  const formatDateOnlyForNotification = (dateString) => {
+    if (!dateString) return "";
+
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  const notifyAssignedNurses = async () => {
+    try {
+      console.log("🔔 Starting to notify assigned nurses...");
+
+      // Lấy danh sách customize tasks để tìm nurses đã được assign
+      const tasksResult =
+        await CustomizeTaskService.getCustomizeTasksByBookingId(
+          bookingId
+        );
+
+      if (!tasksResult.success || !tasksResult.data) {
+        console.log("🔔 No customize tasks found for notification");
+        return;
+      }
+
+      const tasks = tasksResult.data;
+      const assignedNurses = new Map(); // nursingID -> task info
+
+      // Lọc ra các nurses đã được assign và lưu thông tin task
+      for (const task of tasks) {
+        if (task.nursingID) {
+          assignedNurses.set(task.nursingID, task);
+        }
+      }
+
+      console.log(
+        "🔔 Found assigned nurses:",
+        Array.from(assignedNurses.keys())
+      );
+
+      if (assignedNurses.size === 0) {
+        console.log(
+          "🔔 No nurses assigned yet, skipping notifications"
+        );
+        return;
+      }
+
+      // Lấy thông tin khách hàng
+      const customerName =
+        careProfileData?.fullName ||
+        careProfileData?.profileName ||
+        "Khách hàng";
+
+      // Tạo thông báo cho từng nurse
+      const notificationPromises = Array.from(
+        assignedNurses.entries()
+      ).map(async ([nursingID, task]) => {
+        try {
+          // Format thời gian theo yêu cầu
+          const startTime = formatTimeForNotification(task.startTime);
+          const endTime = formatTimeForNotification(task.endTime);
+          const date = formatDateOnlyForNotification(task.startTime);
+
+          // Tạo message theo format yêu cầu
+          const message = `Bạn có lịch mới! Booking #${bookingId} - Thời gian: ${startTime} đến ${endTime} vào ngày ${date}. Khách hàng: ${customerName}`;
+
+          console.log(
+            `🔔 Sending notification to nurse ${nursingID}:`,
+            message
+          );
+
+          // Gửi thông báo
+          const result = await NotificationService.createNotification(
+            nursingID,
+            message
+          );
+
+          if (result.success) {
+            console.log(
+              `✅ Notification sent successfully to nurse ${nursingID}`
+            );
+          } else {
+            console.error(
+              `❌ Failed to send notification to nurse ${nursingID}:`,
+              result.error
+            );
+          }
+
+          return result;
+        } catch (error) {
+          console.error(
+            `❌ Error sending notification to nurse ${nursingID}:`,
+            error
+          );
+          return { success: false, error: error.message };
+        }
+      });
+
+      // Chờ tất cả notifications được gửi
+      const results = await Promise.all(notificationPromises);
+
+      // Đếm số thành công
+      const successCount = results.filter((r) => r.success).length;
+      const totalCount = results.length;
+
+      console.log(
+        `🔔 Notification summary: ${successCount}/${totalCount} sent successfully`
+      );
+    } catch (error) {
+      console.error("❌ Error in notifyAssignedNurses:", error);
+      // KHÔNG throw error để không ảnh hưởng đến flow thanh toán
+    }
+  };
+
   const handlePayment = async () => {
     // Enforce selection requirement
     if (!selectionMode) {
@@ -1247,6 +1380,18 @@ export default function PaymentScreen() {
         data.message &&
         data.message.includes("success")
       ) {
+        // 4. THANH TOÁN THÀNH CÔNG - GỬI THÔNG BÁO CHO NURSES (SILENT)
+        try {
+          await notifyAssignedNurses();
+        } catch (notificationError) {
+          // SILENT CATCH - không hiển thị lỗi cho customer
+          console.error(
+            "❌ Silent error in notification process:",
+            notificationError
+          );
+          // KHÔNG Alert.alert hoặc hiển thị bất kỳ thông báo lỗi nào cho user
+        }
+
         // Reload invoice data để cập nhật trạng thái
         await loadInvoiceData(bookingId);
 
@@ -1260,7 +1405,7 @@ export default function PaymentScreen() {
         global.__notify?.({
           title: "Thanh toán thành công!",
           message:
-            "Bạn đã đặt lịch thành công, hãy tiến hành chọn chuyên viên.",
+            "Bạn đã đặt lịch thành công, điều dưỡng viên đã được thông báo.",
         });
 
         Alert.alert("Thành công", displayMessage, [

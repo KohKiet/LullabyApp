@@ -1,6 +1,8 @@
 import { API_CONFIG } from "./apiConfig";
 
 class NotificationService {
+  static BASE_URL = "https://phamlequyanh.name.vn/api";
+
   // Retry configuration
   static MAX_RETRIES = 2;
   static RETRY_DELAY = 1000;
@@ -11,38 +13,39 @@ class NotificationService {
   }
 
   // Create a new notification for a specific account
-  static async createNotification({ accountID, message }) {
+  static async createNotification(accountID, message) {
     try {
-      const response = await this.retryRequest(async () => {
-        const res = await fetch(
-          `${API_CONFIG.BASE_URL}/api/Notification`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ accountID, message }),
-            timeout: 10000,
-          }
-        );
-
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(
-            `HTTP ${res.status}: ${text || res.statusText}`
-          );
-        }
-
-        return res;
+      const response = await fetch(`${this.BASE_URL}/Notification`, {
+        method: "POST",
+        headers: {
+          accept: "*/*",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          accountID: accountID,
+          message: message,
+        }),
       });
 
-      const data = await response.json();
-      return { success: true, data };
+      const result = await response.json();
+
+      if (response.ok) {
+        return {
+          success: true,
+          data: result,
+          message: result.message || "Notification sent successfully",
+        };
+      } else {
+        return {
+          success: false,
+          error: result.message || "Failed to send notification",
+        };
+      }
     } catch (error) {
-      // Silently handle API errors to avoid noisy console overlays in production/dev
+      console.error("Error creating notification:", error);
       return {
         success: false,
-        error: error.message || "Không thể tạo thông báo",
+        error: error.message,
       };
     }
   }
@@ -186,32 +189,173 @@ class NotificationService {
 
   // Format notification date
   static formatDate(dateString) {
+    class NotificationService {
+      static BASE_URL = "https://phamlequyanh.name.vn/api";
+
+      // ...existing methods
+
+      static async notifyNurseOfPayment(bookingData, nurseAccountID) {
+        try {
+          // Format thời gian
+          const startTime = this.formatTime(bookingData.startTime);
+          const endTime = this.formatTime(bookingData.endTime);
+          const date = this.formatDate(bookingData.startTime);
+
+          const message =
+            `Bạn có lịch mới! Booking #${bookingData.bookingID} - ` +
+            `Thời gian: ${startTime} đến ${endTime} vào ngày ${date}. ` +
+            `Khách hàng: ${bookingData.customerName || "Khách hàng"}`;
+
+          return await this.createNotification(
+            nurseAccountID,
+            message
+          );
+        } catch (error) {
+          console.error("Error notifying nurse:", error);
+          return {
+            success: false,
+            error: error.message,
+          };
+        }
+      }
+
+      static formatTime(dateString) {
+        if (!dateString) return "";
+
+        try {
+          const date = new Date(dateString);
+          return date.toLocaleTimeString("vi-VN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        } catch (error) {
+          return dateString;
+        }
+      }
+
+      static formatDate(dateString) {
+        if (!dateString) return "";
+
+        try {
+          const date = new Date(dateString);
+          return date.toLocaleDateString("vi-VN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+        } catch (error) {
+          return dateString;
+        }
+      }
+
+      static async createNotification(accountID, message) {
+        try {
+          const response = await fetch(
+            `${this.BASE_URL}/Notification`,
+            {
+              method: "POST",
+              headers: {
+                accept: "*/*",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                accountID: accountID,
+                message: message,
+              }),
+            }
+          );
+
+          const result = await response.json();
+
+          if (response.ok) {
+            return {
+              success: true,
+              data: result,
+              message:
+                result.message || "Notification sent successfully",
+            };
+          } else {
+            return {
+              success: false,
+              error: result.message || "Failed to send notification",
+            };
+          }
+        } catch (error) {
+          console.error("Error creating notification:", error);
+          return {
+            success: false,
+            error: error.message,
+          };
+        }
+      }
+    }
+
+    if (!dateString) return "";
+
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return "Thời gian không xác định";
-      }
-
-      const now = new Date();
-      const diffTime = Math.abs(now - date);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
-      const diffMinutes = Math.ceil(diffTime / (1000 * 60));
-
-      if (diffMinutes < 60) {
-        return `${diffMinutes} phút trước`;
-      } else if (diffHours < 24) {
-        return `${diffHours} giờ trước`;
-      } else if (diffDays === 1) {
-        return "Hôm qua";
-      } else if (diffDays < 7) {
-        return `${diffDays} ngày trước`;
-      } else {
-        return date.toLocaleDateString("vi-VN");
-      }
+      return date.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
     } catch (error) {
-      // Silent error handling
-      return "Thời gian không xác định";
+      return dateString;
+    }
+  }
+
+  static async notifyNurseOfPayment(bookingData, nurseAccountID) {
+    try {
+      // Format thời gian
+      const startTime = this.formatTime(bookingData.startTime);
+      const endTime = this.formatTime(bookingData.endTime);
+      const date = this.formatDate(bookingData.startTime);
+
+      const message =
+        `Bạn có lịch mới! Booking #${bookingData.bookingID} - ` +
+        `Thời gian: ${startTime} đến ${endTime} vào ngày ${date}. ` +
+        `Khách hàng: ${bookingData.customerName || "Khách hàng"}`;
+
+      return await this.createNotification(nurseAccountID, message);
+    } catch (error) {
+      console.error("Error notifying nurse:", error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  static formatTime(dateString) {
+    if (!dateString) return "";
+
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    } catch (error) {
+      return dateString;
+    }
+  }
+
+  static formatDateTime(dateString) {
+    if (!dateString) return "";
+
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (error) {
+      return dateString;
     }
   }
 }
