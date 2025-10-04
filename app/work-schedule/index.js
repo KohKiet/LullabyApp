@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -102,6 +103,50 @@ export default function WorkScheduleScreen() {
   const [isLoadingMedicalNotes, setIsLoadingMedicalNotes] =
     useState(false);
 
+  // Enrich schedules with service names
+  const enrichSchedulesWithServiceNames = async (schedules) => {
+    try {
+      const enrichedSchedules = await Promise.all(
+        schedules.map(async (schedule) => {
+          try {
+            const serviceResult =
+              await ServiceTypeService.getServiceTypeById(
+                schedule.serviceID
+              );
+            if (serviceResult.success && serviceResult.data) {
+              return {
+                ...schedule,
+                serviceName:
+                  serviceResult.data.serviceName ||
+                  serviceResult.data.name ||
+                  `Dịch vụ #${schedule.serviceID}`,
+              };
+            }
+          } catch (error) {
+            console.log(
+              `Error loading service ${schedule.serviceID}:`,
+              error
+            );
+          }
+          return {
+            ...schedule,
+            serviceName: `Dịch vụ #${schedule.serviceID}`,
+          };
+        })
+      );
+      return enrichedSchedules;
+    } catch (error) {
+      console.error(
+        "Error enriching schedules with service names:",
+        error
+      );
+      return schedules.map((schedule) => ({
+        ...schedule,
+        serviceName: `Dịch vụ #${schedule.serviceID}`,
+      }));
+    }
+  };
+
   // Kiểm tra xem có thể điểm danh "đã đến" hay không
   const canMarkArrived = (schedule) => {
     if (!schedule || !schedule.workDate) return false;
@@ -125,16 +170,12 @@ export default function WorkScheduleScreen() {
     const endTime = new Date(schedule.endTime);
     const cutoff = new Date(endTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours after endTime
 
-    // Chỉ cho phép điểm danh sau khi đã điểm danh "đã đến" và sau thời gian kết thúc
-    // Hoặc khi status đã completed nhưng chưa điểm danh
-    // Và không được trễ quá 2 giờ sau endTime
+    // Cho phép điểm danh từ endTime đến 2 giờ sau endTime
+    // Không cần phải bấm "Đã đến" trước
     const withinCutoff = now <= cutoff;
+    const afterEndTime = now >= endTime;
 
-    return (
-      withinCutoff &&
-      ((schedule.status === "arrived" && now >= endTime) ||
-        (schedule.status === "completed" && !schedule.isAttended))
-    );
+    return withinCutoff && afterEndTime && !schedule.isAttended;
   };
 
   // Xử lý điểm danh "đã đến"
@@ -213,7 +254,7 @@ export default function WorkScheduleScreen() {
       }
       Alert.alert(
         "Không thể điểm danh",
-        "Chỉ có thể điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc."
+        "Chỉ có thể điểm danh từ thời gian kết thúc đến 2 giờ sau đó."
       );
       return;
     }
@@ -275,6 +316,88 @@ export default function WorkScheduleScreen() {
     } catch (error) {
       console.error("Error marking attendance:", error);
       Alert.alert("Thông báo", "Có lỗi xảy ra khi điểm danh");
+    }
+  };
+
+  // Load medical notes for care profile
+  const loadMedicalNotesForCareProfile = async (careProfileId) => {
+    try {
+      console.log(
+        "Loading medical notes for care profile:",
+        careProfileId
+      );
+
+      const response = await fetch(
+        `https://phamlequyanh.name.vn/api/MedicalNote/by-careprofile-service?careProfileId=${careProfileId}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Medical notes loaded for care profile:", data);
+
+        // Enhance notes with additional information
+        const enhancedNotes = await Promise.all(
+          data.map(async (note) => {
+            const enhancedNote = { ...note };
+
+            // Fetch nursing specialist name
+            try {
+              const nursingResponse = await fetch(
+                `https://phamlequyanh.name.vn/api/nursingspecialists/get/${note.nursingID}`,
+                { headers: { accept: "*/*" } }
+              );
+              if (nursingResponse.ok) {
+                const nursingData = await nursingResponse.json();
+                enhancedNote.nursingName =
+                  nursingData.fullName ||
+                  nursingData.nursingFullName ||
+                  nursingData.name;
+              }
+            } catch (error) {
+              console.log("Could not fetch nursing name:", error);
+            }
+
+            // Fetch relative name if relativeID exists
+            if (note.relativeID) {
+              try {
+                const relativeResponse = await fetch(
+                  `https://phamlequyanh.name.vn/api/relatives/get/${note.relativeID}`,
+                  { headers: { accept: "*/*" } }
+                );
+                if (relativeResponse.ok) {
+                  const relativeData = await relativeResponse.json();
+                  enhancedNote.relativeName =
+                    relativeData.relativeName || relativeData.name;
+                }
+              } catch (error) {
+                console.log("Could not fetch relative name:", error);
+              }
+            }
+
+            return enhancedNote;
+          })
+        );
+
+        setMedicalNotes(enhancedNotes);
+      } else {
+        console.log(
+          "Failed to load medical notes for care profile:",
+          response.status
+        );
+        setMedicalNotes([]);
+      }
+    } catch (error) {
+      console.error(
+        "Error loading medical notes for care profile:",
+        error
+      );
+      setMedicalNotes([]);
     }
   };
 
@@ -517,12 +640,17 @@ export default function WorkScheduleScreen() {
           "WorkScheduleScreen: Raw filtered schedules:",
           result.data
         );
-        setWorkSchedules(result.data);
-        processMarkedDates(result.data);
-        processTodaySchedules(result.data);
+
+        // Enrich schedules with service names
+        const enrichedSchedules =
+          await enrichSchedulesWithServiceNames(result.data);
+
+        setWorkSchedules(enrichedSchedules);
+        processMarkedDates(enrichedSchedules);
+        processTodaySchedules(enrichedSchedules);
         console.log(
           "WorkScheduleScreen: Loaded",
-          result.data.length,
+          enrichedSchedules.length,
           "work schedules"
         );
       } else {
@@ -749,6 +877,11 @@ export default function WorkScheduleScreen() {
       // Load medical notes cho schedule này sau khi đã có customizeTask
       if (customizeTask) {
         await loadMedicalNotes(schedule, customizeTask);
+      } else if (careProfile) {
+        // Nếu không có customizeTask nhưng có careProfile, load medical notes theo careProfile
+        await loadMedicalNotesForCareProfile(
+          careProfile.careProfileID
+        );
       }
     } catch (error) {
       console.error(
@@ -1043,8 +1176,9 @@ export default function WorkScheduleScreen() {
 
           <View style={styles.scheduleDetails}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailText}>
-                Dịch vụ ID: {schedule.serviceID}
+              <Text style={styles.serviceText}>
+                {schedule.serviceName ||
+                  `Dịch vụ #${schedule.serviceID}`}
               </Text>
             </View>
 
@@ -1088,46 +1222,40 @@ export default function WorkScheduleScreen() {
                 </View>
               )}
 
-            {/* Nút "Điểm danh" - chỉ hiện khi đã "Đã đến" và chưa điểm danh tham gia */}
-            {(schedule.status === "arrived" ||
-              schedule.status === "completed") &&
-              !schedule.isAttended &&
-              isToday && (
-                <View style={styles.attendanceRow}>
-                  <TouchableOpacity
-                    style={styles.attendanceButton}
-                    onPress={() => handleMarkAttendance(schedule)}
-                    disabled={!canMarkAttendance(schedule)}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={16}
-                      color={
-                        canMarkAttendance(schedule)
+            {/* Nút "Điểm danh" - hiện khi chưa điểm danh và trong khoảng thời gian cho phép */}
+            {!schedule.isAttended && isToday && (
+              <View style={styles.attendanceRow}>
+                <TouchableOpacity
+                  style={styles.attendanceButton}
+                  onPress={() => handleMarkAttendance(schedule)}
+                  disabled={!canMarkAttendance(schedule)}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={
+                      canMarkAttendance(schedule) ? "#4CAF50" : "#999"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.attendanceButtonText,
+                      {
+                        color: canMarkAttendance(schedule)
                           ? "#4CAF50"
-                          : "#999"
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.attendanceButtonText,
-                        {
-                          color: canMarkAttendance(schedule)
-                            ? "#4CAF50"
-                            : "#999",
-                        },
-                      ]}>
-                      Điểm danh
-                    </Text>
-                  </TouchableOpacity>
-                  {!canMarkAttendance(schedule) && (
-                    <Text style={styles.attendanceNote}>
-                      {schedule.status === "completed"
-                        ? "Đã hoàn thành, có thể điểm danh"
-                        : "Chỉ điểm danh sau khi đã điểm danh 'đã đến' và sau thời gian kết thúc"}
-                    </Text>
-                  )}
-                </View>
-              )}
+                          : "#999",
+                      },
+                    ]}>
+                    Điểm danh
+                  </Text>
+                </TouchableOpacity>
+                {!canMarkAttendance(schedule) && (
+                  <Text style={styles.attendanceNote}>
+                    Chỉ có thể điểm danh từ thời gian kết thúc đến 2
+                    giờ sau đó
+                  </Text>
+                )}
+              </View>
+            )}
 
             {isToday && (
               <View style={styles.detailRow}>
@@ -1237,71 +1365,42 @@ export default function WorkScheduleScreen() {
                       )}
                     </View>
 
-                    {/* Nút Điểm danh trong modal - chỉ bật khi đã 'Đã đến' */}
-                    <View style={{ flexDirection: "row", gap: 10 }}>
-                      <TouchableOpacity
-                        style={styles.modalActionButton}
-                        onPress={() =>
-                          handleMarkAttendance(selectedSchedule)
-                        }
-                        disabled={
-                          !canMarkAttendance(selectedSchedule)
-                        }>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color={
-                            canMarkAttendance(selectedSchedule)
-                              ? "#4CAF50"
-                              : "#999"
+                    {/* Nút Điểm danh trong modal - hiện khi chưa điểm danh và trong thời gian cho phép */}
+                    {!selectedSchedule.isAttended && (
+                      <View style={{ flexDirection: "row", gap: 10 }}>
+                        <TouchableOpacity
+                          style={styles.modalActionButton}
+                          onPress={() =>
+                            handleMarkAttendance(selectedSchedule)
                           }
-                        />
-                        <Text
-                          style={[
-                            styles.modalActionButtonText,
-                            {
-                              color: canMarkAttendance(
-                                selectedSchedule
-                              )
+                          disabled={
+                            !canMarkAttendance(selectedSchedule)
+                          }>
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={18}
+                            color={
+                              canMarkAttendance(selectedSchedule)
                                 ? "#4CAF50"
-                                : "#999",
-                            },
-                          ]}>
-                          Điểm danh
-                        </Text>
-                      </TouchableOpacity>
-
-                      {/* Xem ghi chú: chỉ mở khi đã completed */}
-                      <TouchableOpacity
-                        style={styles.modalActionButton}
-                        onPress={openMedicalNotesModal}
-                        disabled={
-                          selectedSchedule.status !== "completed"
-                        }>
-                        <Ionicons
-                          name="document-text"
-                          size={18}
-                          color={
-                            selectedSchedule.status === "completed"
-                              ? "#2196F3"
-                              : "#999"
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.modalActionButtonText,
-                            {
-                              color:
-                                selectedSchedule.status ===
-                                "completed"
-                                  ? "#2196F3"
+                                : "#999"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.modalActionButtonText,
+                              {
+                                color: canMarkAttendance(
+                                  selectedSchedule
+                                )
+                                  ? "#4CAF50"
                                   : "#999",
-                            },
-                          ]}>
-                          Xem ghi chú
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                              },
+                            ]}>
+                            Điểm danh
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -1531,11 +1630,11 @@ export default function WorkScheduleScreen() {
                 <View style={styles.detailSection}>
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>
-                      Ghi chú ({medicalNotes.length})
+                      Ghi chú y tế ({medicalNotes.length})
                     </Text>
                     {scheduleDetails.customizeTask &&
-                      medicalNotes.length === 0 &&
-                      selectedSchedule?.status === "completed" && (
+                      selectedSchedule?.status === "completed" &&
+                      selectedSchedule?.isAttended && (
                         <TouchableOpacity
                           style={styles.addNoteButton}
                           onPress={openAddNoteModal}>
@@ -1551,20 +1650,11 @@ export default function WorkScheduleScreen() {
                       )}
                   </View>
 
-                  {/* Debug info */}
-                  {/* Removed debug info since auto-load is working */}
-
                   {medicalNotes.length > 0 ? (
-                    <>
-                      <View style={styles.existingNotesInfo}>
-                        <Text style={styles.existingNotesText}>
-                          Đã có ghi chú cho lịch hẹn này. Không thể
-                          thêm ghi chú mới.
-                        </Text>
-                      </View>
+                    <View style={styles.medicalNotesList}>
                       {medicalNotes.map((note, index) => (
                         <View
-                          key={note.medicalNoteID}
+                          key={note.medicalNoteID || index}
                           style={styles.medicalNoteItem}>
                           <View style={styles.medicalNoteHeader}>
                             <Text style={styles.medicalNoteTitle}>
@@ -1577,42 +1667,70 @@ export default function WorkScheduleScreen() {
                             </Text>
                           </View>
 
-                          {note.note && (
-                            <View style={styles.noteContent}>
-                              <Text style={styles.noteLabel}>
-                                Nội dung:
-                              </Text>
-                              <Text style={styles.noteText}>
-                                {note.note}
-                              </Text>
-                            </View>
-                          )}
+                          <View style={styles.medicalNoteContent}>
+                            {note.note && (
+                              <View style={styles.noteContent}>
+                                <Text style={styles.noteLabel}>
+                                  Nội dung:
+                                </Text>
+                                <Text style={styles.noteText}>
+                                  {note.note}
+                                </Text>
+                              </View>
+                            )}
 
-                          {/* Thông tin bổ sung */}
-                          <View style={styles.noteFooter}>
-                            <Text style={styles.noteFooterText}>
-                              Tạo lúc:{" "}
-                              {MedicalNoteService.formatDateTime(
-                                note.createdAt
+                            {note.advice && (
+                              <View style={styles.noteContent}>
+                                <Text style={styles.noteLabel}>
+                                  Lời khuyên:
+                                </Text>
+                                <Text style={styles.adviceText}>
+                                  {note.advice}
+                                </Text>
+                              </View>
+                            )}
+
+                            {note.image && note.image !== "" && (
+                              <View style={styles.noteContent}>
+                                <Text style={styles.noteLabel}>
+                                  Hình ảnh:
+                                </Text>
+                                <Image
+                                  source={{ uri: note.image }}
+                                  style={styles.noteImage}
+                                  resizeMode="cover"
+                                />
+                              </View>
+                            )}
+
+                            {/* Thông tin bổ sung */}
+                            <View style={styles.noteFooter}>
+                              <Text style={styles.noteFooterText}>
+                                Tạo lúc:{" "}
+                                {MedicalNoteService.formatDateTime(
+                                  note.createdAt
+                                )}
+                              </Text>
+                              {note.nursingName && (
+                                <Text style={styles.noteFooterText}>
+                                  Chuyên viên: {note.nursingName}
+                                </Text>
                               )}
-                            </Text>
+                            </View>
                           </View>
                         </View>
                       ))}
-                    </>
+                    </View>
                   ) : (
                     <View style={styles.noMedicalNotesContainer}>
                       <Text style={styles.noMedicalNotesText}>
-                        {scheduleDetails.customizeTask
-                          ? "Chưa có ghi chú nào cho lịch hẹn này."
-                          : "Không thể thêm ghi chú vì chưa có thông tin công việc"}
+                        Chưa có ghi chú y tế nào cho dịch vụ này
                       </Text>
-                      {selectedSchedule?.status !== "completed" &&
-                        scheduleDetails.customizeTask && (
-                          <Text style={styles.attendanceRequiredText}>
-                            Cần điểm danh để thêm ghi chú.
-                          </Text>
-                        )}
+                      {selectedSchedule?.status !== "completed" && (
+                        <Text style={styles.attendanceRequiredText}>
+                          Cần điểm danh để thêm ghi chú mới.
+                        </Text>
+                      )}
                     </View>
                   )}
                 </View>
@@ -2142,7 +2260,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   scheduleItem: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   todayScheduleItem: {
     shadowColor: "#4FC3F7",
@@ -2152,8 +2270,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   scheduleCard: {
-    borderRadius: 15,
-    padding: 18,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.3)",
     shadowColor: "#000",
@@ -2166,7 +2284,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   scheduleInfo: {
     flex: 1,
@@ -2175,35 +2293,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   bookingId: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#666",
   },
   statusBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 15,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
     alignSelf: "flex-end",
     marginLeft: "auto",
   },
   statusText: {
     color: "white",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "bold",
   },
   scheduleDetails: {
-    marginTop: 8,
+    marginTop: 6,
   },
   detailRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   detailText: {
     fontSize: 13,
     color: "#666",
+    flex: 1,
+  },
+  serviceText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
     flex: 1,
   },
   emptySchedule: {
@@ -2435,20 +2559,20 @@ const styles = StyleSheet.create({
   attendanceRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: 6,
+    marginBottom: 4,
   },
   attendanceButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#E3F2FD",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginRight: 10,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: 8,
     borderWidth: 1,
     borderColor: "#2196F3",
-    minHeight: 44,
+    minHeight: 36,
   },
   attendanceButtonText: {
     marginLeft: 8,
@@ -2459,6 +2583,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     fontStyle: "italic",
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   modalActionButton: {
     flexDirection: "row",
@@ -2594,5 +2720,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     fontStyle: "italic",
+  },
+  noteImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  adviceText: {
+    fontSize: 14,
+    color: "#2E7D32",
+    fontStyle: "italic",
+    backgroundColor: "#E8F5E8",
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 4,
   },
 });

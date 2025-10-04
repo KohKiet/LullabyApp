@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -245,7 +246,11 @@ export default function NurseMedicalNotesScreen() {
           {note.image && note.image.trim() !== "" && (
             <View style={styles.noteRow}>
               <Text style={styles.noteLabel}>Hình ảnh:</Text>
-              <Text style={styles.noteValue}>{note.image}</Text>
+              <Image
+                source={{ uri: note.image }}
+                style={styles.noteImage}
+                resizeMode="cover"
+              />
             </View>
           )}
         </View>
@@ -602,6 +607,13 @@ const styles = StyleSheet.create({
   noteValue: {
     fontSize: 14,
     color: "#666",
+  },
+  noteImage: {
+    width: "100%",
+    height: 120,
+    borderRadius: 8,
+    marginTop: 8,
+    backgroundColor: "#f5f5f5",
   },
   noteActions: {
     flexDirection: "row",

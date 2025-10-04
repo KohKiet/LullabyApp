@@ -6,7 +6,9 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -84,6 +86,33 @@ export default function ProfileScreen() {
     setSelectedCareProfileForNotes,
   ] = useState(null);
   const [medicalNotes, setMedicalNotes] = useState([]);
+  // Helper: format date to YYYY-MM-DD without timezone issues
+  const formatDateForAPI = (date) => {
+    if (!date) return "";
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper: parse date from API without timezone issues
+  const parseDateFromAPI = (dateString) => {
+    if (!dateString) return new Date();
+    if (dateString.includes("T")) {
+      // If it's already ISO format, parse it
+      return new Date(dateString);
+    } else {
+      // If it's YYYY-MM-DD format, create date in local timezone
+      const [year, month, day] = dateString.split("-");
+      return new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day)
+      );
+    }
+  };
+
   // Helper: translate common server messages to Vietnamese
   const translateToVietnamese = (message, context = {}) => {
     try {
@@ -370,7 +399,8 @@ export default function ProfileScreen() {
         accountID: userData.accountID || userData.id,
         zoneDetailID: 1, // Default zone detail ID
         profileName: userData.fullName || userData.full_name || "",
-        dateOfBirth: userData.dateOfBirth || new Date().toISOString(),
+        dateOfBirth:
+          userData.dateOfBirth || formatDateForAPI(new Date()),
         phoneNumber:
           userData.phoneNumber || userData.phone_number || "",
         address: userData.address || "",
@@ -403,7 +433,7 @@ export default function ProfileScreen() {
     let prefillData = {
       profileName: userData.fullName || userData.full_name || "",
       dateOfBirth: userData.dateOfBirth
-        ? new Date(userData.dateOfBirth).toISOString().split("T")[0]
+        ? formatDateForAPI(parseDateFromAPI(userData.dateOfBirth))
         : "",
       phoneNumber:
         userData.phoneNumber || userData.phone_number || "",
@@ -418,9 +448,9 @@ export default function ProfileScreen() {
       prefillData = {
         profileName: firstProfile.profileName || "",
         dateOfBirth: firstProfile.dateOfBirth
-          ? new Date(firstProfile.dateOfBirth)
-              .toISOString()
-              .split("T")[0]
+          ? formatDateForAPI(
+              parseDateFromAPI(firstProfile.dateOfBirth)
+            )
           : "",
         phoneNumber: firstProfile.phoneNumber || "",
         address: firstProfile.address || "",
@@ -431,7 +461,7 @@ export default function ProfileScreen() {
 
     // Set selected date cho date picker
     const dateToSet = prefillData.dateOfBirth
-      ? new Date(prefillData.dateOfBirth)
+      ? parseDateFromAPI(prefillData.dateOfBirth)
       : new Date();
     setSelectedDate(dateToSet);
 
@@ -469,10 +499,9 @@ export default function ProfileScreen() {
   };
 
   const handleDateChange = (event, date) => {
-    hideDatePickerModal();
     if (date) {
       setSelectedDate(date);
-      const dateString = date.toISOString().split("T")[0]; // Format: YYYY-MM-DD
+      const dateString = formatDateForAPI(date); // Use helper to avoid UTC issues
 
       // Update the appropriate form based on which modal is open
       if (showCareProfileForm || showEditForm) {
@@ -481,6 +510,12 @@ export default function ProfileScreen() {
         handleRelativeFormChange("dateOfBirth", dateString);
       }
     }
+
+    // On Android, close immediately after selection
+    if (Platform.OS === "android") {
+      hideDatePickerModal();
+    }
+    // On iOS, keep modal open until user presses Done/Cancel
   };
 
   const openZoneModal = async () => {
@@ -704,14 +739,14 @@ export default function ProfileScreen() {
   const openEditForm = (profile) => {
     setEditingProfile(profile);
     const profileDate = profile.dateOfBirth
-      ? new Date(profile.dateOfBirth)
+      ? parseDateFromAPI(profile.dateOfBirth)
       : new Date();
     setSelectedDate(profileDate);
 
     setCareProfileForm({
       profileName: profile.profileName || "",
       dateOfBirth: profile.dateOfBirth
-        ? new Date(profile.dateOfBirth).toISOString().split("T")[0]
+        ? formatDateForAPI(parseDateFromAPI(profile.dateOfBirth))
         : "",
       phoneNumber: profile.phoneNumber || "",
       address: profile.address || "",
@@ -754,7 +789,7 @@ export default function ProfileScreen() {
       const updateData = {
         zoneDetailID: editingProfile.zoneDetailID || 1,
         profileName: careProfileForm.profileName.trim(),
-        dateOfBirth: new Date(
+        dateOfBirth: parseDateFromAPI(
           careProfileForm.dateOfBirth
         ).toISOString(),
         phoneNumber: careProfileForm.phoneNumber.trim(),
@@ -914,19 +949,13 @@ export default function ProfileScreen() {
       if (firstRelative.dateOfBirth) {
         // Format date để hiển thị đúng
         if (firstRelative.dateOfBirth.includes("T")) {
-          prefillDateOfBirth = new Date(firstRelative.dateOfBirth)
-            .toISOString()
-            .split("T")[0];
-          prefillDate = new Date(firstRelative.dateOfBirth);
+          prefillDateOfBirth = formatDateForAPI(
+            parseDateFromAPI(firstRelative.dateOfBirth)
+          );
+          prefillDate = parseDateFromAPI(firstRelative.dateOfBirth);
         } else {
           prefillDateOfBirth = firstRelative.dateOfBirth;
-          const [year, month, day] =
-            firstRelative.dateOfBirth.split("-");
-          prefillDate = new Date(
-            parseInt(year),
-            parseInt(month) - 1,
-            parseInt(day)
-          );
+          prefillDate = parseDateFromAPI(firstRelative.dateOfBirth);
         }
       }
     }
@@ -975,7 +1004,9 @@ export default function ProfileScreen() {
       const relativeData = {
         careProfileID: selectedCareProfileId,
         relativeName: relativeForm.relativeName.trim(),
-        dateOfBirth: new Date(relativeForm.dateOfBirth).toISOString(),
+        dateOfBirth: parseDateFromAPI(
+          relativeForm.dateOfBirth
+        ).toISOString(),
         gender: relativeForm.gender,
         image: "",
         note: relativeForm.note.trim(),
@@ -1029,13 +1060,9 @@ export default function ProfileScreen() {
     // Format dateOfBirth để hiển thị đúng (YYYY-MM-DD)
     let formattedDateOfBirth = "";
     if (relative.dateOfBirth) {
-      if (relative.dateOfBirth.includes("T")) {
-        formattedDateOfBirth = new Date(relative.dateOfBirth)
-          .toISOString()
-          .split("T")[0];
-      } else {
-        formattedDateOfBirth = relative.dateOfBirth;
-      }
+      formattedDateOfBirth = formatDateForAPI(
+        parseDateFromAPI(relative.dateOfBirth)
+      );
     }
 
     setRelativeForm({
@@ -1217,7 +1244,7 @@ export default function ProfileScreen() {
         accountID: userData.accountID || userData.id,
         zoneDetailID: careProfileForm.zoneDetailID,
         profileName: careProfileForm.profileName.trim(),
-        dateOfBirth: new Date(
+        dateOfBirth: parseDateFromAPI(
           careProfileForm.dateOfBirth
         ).toISOString(),
         phoneNumber: careProfileForm.phoneNumber.trim(),
@@ -1797,7 +1824,7 @@ export default function ProfileScreen() {
                       )
                     : "Chọn ngày sinh"}
                 </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+                <Ionicons name="calendar" size={24} color="#4CAF50" />
               </TouchableOpacity>
             </View>
 
@@ -1921,7 +1948,7 @@ export default function ProfileScreen() {
                       )
                     : "Chọn ngày sinh"}
                 </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+                <Ionicons name="calendar" size={24} color="#4CAF50" />
               </TouchableOpacity>
             </View>
 
@@ -2043,7 +2070,7 @@ export default function ProfileScreen() {
                     ? formatDateForDisplay(relativeForm.dateOfBirth)
                     : "Chọn ngày sinh"}
                 </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+                <Ionicons name="calendar" size={24} color="#4CAF50" />
               </TouchableOpacity>
             </View>
 
@@ -2164,7 +2191,7 @@ export default function ProfileScreen() {
                     ? formatDateForDisplay(relativeForm.dateOfBirth)
                     : "Chọn ngày sinh"}
                 </Text>
-                <Ionicons name="calendar" size={20} color="#666" />
+                <Ionicons name="calendar" size={24} color="#4CAF50" />
               </TouchableOpacity>
             </View>
 
@@ -2248,14 +2275,66 @@ export default function ProfileScreen() {
     if (!showDatePicker) return null;
 
     return (
-      <DateTimePicker
-        value={selectedDate}
-        mode="date"
-        display="default"
-        onChange={handleDateChange}
-        maximumDate={new Date()} // Không cho chọn ngày trong tương lai
-        minimumDate={new Date(1900, 0, 1)} // Giới hạn từ năm 1900
-      />
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={hideDatePickerModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.datePickerModalContent}>
+            <View style={styles.datePickerHeader}>
+              <Text style={styles.datePickerTitle}>
+                Chọn ngày sinh
+              </Text>
+              <TouchableOpacity onPress={hideDatePickerModal}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.datePreviewContainer}>
+              <Text style={styles.datePreviewLabel}>
+                Ngày đã chọn:
+              </Text>
+              <Text style={styles.datePreviewValue}>
+                {selectedDate.toLocaleDateString("vi-VN", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </Text>
+            </View>
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === "ios" ? "compact" : "default"}
+              onChange={handleDateChange}
+              maximumDate={new Date()} // Không cho chọn ngày trong tương lai
+              minimumDate={new Date(1900, 0, 1)} // Giới hạn từ năm 1900
+              style={styles.datePicker}
+              textColor="#333"
+              accentColor="#4CAF50"
+            />
+            <View style={styles.datePickerFooter}>
+              <TouchableOpacity
+                style={styles.datePickerCancelButton}
+                onPress={hideDatePickerModal}>
+                <Text style={styles.datePickerCancelButtonText}>
+                  Hủy
+                </Text>
+              </TouchableOpacity>
+              {Platform.OS === "ios" && (
+                <TouchableOpacity
+                  style={styles.datePickerDoneButton}
+                  onPress={hideDatePickerModal}>
+                  <Text style={styles.datePickerDoneButtonText}>
+                    Xong
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     );
   };
 
@@ -2376,6 +2455,20 @@ export default function ProfileScreen() {
                               style={styles.medicalNoteAdviceText}>
                               {note.advice}
                             </Text>
+                          </View>
+                        )}
+
+                        {note.image && note.image.trim() !== "" && (
+                          <View style={styles.medicalNoteField}>
+                            <Text
+                              style={styles.medicalNoteFieldLabel}>
+                              Hình ảnh:
+                            </Text>
+                            <Image
+                              source={{ uri: note.image }}
+                              style={styles.medicalNoteImage}
+                              resizeMode="cover"
+                            />
                           </View>
                         )}
                       </View>
@@ -3281,18 +3374,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 12,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#ddd",
   },
   datePickerText: {
     fontSize: 16,
-    color: "#333",
+    color: "black",
     flex: 1,
   },
   placeholderText: {
-    color: "#999",
+    color: "#666",
+    fontStyle: "italic",
   },
   relativesSection: {
     marginTop: 20,
@@ -3513,6 +3606,13 @@ const styles = StyleSheet.create({
     color: "#333",
     lineHeight: 18,
   },
+  medicalNoteImage: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    marginTop: 8,
+    backgroundColor: "#f5f5f5",
+  },
   medicalNoteDetails: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -3594,5 +3694,90 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
     backgroundColor: "#FFF5F5",
+  },
+  datePickerModalContent: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    width: "90%",
+    maxHeight: "60%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  datePreviewContainer: {
+    backgroundColor: "#f0f8ff",
+    padding: 15,
+    margin: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  datePreviewLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 5,
+    fontWeight: "500",
+  },
+  datePreviewValue: {
+    fontSize: 16,
+    color: "#2E7D32",
+    fontWeight: "bold",
+  },
+  datePicker: {
+    width: "100%",
+    height: Platform.OS === "ios" ? 300 : 200,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+    marginVertical: 10,
+  },
+  datePickerFooter: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  datePickerCancelButton: {
+    backgroundColor: "#FF6B6B",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    flex: 1,
+    marginRight: 10,
+  },
+  datePickerCancelButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  datePickerDoneButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    flex: 1,
+    marginLeft: 10,
+  },
+  datePickerDoneButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

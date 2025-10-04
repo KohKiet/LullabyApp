@@ -124,6 +124,8 @@ export default function TransactionHistoryScreen() {
       case "canceled":
       case "cancel":
         return "Đã hủy";
+      case "refunded":
+        return "Đã hoàn tiền";
       default:
         return status;
     }

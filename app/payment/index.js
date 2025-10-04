@@ -650,8 +650,8 @@ export default function PaymentScreen() {
     // Guard by status/time window
     if (!canChangeRelativeForTask(task)) {
       Alert.alert(
-        "Không thể đổi người",
-        "Bạn chỉ có thể đổi người nhận dịch vụ trước giờ bắt đầu và cách ít nhất 30 phút."
+        "Không thể đổi con cho dịch vụ",
+        "Bạn chỉ có thể đổi con cho dịch vụ trước giờ bắt đầu và cách ít nhất 30 phút."
       );
       return;
     }
@@ -664,8 +664,8 @@ export default function PaymentScreen() {
     // Guard again right before commit
     if (!canChangeRelativeForTask(relativePickerTask)) {
       Alert.alert(
-        "Không thể đổi người",
-        "Đã quá thời gian cho phép để đổi người nhận dịch vụ."
+        "Không thể đổi con cho dịch vụ",
+        "Đã quá thời gian cho phép để đổi con cho dịch vụ."
       );
       setShowRelativePicker(false);
       setRelativePickerTask(null);
